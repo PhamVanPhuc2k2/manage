@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,10 +46,18 @@ type employeeDTO struct {
 	JoinedAt       time.Time  `json:"joined_at"`
 	ResignedAt     *time.Time `json:"resigned_at,omitempty"`
 	HasAccount     bool       `json:"has_account"`
+	AvatarURL      string     `json:"avatar_url,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 }
 
-func toEmployeeDTO(e *domainhr.Employee) employeeDTO {
+// toEmployeeDTO đổi entity thành DTO.
+//
+// Là method chứ không phải hàm rời vì cần sinh URL ảnh đại diện. Việc ký
+// presigned URL diễn ra hoàn toàn cục bộ, không gọi mạng, nên gọi cho từng
+// dòng trong danh sách vẫn rẻ.
+func (h *EmployeeHandler) toEmployeeDTO(ctx context.Context, e *domainhr.Employee) employeeDTO {
+	avatarURL, _ := h.uc.AvatarURL(ctx, e.AvatarKey)
+
 	return employeeDTO{
 		ID:             e.ID.String(),
 		EmployeeCode:   e.EmployeeCode,
@@ -69,6 +78,7 @@ func toEmployeeDTO(e *domainhr.Employee) employeeDTO {
 		JoinedAt:       e.JoinedAt,
 		ResignedAt:     e.ResignedAt,
 		HasAccount:     e.HasAccount,
+		AvatarURL:      avatarURL,
 		CreatedAt:      e.CreatedAt,
 	}
 }
@@ -130,7 +140,7 @@ func (h *EmployeeHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]employeeDTO, 0, len(res.Items))
 	for _, e := range res.Items {
-		items = append(items, toEmployeeDTO(e))
+		items = append(items, h.toEmployeeDTO(r.Context(), e))
 	}
 
 	httpx.Paginated(w, items, map[string]int{
@@ -155,7 +165,7 @@ func (h *EmployeeHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Error(w, err, requestID)
 		return
 	}
-	httpx.OK(w, toEmployeeDTO(e))
+	httpx.OK(w, h.toEmployeeDTO(r.Context(), e))
 }
 
 type employeeRequest struct {
@@ -240,7 +250,7 @@ func (h *EmployeeHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Error(w, err, requestID)
 		return
 	}
-	httpx.Created(w, toEmployeeDTO(e))
+	httpx.Created(w, h.toEmployeeDTO(r.Context(), e))
 }
 
 func (h *EmployeeHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -268,7 +278,7 @@ func (h *EmployeeHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Error(w, err, requestID)
 		return
 	}
-	httpx.OK(w, toEmployeeDTO(e))
+	httpx.OK(w, h.toEmployeeDTO(r.Context(), e))
 }
 
 func (h *EmployeeHandler) Deactivate(w http.ResponseWriter, r *http.Request) {

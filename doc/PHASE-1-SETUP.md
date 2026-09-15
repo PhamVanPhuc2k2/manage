@@ -316,7 +316,7 @@ CREATE TABLE employees (
     joined_at      DATE NOT NULL,
     resigned_at    DATE,
 
-    avatar_key     VARCHAR(500),   -- khoá object trong MinIO, không phải URL
+    avatar_key     VARCHAR(500),   -- khoá object trên Cloudflare R2, không phải URL
 
     deleted_at     TIMESTAMPTZ,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1396,7 +1396,7 @@ Luồng ba bước, **không** cho file đi xuyên qua backend Go:
 1. Client  →  POST /api/v1/employees/{id}/avatar/upload-url
               Server trả presigned PUT URL (hết hạn 5 phút) + object key
 
-2. Client  →  PUT thẳng lên MinIO bằng URL đó
+2. Client  →  PUT thẳng lên Cloudflare R2 bằng URL đó
 
 3. Client  →  POST /api/v1/employees/{id}/avatar/confirm { "key": "..." }
               Server kiểm tra object có thật, đúng kiểu, đúng dung lượng,
@@ -1412,6 +1412,22 @@ Bước 3 phải kiểm tra:
 - Chỉ chấp nhận `image/jpeg`, `image/png`, `image/webp`
 
 Khi trả về hồ sơ, sinh presigned GET URL hạn 1 giờ chứ không lưu URL vào database — URL có chữ ký và sẽ hết hạn.
+
+Ngoài ra, khoá object phải nằm đúng thư mục của nhân viên đó (`avatars/{employee_id}/...`) và server phải kiểm tra tiền tố đó ở bước 3. Thiếu kiểm tra này, ai đó gọi confirm với khoá của người khác là gán được ảnh bất kỳ trong bucket.
+
+### Cloudflare R2 khác AWS S3 ở đâu
+
+R2 dùng giao thức S3 nên `aws-sdk-go-v2` chạy được, nhưng có ba chỗ sai là hỏng, và lỗi sinh ra đều khó đoán:
+
+| Việc phải làm | Sai thì sao |
+|---|---|
+| `Region` đặt đúng chuỗi `"auto"` | Điền tên vùng của AWS (`us-east-1`…) làm chữ ký sai, R2 trả `SignatureDoesNotMatch` |
+| `UsePathStyle = true` | Mặc định SDK ghép bucket vào tên miền (`<bucket>.<account>.r2.cloudflarestorage.com`) — R2 không hỗ trợ dạng đó, mọi request lỗi phân giải tên miền |
+| `RequestChecksumCalculation = WhenRequired` | Từ giữa 2025 SDK tự thêm header `x-amz-checksum-crc32` vào PutObject. Trình duyệt không gửi header đó khi dùng presigned URL nên chữ ký không khớp — lỗi trông y hệt sai credentials |
+
+Địa chỉ có dạng `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`, lấy cùng chỗ với access key trong Cloudflare Dashboard → R2 → Manage R2 API Tokens.
+
+**Chưa cấu hình R2 thì hệ thống vẫn chạy.** `storage.New` trả về `nil` và mọi chỗ dùng đều kiểm tra `nil` rồi báo lỗi 422 kèm thông báo rõ ràng. Nhờ vậy phát triển phần không liên quan tới tệp không cần tài khoản Cloudflare. Endpoint `/ready` hiện `"r2": "chưa cấu hình"` nhưng **không** vì thế mà báo cả hệ thống chưa sẵn sàng — mất chỗ lưu tệp không đáng để cắt toàn bộ traffic.
 
 ---
 

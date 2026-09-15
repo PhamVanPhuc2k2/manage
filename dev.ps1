@@ -225,15 +225,12 @@ Ví dụ:
         else { Write-Host "CHƯA THẤY JOB — kiểm tra bằng: .\dev.ps1 logs worker" -ForegroundColor Yellow }
     }
 
-    "urls" {
-        $ui = Get-EnvValue $dotenv "MINIO_UI_PORT" "9001"
-        @"
+    "urls" {        @"
 
   Ứng dụng        $publicUrl
   API trực tiếp   http://localhost:$apiPort
   Adminer (DB)    http://localhost:$(Get-EnvValue $dotenv 'ADMINER_PORT' '8081')
   RabbitMQ UI     http://localhost:$(Get-EnvValue $dotenv 'RABBITMQ_UI_PORT' '15672')
-  MinIO Console   http://localhost:$ui
   MailHog         http://localhost:$(Get-EnvValue $dotenv 'MAILHOG_UI_PORT' '8025')
 
 "@

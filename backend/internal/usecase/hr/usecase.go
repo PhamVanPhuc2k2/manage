@@ -23,6 +23,11 @@ type Usecase struct {
 	users       domainhr.UserRepository
 	roles       domainhr.RoleRepository
 
+	// storage có thể là nil khi chưa cấu hình Cloudflare R2. Mọi chỗ dùng
+	// phải kiểm tra nil và báo lỗi rõ ràng — hệ thống vẫn chạy được, chỉ
+	// riêng chức năng tệp là không.
+	storage domainhr.FileStorage
+
 	// onEmployeeDeactivated được gọi khi một nhân viên bị vô hiệu hoá,
 	// để module auth cắt phiên đăng nhập của họ.
 	//
@@ -44,6 +49,7 @@ func NewUsecase(
 	employees domainhr.EmployeeRepository,
 	users domainhr.UserRepository,
 	roles domainhr.RoleRepository,
+	storage domainhr.FileStorage,
 ) *Usecase {
 	return &Usecase{
 		companies:   companies,
@@ -52,6 +58,7 @@ func NewUsecase(
 		employees:   employees,
 		users:       users,
 		roles:       roles,
+		storage:     storage,
 	}
 }
 

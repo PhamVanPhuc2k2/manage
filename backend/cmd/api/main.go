@@ -23,9 +23,11 @@ import (
 
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/handler"
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/router"
+	domainhr "github.com/PhamVanPhuc2k2/manage/internal/domain/hr"
 	repopg "github.com/PhamVanPhuc2k2/manage/internal/repository/postgres"
 	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
 	reporedis "github.com/PhamVanPhuc2k2/manage/internal/repository/redis"
+	reposto "github.com/PhamVanPhuc2k2/manage/internal/repository/storage"
 	ucauth "github.com/PhamVanPhuc2k2/manage/internal/usecase/auth"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
 	ucsystem "github.com/PhamVanPhuc2k2/manage/internal/usecase/system"
@@ -34,6 +36,7 @@ import (
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
 	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
 	"github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
+	"github.com/PhamVanPhuc2k2/manage/pkg/storage"
 )
 
 // Ba biến này được nhúng lúc build qua -ldflags -X.
@@ -93,6 +96,29 @@ func run() error {
 		return err
 	}
 
+	// Cloudflare R2. Trả về nil khi chưa cấu hình — hệ thống vẫn chạy bình
+	// thường, chỉ chức năng tải tệp báo lỗi rõ ràng. Nhờ vậy phát triển phần
+	// không liên quan tới tệp không cần tài khoản Cloudflare.
+	r2, err := storage.New(ctx, storage.Config{
+		AccountID:       cfg.R2AccountID,
+		AccessKeyID:     cfg.R2AccessKeyID,
+		SecretAccessKey: cfg.R2SecretAccessKey,
+		Bucket:          cfg.R2Bucket,
+		PublicURL:       cfg.R2PublicURL,
+	})
+	if err != nil {
+		return fmt.Errorf("khởi tạo Cloudflare R2: %w", err)
+	}
+	if r2 == nil {
+		log.Warn().Msg("chưa cấu hình Cloudflare R2 — chức năng tải tệp sẽ không dùng được")
+	} else if err := r2.HealthCheck(ctx); err != nil {
+		// Cảnh báo chứ không dừng: R2 trục trặc không nên chặn cả hệ thống
+		// khởi động, phần lớn chức năng không đụng tới tệp.
+		log.Error().Err(err).Msg("không truy cập được bucket R2")
+	} else {
+		log.Info().Str("bucket", cfg.R2Bucket).Msg("đã kết nối Cloudflare R2")
+	}
+
 	// =====================================================================
 	// COMPOSITION ROOT — nơi DUY NHẤT biết cả interface lẫn bản hiện thực.
 	//
@@ -132,7 +158,14 @@ func run() error {
 		},
 	)
 
-	hrUC := uchr.NewUsecase(companyRepo, deptRepo, posRepo, empRepo, userRepo, roleRepo)
+	// storage có thể nil — usecase kiểm tra nil ở mọi chỗ dùng tới tệp.
+	var fileStorage domainhr.FileStorage
+	if r2 != nil {
+		fileStorage = reposto.NewRepository(r2)
+	}
+
+	hrUC := uchr.NewUsecase(
+		companyRepo, deptRepo, posRepo, empRepo, userRepo, roleRepo, fileStorage)
 
 	// Nối hr với auth: vô hiệu hoá nhân viên phải cắt luôn phiên đăng nhập
 	// của họ, nếu không họ vẫn dùng được hệ thống tới khi token hết hạn.
@@ -160,6 +193,7 @@ func run() error {
 			Postgres:   db,
 			Redis:      rdb,
 			RabbitMQ:   mqClient,
+			Storage:    r2,
 			JWT:        jwtMgr,
 			Sessions:   sessionStore,
 			AuthReader: authReader,

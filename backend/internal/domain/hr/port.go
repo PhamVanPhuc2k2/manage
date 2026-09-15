@@ -2,6 +2,7 @@ package hr
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -76,6 +77,20 @@ type UserRepository interface {
 type RoleRepository interface {
 	List(ctx context.Context) ([]*Role, error)
 	GetByCode(ctx context.Context, code string) (*Role, error)
+}
+
+// FileStorage là cổng lưu trữ tệp.
+//
+// Khai báo ở tầng domain nên usecase không biết đằng sau là Cloudflare R2,
+// AWS S3 hay ổ đĩa — đổi nhà cung cấp chỉ phải sửa ở composition root.
+type FileStorage interface {
+	PresignPut(ctx context.Context, key, contentType string, ttl time.Duration) (string, error)
+	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
+	Stat(ctx context.Context, key string) (size int64, contentType string, err error)
+	// DetectContentType đoán kiểu tệp từ NỘI DUNG thật, không tin header
+	// do client khai báo.
+	DetectContentType(ctx context.Context, key string) (string, error)
+	Delete(ctx context.Context, key string) error
 }
 
 type Role struct {

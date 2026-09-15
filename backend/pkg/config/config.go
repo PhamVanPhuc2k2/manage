@@ -42,6 +42,13 @@ type Config struct {
 	SMTPFrom string `mapstructure:"SMTP_FROM"`
 	SMTPUser string `mapstructure:"SMTP_USER"`
 	SMTPPass string `mapstructure:"SMTP_PASS"`
+
+	// Cloudflare R2. Để trống thì chức năng tệp tắt, hệ thống vẫn chạy.
+	R2AccountID       string `mapstructure:"R2_ACCOUNT_ID"`
+	R2AccessKeyID     string `mapstructure:"R2_ACCESS_KEY_ID"`
+	R2SecretAccessKey string `mapstructure:"R2_SECRET_ACCESS_KEY"`
+	R2Bucket          string `mapstructure:"R2_BUCKET"`
+	R2PublicURL       string `mapstructure:"R2_PUBLIC_URL"`
 }
 
 func (c Config) IsProduction() bool { return c.Env == "production" }
@@ -90,6 +97,12 @@ func Load(appName string) (*Config, error) {
 	setDefault("SMTP_FROM", "no-reply@manage.local")
 	setDefault("SMTP_USER", "")
 	setDefault("SMTP_PASS", "")
+
+	setDefault("R2_ACCOUNT_ID", "")
+	setDefault("R2_ACCESS_KEY_ID", "")
+	setDefault("R2_SECRET_ACCESS_KEY", "")
+	setDefault("R2_BUCKET", "")
+	setDefault("R2_PUBLIC_URL", "")
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {

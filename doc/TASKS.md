@@ -32,6 +32,7 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 | Phân quyền | RBAC theo vai trò + kiểm tra phạm vi dữ liệu (phòng ban / dự án) |
 | Realtime | WebSocket hub tự viết bằng Go, RabbitMQ fan-out giữa các instance, Redis lưu presence |
 | Chấm công | Presence-based: đo thời gian online thực tế qua WebSocket heartbeat |
+| Lưu trữ tệp | **Cloudflare R2** (tương thích S3). Client tải THẲNG lên bằng presigned URL, không đi qua backend |
 | Triển khai | Docker toàn bộ — dev và production đều chạy bằng container, deploy qua Docker Compose |
 | Lộ trình | Chia phase, mỗi phase chạy được độc lập |
 
@@ -57,7 +58,7 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 **Hạ tầng**
 - Docker + Docker Compose v2 — toàn bộ dịch vụ chạy trong container ở mọi môi trường
 - Nginx (container) làm reverse proxy, hỗ trợ nâng cấp WebSocket, kết thúc TLS
-- MinIO (tương thích S3) cho file đính kèm, avatar
+- Cloudflare R2 (tương thích S3) cho tệp đính kèm và ảnh đại diện
 - GitHub Actions cho CI/CD, build và đẩy image lên GitHub Container Registry (GHCR)
 - Prometheus + Grafana + Loki (container) cho giám sát và log
 
@@ -172,13 +173,19 @@ manage/
                         │ (job nền, mail)│          │   toàn bộ code internal/
                         └───────┬────────┘          │
                                 │                   │
-                    ┌───────────┴───────┬───────────┴───────┬───────────┐
-                    ▼                   ▼                   ▼           ▼
-             ┌────────────┐      ┌────────────┐     ┌────────────┐ ┌──────────┐
-             │  postgres  │      │   redis    │     │  rabbitmq  │ │  minio   │
-             │ MỘT database│      │ session    │     │ job + sự   │ │  tệp     │
-             │ có FK thật  │      │ presence   │     │ kiện nền   │ │          │
-             └────────────┘      └────────────┘     └────────────┘ └──────────┘
+                    ┌───────────┴───────┬───────────┴───────┐
+                    ▼                   ▼                   ▼
+             ┌────────────┐      ┌────────────┐     ┌────────────┐
+             │  postgres  │      │   redis    │     │  rabbitmq  │
+             │MỘT database│      │  session   │     │  job + sự  │
+             │ có FK thật │      │  presence  │     │  kiện nền  │
+             └────────────┘      └────────────┘     └────────────┘
+   ═══════════════════════════════════════════════════════════════════════
+                                                    ┌──────────────────┐
+   Dịch vụ ngoài (không phải container)  ──HTTPS──▶ │  Cloudflare R2   │
+   Client tải tệp THẲNG lên đây bằng                │  ảnh, tệp đính   │
+   presigned URL, không đi qua backend.             │  kèm, phiếu lương│
+                                                    └──────────────────┘
 
    Chỉ dev: adminer (xem DB) · mailhog (bắt email)
    Giám sát (network riêng): prometheus · grafana · loki · promtail · cadvisor
@@ -194,7 +201,7 @@ manage/
 | Migration tách thành job riêng | Chạy một lần trước khi `api` khởi động — nhiều replica cùng migrate sẽ xung đột |
 | Multi-stage build | Image production chỉ chứa binary, không chứa toolchain. Mục tiêu backend < 30MB, frontend < 200MB |
 | Chạy bằng user không phải root | Tạo user `app` (UID 1001) trong Dockerfile, hạn chế thiệt hại khi bị chiếm quyền |
-| Chỉ nginx expose ra host | Postgres, Redis, RabbitMQ, MinIO không mở port ra ngoài ở production |
+| Chỉ nginx expose ra host | Postgres, Redis, RabbitMQ không mở port ra ngoài ở production |
 | Mọi container có `healthcheck` | `depends_on: condition: service_healthy` bảo đảm thứ tự khởi động đúng |
 | Dữ liệu nằm ở named volume | Không dùng bind mount cho database ở production (tránh vấn đề quyền và hiệu năng) |
 | Cấu hình qua biến môi trường | Image không chứa cấu hình; cùng một image chạy được ở staging và production |
@@ -267,10 +274,10 @@ Lệnh chạy:
 - [ ] `Makefile`: `make up`, `make down`, `make logs`, `make migrate`, `make test`, `make lint`, `make seed`, `make sh-api`
 
 ### Docker — môi trường dev
-- [ ] `docker-compose.yml` gốc: postgres, redis, rabbitmq, minio, api, worker, frontend, nginx
-- [ ] Khai báo `healthcheck` cho cả 4 dịch vụ hạ tầng (`pg_isready`, `redis-cli ping`, `rabbitmq-diagnostics ping`, MinIO `/minio/health/live`)
+- [ ] `docker-compose.yml` gốc: postgres, redis, rabbitmq, api, worker, frontend, nginx
+- [ ] Khai báo `healthcheck` cho cả 3 dịch vụ hạ tầng (`pg_isready`, `redis-cli ping`, `rabbitmq-diagnostics ping`)
 - [ ] Dùng `depends_on: condition: service_healthy` cho api và worker
-- [ ] Named volume cho dữ liệu: `pgdata`, `redisdata`, `rabbitmqdata`, `miniodata`
+- [ ] Named volume cho dữ liệu: `pgdata`, `redisdata`, `rabbitmqdata`
 - [ ] Hai network tách biệt: `backend` (nội bộ) và `proxy` (nginx ↔ api/frontend)
 - [ ] `docker/backend/Dockerfile` **dùng chung cho `api` và `worker`**, chọn binary bằng build arg `BINARY`, có target `dev` / `builder` / `prod`
 - [ ] `.air.api.toml` và `.air.worker.toml` — hai cấu hình hot reload riêng
@@ -360,7 +367,7 @@ Lệnh chạy:
 - [ ] CRUD nhân viên: tạo, sửa, xem, vô hiệu hoá (soft delete, không xoá cứng)
 - [ ] Tìm kiếm + lọc nhân viên: theo phòng ban, chức vụ, trạng thái, hình thức làm việc
 - [ ] Phân trang chuẩn (cursor hoặc offset) áp dụng cho mọi API danh sách
-- [ ] Tải lên avatar, lưu MinIO, trả về presigned URL
+- [ ] Tải lên avatar, lưu Cloudflare R2, trả về presigned URL
 - [ ] Nhập nhân viên hàng loạt từ CSV/Excel (xử lý nền qua RabbitMQ, báo kết quả qua thông báo)
 - [ ] Xem sơ đồ tổ chức (org chart) dạng cây
 
@@ -390,7 +397,7 @@ Lệnh chạy:
 - [ ] Chuyển trạng thái task: `todo → in_progress → review → done`, chặn bước nhảy không hợp lệ
 - [ ] Sắp xếp thứ tự task trong cột Kanban (dùng số thực hoặc chuỗi lexo để chèn giữa)
 - [ ] Bình luận task, hỗ trợ `@mention` → sinh thông báo
-- [ ] Đính kèm tệp vào task (MinIO)
+- [ ] Đính kèm tệp vào task (Cloudflare R2)
 - [ ] Ghi nhật ký thay đổi task (`task_activities`) — ai đổi gì, lúc nào
 - [ ] Ghi nhận thời gian làm việc theo task (timelog), phục vụ báo cáo
 - [ ] API báo cáo: tiến độ dự án, task quá hạn, khối lượng việc theo nhân viên
@@ -513,7 +520,7 @@ Lệnh chạy:
 - [ ] Chỉ báo "đang nhập..." (throttle, không lưu DB)
 - [ ] Trạng thái online/offline/lần cuối hoạt động (dùng chung dữ liệu presence của Phase 3)
 - [ ] Trả lời tin nhắn (reply), sửa và thu hồi tin nhắn (soft delete)
-- [ ] Gửi tệp và ảnh (MinIO), hiển thị xem trước ảnh
+- [ ] Gửi tệp và ảnh (Cloudflare R2), hiển thị xem trước ảnh
 - [ ] Tìm kiếm tin nhắn trong hội thoại (PostgreSQL full-text search)
 - [ ] Ghim hội thoại, tắt thông báo hội thoại
 
@@ -564,7 +571,7 @@ Lệnh chạy:
 - [ ] Kiểm chứng scale: `docker compose up -d --scale api=3` → chat và thông báo vẫn hoạt động đúng (xác nhận fan-out RabbitMQ chạy chuẩn)
 - [ ] Script deploy: pull image mới → chạy job `migrate` → rolling restart từng container api
 - [ ] Quy trình rollback: đổi tag image về SHA trước đó và khởi động lại
-- [ ] Container backup: `pg_dump` theo lịch, nén, đẩy lên MinIO/S3, xoá bản cũ theo chính sách lưu trữ
+- [ ] Container backup: `pg_dump` theo lịch, nén, đẩy lên Cloudflare R2, xoá bản cũ theo chính sách lưu trữ
 - [ ] Diễn tập khôi phục: dựng lại toàn bộ hệ thống từ bản backup trên máy sạch, ghi lại thời gian thực tế
 
 ### Giám sát

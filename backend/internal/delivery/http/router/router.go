@@ -20,6 +20,7 @@ import (
 	"github.com/PhamVanPhuc2k2/manage/pkg/jwt"
 	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
 	"github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
+	"github.com/PhamVanPhuc2k2/manage/pkg/storage"
 )
 
 type Deps struct {
@@ -29,6 +30,7 @@ type Deps struct {
 	Postgres *postgres.DB
 	Redis    *goredis.Client
 	RabbitMQ *rabbitmq.Client
+	Storage  *storage.Storage
 
 	JWT        *jwt.Manager
 	Sessions   domainauth.SessionStore
@@ -100,6 +102,17 @@ func New(d Deps) http.Handler {
 			checks["rabbitmq"] = "ok"
 		}
 
+		// R2 KHÔNG ảnh hưởng tới `ready`: mất chỗ lưu tệp thì không tải ảnh
+		// lên được, nhưng toàn bộ phần còn lại của hệ thống vẫn phục vụ bình
+		// thường. Cắt traffic vì lý do đó là phản ứng thái quá.
+		if d.Storage == nil {
+			checks["r2"] = "chưa cấu hình"
+		} else if err := d.Storage.HealthCheck(ctx); err != nil {
+			checks["r2"] = err.Error()
+		} else {
+			checks["r2"] = "ok"
+		}
+
 		status := http.StatusOK
 		if !ready {
 			status = http.StatusServiceUnavailable
@@ -144,6 +157,15 @@ func New(d Deps) http.Handler {
 					Put("/{id}", d.Employee.Update)
 				r.With(appmw.RequirePermission(domainauth.PermEmployeeDelete)).
 					Delete("/{id}", d.Employee.Deactivate)
+
+				// Ảnh đại diện. Dùng quyền employee:update vì đây là sửa hồ
+				// sơ — nhân viên tự đổi ảnh của mình được nhờ phạm vi "self".
+				r.With(appmw.RequirePermission(domainauth.PermEmployeeUpdate)).
+					Post("/{id}/avatar/upload-url", d.Employee.RequestAvatarUpload)
+				r.With(appmw.RequirePermission(domainauth.PermEmployeeUpdate)).
+					Post("/{id}/avatar/confirm", d.Employee.ConfirmAvatar)
+				r.With(appmw.RequirePermission(domainauth.PermEmployeeUpdate)).
+					Delete("/{id}/avatar", d.Employee.RemoveAvatar)
 			})
 
 			// --- Phòng ban ---

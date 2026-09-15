@@ -228,11 +228,14 @@ RABBITMQ_PASSWORD=rabbit_dev_password
 RABBITMQ_PORT=5672
 RABBITMQ_UI_PORT=15672
 
-# ---------- MinIO ----------
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=minio_dev_password
-MINIO_API_PORT=9000
-MINIO_UI_PORT=9001
+# ---------- Cloudflare R2 (lưu trữ tệp) ----------
+# Lấy tại: Cloudflare Dashboard > R2 > Manage R2 API Tokens
+# Để trống thì hệ thống vẫn chạy, chỉ chức năng tải tệp báo lỗi rõ ràng.
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=manage-dev
+R2_PUBLIC_URL=
 
 # ---------- JWT ----------
 # Sinh bằng: openssl rand -base64 48
@@ -2061,40 +2064,11 @@ services:
       start_period: 60s
     networks: [backend]
 
-  minio:
-    image: quay.io/minio/minio:latest
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    volumes:
-      - miniodata:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    networks: [backend]
-
-  # Container chạy một lần để tạo bucket rồi thoát.
-  minio-init:
-    image: quay.io/minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
-      mc mb --ignore-existing local/avatars;
-      mc mb --ignore-existing local/attachments;
-      mc mb --ignore-existing local/payslips;
-      mc anonymous set download local/avatars;
-      echo 'đã tạo xong bucket';
-      "
-    restart: "no"
-    networks: [backend]
+  # KHÔNG có service lưu trữ tệp.
+  #
+  # Tệp nằm trên Cloudflare R2 — dịch vụ ngoài, không phải container. Client
+  # tải THẲNG lên đó bằng presigned URL do api cấp, không đi qua backend.
+  # Xem pkg/storage để biết những chỗ R2 khác AWS S3.
 
   # =========================================================================
   # MIGRATION — chạy một lần rồi thoát, TRƯỚC khi api và worker khởi động.
@@ -2232,7 +2206,6 @@ volumes:
   pgdata:
   redisdata:
   rabbitmqdata:
-  miniodata:
 ```
 
 ### `docker-compose.override.yml` — chỉ dev, tự động nạp
@@ -2293,11 +2266,6 @@ services:
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "${RABBITMQ_UI_PORT:-15672}:15672"   # giao diện quản trị
-
-  minio:
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_UI_PORT:-9001}:9001"
 
   # ---------------------------------------------------------------------
   # Công cụ chỉ dùng khi dev
@@ -2375,10 +2343,6 @@ services:
     deploy:
       resources:
         limits: { cpus: "1.0", memory: 1G }
-
-  minio:
-    <<: *prod-common
-    ports: []
 
   api:
     <<: *prod-common
@@ -3162,7 +3126,7 @@ Mở http://localhost:15672 (tài khoản trong `.env`), vào tab Queues. Phải
 | Container `frontend` lỗi module native | `node_modules` của Windows bị bind mount đè lên | Dùng named volume như trong `docker-compose.override.yml` |
 | `docker compose up` rất chậm trên Windows | Bind mount NTFS chậm cố hữu | Đặt repo trong WSL2 filesystem (`\\wsl$\...`) thay vì ổ `D:` |
 | Sửa `01-extensions.sql` không có tác dụng | Script init chỉ chạy khi volume rỗng | `make destroy` rồi `make up` — sẽ mất hết dữ liệu |
-| Port 80 hoặc 9001 bị chiếm | IIS, Laravel Herd, XAMPP | Đổi `NGINX_PORT` / `MINIO_UI_PORT` trong `.env`, nhớ đổi cả `PUBLIC_BASE_URL` cho khớp |
+| Port 80 bị chiếm | IIS, Laravel Herd, XAMPP | Đổi `NGINX_PORT` trong `.env`, nhớ đổi cả `PUBLIC_BASE_URL` cho khớp |
 
 ### Những lỗi gặp thật khi dựng Phase 0
 
@@ -3171,7 +3135,7 @@ Phần dưới là lỗi đã thực sự xảy ra trong lần dựng đầu ti�
 | Hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | `cannot call pointer method Info on zerolog.Logger` | `zerolog.Logger` có method pointer receiver; giá trị trả về từ hàm không lấy địa chỉ được | Gán ra biến trước: `log := logger.FromContext(ctx)` rồi `log.Info()` |
-| `pull access denied for minio/mc` | MinIO đã rút image khỏi Docker Hub | Dùng `quay.io/minio/minio` và `quay.io/minio/mc` |
+| `pull access denied for minio/mc` | MinIO đã rút image khỏi Docker Hub | Dự án nay dùng Cloudflare R2, không còn container lưu trữ. Ghi lại vì đây là lý do ban đầu khiến tôi phải đổi registry |
 | nginx luôn `unhealthy` dù chạy bình thường | `listen 80` chỉ bind IPv4, còn `localhost` trong container phân giải ra `::1` trước | Healthcheck dùng `http://127.0.0.1/health` |
 | `/health` trả về mảng byte thay vì chuỗi JSON | Chỉ thị `return` bỏ qua Content-Type đặt bằng `add_header` | Dùng `default_type application/json;` |
 | `golangci-lint: the Go language version (go1.23) ... lower than the targeted Go version (1.25)` | Bản v1.62 build bằng Go 1.23 | Nâng lên golangci-lint v2.x (schema config khác hẳn v1, phải viết lại `.golangci.yml` với `version: "2"`) |

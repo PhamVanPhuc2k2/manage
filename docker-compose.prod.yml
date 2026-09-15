@@ -38,10 +38,6 @@ services:
       resources:
         limits: { cpus: "1.0", memory: 1G }
 
-  minio:
-    <<: *prod-common
-    ports: []
-
   api:
     <<: *prod-common
     # Không build tại chỗ — kéo image đã build và quét bảo mật trong CI.

@@ -85,7 +85,7 @@ CREATE TABLE employees (
     joined_at      DATE NOT NULL,
     resigned_at    DATE,
 
-    avatar_key     VARCHAR(500),   -- khoá object trong MinIO, KHÔNG phải URL
+    avatar_key     VARCHAR(500),   -- khoá object trên Cloudflare R2, KHÔNG phải URL
 
     deleted_at     TIMESTAMPTZ,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),

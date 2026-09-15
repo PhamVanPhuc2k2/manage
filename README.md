@@ -15,7 +15,7 @@ Monolith theo module, hai binary chạy độc lập:
 
 Hai binary dùng chung toàn bộ `internal/`, chỉ khác tầng `delivery`.
 
-**Stack:** Go 1.25 + go-chi · PostgreSQL 16 · Redis 7 · RabbitMQ 3.13 · MinIO · Next.js 16 · nginx — toàn bộ chạy trong Docker.
+**Stack:** Go 1.27 + go-chi · PostgreSQL 16 · Redis 7 · RabbitMQ 3.13 · Next.js 16 · nginx — toàn bộ chạy trong Docker. Tệp lưu trên Cloudflare R2 (dịch vụ ngoài).
 
 Backend theo Clean Architecture: `delivery` → `usecase` → `domain` ← `repository`.
 
@@ -29,7 +29,9 @@ cd manage
 cp .env.example .env
 ```
 
-Mở `.env` và **kiểm tra các cổng có bị chiếm không** (IIS, Laravel Herd, XAMPP hay chiếm cổng 80 và 9001). Nếu có, đổi `NGINX_PORT` và sửa `PUBLIC_BASE_URL` cho khớp.
+Mở `.env` và **kiểm tra các cổng có bị chiếm không** (IIS, Laravel Herd, XAMPP hay chiếm cổng 80). Nếu có, đổi `NGINX_PORT` và sửa `PUBLIC_BASE_URL` cho khớp.
+
+**Cloudflare R2 là tuỳ chọn khi phát triển.** Để trống các biến `R2_*` thì hệ thống chạy bình thường, chỉ chức năng tải tệp báo lỗi rõ ràng. Muốn dùng thì tạo bucket ở Cloudflare Dashboard → R2, lấy access key ở Manage R2 API Tokens, rồi điền `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
 
 ```bash
 # Linux, macOS, WSL
