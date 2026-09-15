@@ -222,15 +222,22 @@ func (u *Usecase) DeactivateEmployee(
 		return apperror.Invalid("Không thể tự vô hiệu hoá tài khoản của mình", nil)
 	}
 
+	// Tra tài khoản TRƯỚC khi xoá mềm, không phải sau.
+	//
+	// SoftDelete đặt users.deleted_at (bắt buộc, nếu không email bị khoá
+	// vĩnh viễn), mà FindByEmployeeID lọc `deleted_at IS NULL`. Tra sau khi
+	// xoá thì không bao giờ ra, nhánh cắt phiên bị bỏ qua âm thầm, và người
+	// vừa bị vô hiệu hoá vẫn dùng được hệ thống tới khi access token hết
+	// hạn — tối đa 15 phút với đầy đủ quyền cũ.
+	user, findErr := u.users.FindByEmployeeID(ctx, id)
+
 	if err := u.employees.SoftDelete(ctx, id); err != nil {
 		return apperror.Internal(err)
 	}
-	// Phiên đang mở của người đó phải bị cắt ngay, nếu không họ vẫn dùng
-	// được hệ thống tới khi token hết hạn.
-	if user, err := u.users.FindByEmployeeID(ctx, id); err == nil && user != nil {
-		if u.onEmployeeDeactivated != nil {
-			u.onEmployeeDeactivated(ctx, user.ID)
-		}
+
+	// Phiên đang mở của người đó phải bị cắt ngay.
+	if findErr == nil && user != nil && u.onEmployeeDeactivated != nil {
+		u.onEmployeeDeactivated(ctx, user.ID)
 	}
 	return nil
 }

@@ -100,6 +100,54 @@ check "Hai tab cùng F5: tab 1 vẫn dùng được" 200 \
 check "Hai tab cùng F5: tab 2 vẫn dùng được" 200 \
   "$([ -n "$TOK_B" ] && code "$BASE/auth/me" -H "Authorization: Bearer $TOK_B" || echo "no-token")"
 
+# --- Hai tab F5 KHÔNG được đẻ thêm phiên ---
+#
+# Thời gian ân hạn ban đầu xử lý lần dùng lại bằng cách cấp hẳn một phiên
+# mới. Người dùng không bị đá ra, nhưng mỗi chu kỳ refresh với N tab lại để
+# lại N-1 phiên rác sống tới 7 ngày, và trang "thiết bị đang đăng nhập" đầy
+# dòng trùng nhau. Nay lần dùng lại bám vào đúng phiên mà lần đầu đã tạo.
+# Đếm theo "last_seen_at": mỗi phiên có đúng một trường này, còn "id" thì
+# xuất hiện ở nhiều nơi khác trong cùng response.
+count_sessions() {
+  json "$BASE/auth/sessions" -H "Authorization: Bearer $1" \
+    | grep -o '"last_seen_at"' | wc -l | tr -d ' '
+}
+
+GRACE_JAR=/tmp/grace.cookie
+G_TOKEN=$(json -c "$GRACE_JAR" -X POST "$DIRECT/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" \
+  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+N_BEFORE=$(count_sessions "$G_TOKEN")
+
+cp "$GRACE_JAR" /tmp/g1.cookie
+cp "$GRACE_JAR" /tmp/g2.cookie
+json -b /tmp/g1.cookie -X POST "$BASE/auth/refresh" > /tmp/g1.json &
+json -b /tmp/g2.cookie -X POST "$BASE/auth/refresh" > /tmp/g2.json &
+wait
+G1=$(grep -o '"access_token":"[^"]*"' /tmp/g1.json | cut -d'"' -f4)
+G2=$(grep -o '"access_token":"[^"]*"' /tmp/g2.json | cut -d'"' -f4)
+N_AFTER=$(count_sessions "$G1")
+
+check "Hai tab F5 vẫn chỉ một phiên (không đẻ thêm)" "$N_BEFORE" "$N_AFTER"
+check "Hai tab F5: cả hai token cùng trỏ một phiên" 200 \
+  "$([ -n "$G2" ] && code "$BASE/auth/me" -H "Authorization: Bearer $G2" || echo "no-token")"
+
+# --- Đăng xuất phải thắng thời gian ân hạn ---
+#
+# Lỗ hổng cũ: đăng xuất xong, tab khác gửi lại refresh token cũ trong vòng
+# 10 giây là được cấp một phiên mới hợp lệ. Phiên vừa cắt sống lại dưới id
+# khác, và người dùng tưởng mình đã thoát.
+LO_JAR=/tmp/logout-grace.cookie
+json -c "$LO_JAR" -X POST "$DIRECT/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" >/dev/null
+cp "$LO_JAR" /tmp/logout-old.cookie
+LO_TOKEN=$(json -b "$LO_JAR" -c "$LO_JAR" -X POST "$BASE/auth/refresh" \
+  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+curl -s -b "$LO_JAR" -X POST "$BASE/auth/logout" \
+  -H "Authorization: Bearer $LO_TOKEN" >/dev/null
+check "Đăng xuất rồi dùng lại token cũ trong ân hạn → 401" 401 \
+  "$(code -b /tmp/logout-old.cookie -X POST "$BASE/auth/refresh")"
+
 # --- Đánh cắp thật: dùng lại SAU thời gian ân hạn ---
 #
 # Phải chờ qua 10 giây ân hạn, nếu không sẽ đo nhầm sang nhánh "nhiều tab".

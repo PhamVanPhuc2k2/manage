@@ -112,17 +112,31 @@ Bản xoay vòng "thuần" ở trên có một lỗ hổng về trải nghiệm,
 - **Hai tab cùng F5.** Cả hai gọi `/auth/refresh` với cùng một cookie. Một tab thắng, tab kia bị coi là đánh cắp → hệ thống huỷ sạch phiên → **cả hai tab đều bị đăng xuất**, kể cả tab vừa lấy được token mới. Cơ chế gộp request trong `api-client` chỉ hoạt động trong phạm vi một tab, không chặn được nhiều tab.
 - **Phản hồi rơi mạng.** Client gửi refresh, server xoay vòng và trả lời, nhưng phản hồi mất giữa đường. Client gửi lại token cũ và bị coi là kẻ trộm.
 
-Cách xử lý: cho một **khoảng ân hạn ngắn** sau lần dùng đầu tiên. Token dùng lại trong khoảng đó vẫn được chấp nhận và cấp phiên mới bình thường; dùng lại sau đó mới bị coi là đánh cắp.
+Cách xử lý: cho một **khoảng ân hạn ngắn** sau lần dùng đầu tiên. Token dùng lại trong khoảng đó vẫn được chấp nhận; dùng lại sau đó mới bị coi là đánh cắp.
 
 ```
 Chủ nhân dùng token lúc T
-    ├─ dùng lại trong khoảng [T, T+10s]  → chấp nhận, cấp phiên mới
+    ├─ dùng lại trong khoảng [T, T+10s]  → chấp nhận, bám vào phiên vừa tạo
     └─ dùng lại sau T+10s                → ĐÁNH CẮP, huỷ toàn bộ phiên
 ```
 
 Đánh đổi: khoảng này càng dài, kẻ trộm càng có nhiều thời gian dùng token đã lộ. 10 giây đủ cho hai tab và một lần gửi lại do mạng chập, nhưng quá ngắn để khai thác trong thực tế. Các nhà cung cấp lớn cũng làm vậy — Auth0 gọi là *rotation leeway*.
 
-Cả hai chiều đều có trong `scripts/smoke-auth.sh`: hai tab cùng F5 phải cùng sống, và dùng lại sau ân hạn phải huỷ sạch phiên.
+**Lần dùng lại phải bám vào phiên vừa tạo, không được cấp phiên mới.** Bản ân hạn đầu tiên xử lý bằng cách cấp hẳn một phiên mới cho tab thứ hai. Người dùng không bị đá ra, nhưng kéo theo ba chuyện:
+
+1. Mỗi chu kỳ refresh với N tab đẻ ra N phiên mà chỉ xoá 1. Ba tab mở cả ngày là vài trăm phiên rác trong Redis, sống tới hết 7 ngày.
+2. Trang "thiết bị đang đăng nhập" đầy dòng trùng nhau, tên thiết bị rỗng. Bấm đăng xuất một dòng chỉ cắt được một tab.
+3. Nghiêm trọng nhất: **đăng xuất bị vô hiệu**. Đăng xuất xong, tab khác gửi lại token cũ trong vòng 10 giây là có ngay một phiên mới hợp lệ — phiên vừa cắt sống lại dưới id khác.
+
+Cách sửa nằm ở chỗ *khi nào* ghi id phiên mới. Ghi bổ sung sau khi tạo phiên là vô dụng: hai tab F5 gần như cùng một thời điểm, lần ghi đó luôn đến sau lần đọc của tab kia. Nên id được **đặt chỗ ngay trong lệnh Lua tiêu token**:
+
+```lua
+redis.call('HSET', KEYS[1], 'used', '1', 'used_at', ARGV[1], 'next_session', ARGV[3])
+```
+
+Tab thứ hai đọc `next_session` ra ngay, rồi chờ tối đa 300 ms cho bản ghi phiên hiện ra — vì id có trước, bản ghi có sau vài mili giây. Hết 300 ms mà vẫn không có nghĩa là phiên đã bị cắt thật: từ chối. **Đăng xuất phải thắng ân hạn.**
+
+Cả bốn chiều đều có trong `scripts/smoke-auth.sh`: hai tab cùng F5 phải cùng sống, phải vẫn chỉ một phiên, đăng xuất rồi dùng lại trong ân hạn phải 401, và dùng lại sau ân hạn phải huỷ sạch phiên.
 
 Đây là cơ chế duy nhất giúp phát hiện token bị đánh cắp mà không cần thiết bị theo dõi gì thêm. Bỏ nó đi thì refresh token bị lộ có thể dùng vô thời hạn mà không ai biết.
 
@@ -1601,6 +1615,11 @@ Chạy tay từng mục, đừng tin là "chắc đúng".
 | Seed mật khẩu admin trong migration | Mật khẩu nằm trong git vĩnh viễn | Dùng lệnh `cmd/seed`, in ra stdout một lần |
 | Xoá mềm nhân viên mà quên đặt `users.deleted_at` | Email bị khoá vĩnh viễn: nhân viên nghỉ rồi quay lại không tạo được tài khoản, lỗi hiện ra là 500 khó hiểu | Đặt cả `deleted_at` chứ không chỉ `is_active` — chỉ số unique là chỉ số một phần `WHERE deleted_at IS NULL` |
 | Xoay vòng refresh token không có thời gian ân hạn | Hai tab cùng F5 làm cả hai bị đăng xuất; phản hồi rơi mạng cũng bị coi là đánh cắp | Cho ân hạn 10 giây sau lần dùng đầu — xem `RefreshGracePeriod` |
+| Tra tài khoản SAU khi xoá mềm nhân viên | Truy vấn lọc `deleted_at IS NULL` nên không ra kết quả, nhánh cắt phiên bị bỏ qua âm thầm: người vừa cho nghỉ vẫn dùng hệ thống thêm 15 phút với đầy đủ quyền cũ | Tra TRƯỚC khi xoá, giữ lại `user.ID` để cắt phiên sau |
+| Ân hạn xử lý bằng cách cấp phiên MỚI | Mỗi chu kỳ refresh với N tab đẻ ra N phiên rác sống 7 ngày; trang thiết bị đầy dòng trùng; và đăng xuất bị vô hiệu — gửi lại token cũ trong 10 giây là phiên vừa cắt sống lại dưới id khác | Đặt chỗ id phiên mới ngay trong lệnh Lua tiêu token, lần dùng lại bám vào đúng phiên đó |
+
+Hai dòng cuối là hậu quả dây chuyền của hai dòng ngay trên chúng — bản vá
+nào cũng nên đọc lại chỗ nó vừa đổi giả định.
 
 ---
 

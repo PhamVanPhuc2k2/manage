@@ -101,8 +101,8 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 Hai script chạy lại bất cứ lúc nào, tự tạo và tự dọn dữ liệu kiểm thử:
 
 ```bash
-ADMIN_PASS='...' bash scripts/smoke-auth.sh   # 23 mục bảo mật
-ADMIN_PASS='...' bash scripts/smoke-hr.sh     # 26 mục nghiệp vụ nhân sự
+ADMIN_PASS='...' bash scripts/smoke-auth.sh   # 26 mục bảo mật
+ADMIN_PASS='...' bash scripts/smoke-hr.sh     # 31 mục nghiệp vụ nhân sự
 ```
 
 `smoke-auth.sh` kiểm tra những thứ dễ hỏng âm thầm: giả mạo JWT, xoay vòng

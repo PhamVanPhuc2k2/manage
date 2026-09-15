@@ -20,6 +20,19 @@ type SessionStore interface {
 	ListOfUser(ctx context.Context, userID uuid.UUID) ([]Session, error)
 }
 
+// RefreshConsumed là kết quả của một lần tiêu refresh token.
+type RefreshConsumed struct {
+	// SessionID là phiên gắn với token lúc phát hành.
+	SessionID uuid.UUID
+
+	// UserID là chủ nhân của token.
+	UserID uuid.UUID
+
+	// NextSessionID là phiên mà lần refresh THÀNH CÔNG trước đó đã đặt chỗ.
+	// Chỉ có giá trị khi trả về ErrTokenReusedInGrace.
+	NextSessionID uuid.UUID
+}
+
 type RefreshStore interface {
 	Save(ctx context.Context, tokenHash string, sessionID, userID uuid.UUID, ttl time.Duration) error
 
@@ -32,7 +45,16 @@ type RefreshStore interface {
 	// sử dụng, phiên gắn với token cũ đã không còn — nếu chỉ có sessionID
 	// thì không tra ra được chủ nhân, và bước huỷ toàn bộ phiên sẽ bị bỏ
 	// qua âm thầm. Cơ chế chống đánh cắp khi đó trở nên vô dụng.
-	Consume(ctx context.Context, tokenHash string) (sessionID, userID uuid.UUID, err error)
+	//
+	// reserveSessionID là id mà người gọi SẼ dùng cho phiên mới. Nó được ghi
+	// vào bản ghi token trong CÙNG lệnh đánh dấu đã dùng, nên lần dùng lại
+	// trong thời gian ân hạn đọc ra ngay và bám được vào đúng phiên đó thay
+	// vì đẻ thêm phiên mới.
+	//
+	// Phải đặt chỗ trong cùng một lệnh, không ghi bổ sung sau khi tạo phiên:
+	// hai tab F5 gần như cùng một thời điểm, lần ghi bổ sung luôn đến sau
+	// lần đọc của tab kia.
+	Consume(ctx context.Context, tokenHash string, reserveSessionID uuid.UUID) (RefreshConsumed, error)
 }
 
 // LoginThrottle chặn dò mật khẩu. Đếm theo cả IP lẫn tài khoản:

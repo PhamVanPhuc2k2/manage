@@ -342,7 +342,7 @@ Lệnh chạy:
 **Mục tiêu:** Đăng nhập được, phân quyền hoạt động, quản lý đầy đủ nhân viên và phòng ban.
 
 > **Trạng thái: đã xong.** Kiểm chứng bằng hai script trong `scripts/`:
-> `smoke-auth.sh` (23 mục bảo mật) và `smoke-hr.sh` (26 mục nghiệp vụ), đều đạt toàn bộ.
+> `smoke-auth.sh` (26 mục bảo mật) và `smoke-hr.sh` (31 mục nghiệp vụ), đều đạt toàn bộ.
 >
 > Hai việc còn để lại có chủ ý: nhập nhân viên từ Excel (cần hạ tầng báo tiến
 > độ của Phase 5) và sơ đồ tổ chức dạng đồ hoạ (API cây đã có, chỉ thiếu phần vẽ).

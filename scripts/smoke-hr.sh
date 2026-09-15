@@ -190,9 +190,42 @@ else
   check "Xin URL tải ảnh → 200" 200 "$R2_CODE"
 fi
 
+# ------------------------------------------------- nghỉ việc rồi quay lại
+echo
+echo "── Nhân viên nghỉ việc ──"
+
+# Bật lại tài khoản để lấy một phiên đang sống, rồi cho nghỉ việc.
+curl -s -o /dev/null -X PUT "$BASE/employees/$EMP_ID/account/active" -H "$AUTH" -H "$JSON" \
+  -d '{"active":true}'
+LEAVER=$(curl -s -X POST "$DIRECT/auth/login" -H "$JSON" \
+  -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}" \
+  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+check "Bật lại tài khoản, đăng nhập được" 200 \
+  "$([ -n "$LEAVER" ] && code "$DIRECT/auth/me" -H "Authorization: Bearer $LEAVER" || echo no-token)"
+
+check "Cho nghỉ việc → 200" 200 "$(code -X DELETE "$BASE/employees/$EMP_ID" -H "$AUTH")"
+
+# Phiên phải chết NGAY, không chờ access token hết hạn.
+#
+# Chỗ này từng hỏng âm thầm: bản vá đặt users.deleted_at (để email không bị
+# khoá vĩnh viễn) làm cho bước tra tài khoản sau khi xoá mềm không ra kết
+# quả nữa, nên nhánh cắt phiên bị bỏ qua. Người vừa cho nghỉ vẫn dùng được
+# hệ thống tới 15 phút với đầy đủ quyền cũ.
+check "Nghỉ việc: phiên chết NGAY → 401" 401 \
+  "$(code "$DIRECT/auth/me" -H "Authorization: Bearer $LEAVER")"
+
+# Và email phải dùng lại được: nhân viên cũ quay lại công ty.
+REHIRE_ID=$(curl -s -X POST "$BASE/employees" -H "$AUTH" -H "$JSON" \
+  --data-binary "@$TMP/emp.json" | idof)
+check "Nghỉ rồi quay lại: tạo lại cùng email" "yes" \
+  "$([ -n "$REHIRE_ID" ] && echo yes || echo no)"
+check "Nghỉ rồi quay lại: tạo lại tài khoản → 201" 201 \
+  "$([ -n "$REHIRE_ID" ] && code -X POST "$BASE/employees/$REHIRE_ID/account" -H "$AUTH" || echo no-id)"
+
 # --------------------------------------------------------------------- dọn dẹp
 echo
 echo "── Dọn dữ liệu kiểm thử ──"
+[ -n "$REHIRE_ID" ] && curl -s -o /dev/null -X DELETE "$BASE/employees/$REHIRE_ID" -H "$AUTH"
 curl -s -o /dev/null -X DELETE "$BASE/employees/$EMP_ID" -H "$AUTH"
 curl -s -o /dev/null -X DELETE "$BASE/departments/$CHILD_ID" -H "$AUTH"
 curl -s -o /dev/null -X DELETE "$BASE/departments/$DEPT_ID" -H "$AUTH"
