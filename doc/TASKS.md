@@ -3,7 +3,7 @@
 > Tài liệu lộ trình triển khai. Cập nhật lần cuối: 2026-09-15
 > Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong
 >
-> Hướng dẫn chi tiết từng phase: [PHASE-0-SETUP.md](./PHASE-0-SETUP.md)
+> Hướng dẫn chi tiết: [PHASE-0-SETUP.md](./PHASE-0-SETUP.md) · [PHASE-1-SETUP.md](./PHASE-1-SETUP.md)
 
 ---
 
@@ -40,15 +40,15 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 ## 2. Stack kỹ thuật
 
 **Backend**
-- Go 1.23+, router `go-chi/chi/v5`
+- Go 1.25, router `go-chi/chi/v5`
 - PostgreSQL 16 — dữ liệu nghiệp vụ
 - Redis 7 — session, refresh token, presence, cache, rate limit
 - RabbitMQ 3.13 — hàng đợi sự kiện, fan-out realtime, job nền
 - `pgx/v5` (driver), `golang-migrate` (migration), `sqlc` hoặc query thủ công
-- `gorilla/websocket`, `go-playground/validator`, `zerolog`, `viper`
+- `gorilla/websocket`, `go-playground/validator`, `zerolog`, `viper`, `golang-jwt/jwt/v5`
 
 **Frontend**
-- Next.js 15 (App Router), TypeScript, React 19
+- Next.js 16 (App Router), TypeScript, React 19
 - TailwindCSS + shadcn/ui
 - TanStack Query (server state), Zustand (client state)
 - `react-hook-form` + `zod`
@@ -70,18 +70,15 @@ manage/
 ├── doc/                          # Tài liệu
 ├── docker/                       # Mọi thứ liên quan container
 │   ├── backend/
-│   │   ├── Dockerfile            # Multi-stage, target: dev | builder | prod
-│   │   └── entrypoint.sh         # Chờ dependency sẵn sàng → chạy migrate → khởi động
+│   │   └── Dockerfile            # DÙNG CHUNG api + worker, chọn bằng arg BINARY
 │   ├── frontend/
 │   │   └── Dockerfile            # Multi-stage, dùng Next.js standalone output
 │   ├── nginx/
 │   │   ├── nginx.conf
 │   │   └── conf.d/app.conf       # Reverse proxy + WebSocket upgrade + TLS
 │   ├── postgres/
-│   │   └── init/                 # Script chạy lần đầu: tạo extension, tạo user readonly
-│   └── monitoring/
-│       ├── prometheus.yml
-│       └── grafana/              # Dashboard định nghĩa sẵn (provisioning)
+│   │   └── init/                 # Chạy lần đầu: bật extension uuid, pg_trgm, unaccent
+│   └── monitoring/               # Phase 6: prometheus.yml, grafana/
 ├── backend/
 │   ├── go.mod
 │   ├── cmd/
@@ -112,13 +109,14 @@ manage/
 │   │   │   ├── redis/
 │   │   │   └── rabbitmq/
 │   │   └── delivery/             # TẦNG 4 — Cổng vào
-│   │       ├── http/             # handler, router, dto, middleware
-│   │       └── ws/               # hub, client, room, event
+│   │       ├── http/             # handler/, middleware/, router/, dto/
+│   │       ├── ws/               # hub, client, room, event (Phase 5)
+│   │       └── consumer/         # Handler cho message RabbitMQ (worker)
 │   ├── pkg/                      # Tiện ích không gắn nghiệp vụ
 │   │   ├── config/ logger/ apperror/
 │   │   ├── postgres/ redis/ rabbitmq/
 │   │   ├── httpx/                # Chuẩn hoá response
-│   │   └── jwt/ hash/ validator/ pagination/
+│   │   └── jwt/ hash/ token/ validator/ pagination/
 │   └── tests/                    # Integration test, testcontainers
 ├── frontend/
 │   └── src/
@@ -131,7 +129,10 @@ manage/
 ├── docker-compose.override.yml   # Dev: bind mount, hot reload, expose port ra ngoài
 ├── docker-compose.prod.yml       # Prod: image từ registry, replica, resource limit
 ├── .env.example                  # Biến môi trường cho compose
-└── Makefile
+├── .gitattributes                # Ép LF cho Dockerfile, .sh, .conf — tránh lỗi CRLF
+├── Makefile                      # Linux, macOS, WSL, CI
+├── dev.ps1                       # Windows PowerShell (không cần cài make)
+└── README.md
 ```
 
 **Quy tắc phụ thuộc — bắt buộc tuân thủ:**
