@@ -105,6 +105,25 @@ Mỗi lần gọi `/auth/refresh`:
 
 **Vì sao bước 4 và 7 quan trọng?** Refresh token dùng một lần rồi bỏ. Nếu một token đã tiêu lại xuất hiện lần nữa, chỉ có thể là ai đó đã sao chép nó. Lúc này chưa biết token đang dùng là của người thật hay kẻ trộm — nên cắt cả hai và bắt đăng nhập lại. Bất tiện một lần, nhưng chặn được kẻ trộm.
 
+### Thời gian ân hạn — bắt buộc phải có
+
+Bản xoay vòng "thuần" ở trên có một lỗ hổng về trải nghiệm, và nó xảy ra thật:
+
+- **Hai tab cùng F5.** Cả hai gọi `/auth/refresh` với cùng một cookie. Một tab thắng, tab kia bị coi là đánh cắp → hệ thống huỷ sạch phiên → **cả hai tab đều bị đăng xuất**, kể cả tab vừa lấy được token mới. Cơ chế gộp request trong `api-client` chỉ hoạt động trong phạm vi một tab, không chặn được nhiều tab.
+- **Phản hồi rơi mạng.** Client gửi refresh, server xoay vòng và trả lời, nhưng phản hồi mất giữa đường. Client gửi lại token cũ và bị coi là kẻ trộm.
+
+Cách xử lý: cho một **khoảng ân hạn ngắn** sau lần dùng đầu tiên. Token dùng lại trong khoảng đó vẫn được chấp nhận và cấp phiên mới bình thường; dùng lại sau đó mới bị coi là đánh cắp.
+
+```
+Chủ nhân dùng token lúc T
+    ├─ dùng lại trong khoảng [T, T+10s]  → chấp nhận, cấp phiên mới
+    └─ dùng lại sau T+10s                → ĐÁNH CẮP, huỷ toàn bộ phiên
+```
+
+Đánh đổi: khoảng này càng dài, kẻ trộm càng có nhiều thời gian dùng token đã lộ. 10 giây đủ cho hai tab và một lần gửi lại do mạng chập, nhưng quá ngắn để khai thác trong thực tế. Các nhà cung cấp lớn cũng làm vậy — Auth0 gọi là *rotation leeway*.
+
+Cả hai chiều đều có trong `scripts/smoke-auth.sh`: hai tab cùng F5 phải cùng sống, và dùng lại sau ân hạn phải huỷ sạch phiên.
+
 Đây là cơ chế duy nhất giúp phát hiện token bị đánh cắp mà không cần thiết bị theo dõi gì thêm. Bỏ nó đi thì refresh token bị lộ có thể dùng vô thời hạn mà không ai biết.
 
 ### 3.4 Mô hình phân quyền
@@ -1560,6 +1579,8 @@ Chạy tay từng mục, đừng tin là "chắc đúng".
 | Cho phép tạo vòng lặp trong cây | `WITH RECURSIVE` treo database | Kiểm tra tổ tiên trước khi ghi + van `depth < 10` |
 | Tin `Content-Type` khi tải file lên | Tải được file thực thi | Kiểm tra magic bytes phía server |
 | Seed mật khẩu admin trong migration | Mật khẩu nằm trong git vĩnh viễn | Dùng lệnh `cmd/seed`, in ra stdout một lần |
+| Xoá mềm nhân viên mà quên đặt `users.deleted_at` | Email bị khoá vĩnh viễn: nhân viên nghỉ rồi quay lại không tạo được tài khoản, lỗi hiện ra là 500 khó hiểu | Đặt cả `deleted_at` chứ không chỉ `is_active` — chỉ số unique là chỉ số một phần `WHERE deleted_at IS NULL` |
+| Xoay vòng refresh token không có thời gian ân hạn | Hai tab cùng F5 làm cả hai bị đăng xuất; phản hồi rơi mạng cũng bị coi là đánh cắp | Cho ân hạn 10 giây sau lần dùng đầu — xem `RefreshGracePeriod` |
 
 ---
 

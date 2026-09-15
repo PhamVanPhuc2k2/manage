@@ -12,7 +12,30 @@ var (
 	ErrTokenReused  = errors.New("refresh token đã được sử dụng")
 	ErrTokenInvalid = errors.New("refresh token không hợp lệ")
 	ErrNoSession    = errors.New("phiên không tồn tại")
+
+	// ErrTokenReusedInGrace: token dùng lại NGAY SAU lần dùng đầu tiên.
+	//
+	// Đây gần như chắc chắn không phải đánh cắp mà là hai tình huống bình
+	// thường:
+	//   - Người dùng mở nhiều tab, hai tab cùng gọi refresh một lúc. Cơ chế
+	//     gộp request trong api-client chỉ hoạt động trong PHẠM VI MỘT TAB,
+	//     không chặn được nhiều tab.
+	//   - Phản hồi refresh rơi mất giữa đường, client gửi lại token cũ.
+	//
+	// Kẻ trộm thật gần như không thể dùng token trong đúng vài giây sau khi
+	// chủ nhân vừa dùng. Xem RefreshGracePeriod.
+	ErrTokenReusedInGrace = errors.New("refresh token dùng lại trong thời gian ân hạn")
 )
+
+// RefreshGracePeriod là khoảng thời gian sau lần dùng đầu tiên mà việc dùng
+// lại refresh token vẫn được chấp nhận.
+//
+// Đánh đổi: khoảng này càng dài, kẻ trộm càng có nhiều thời gian dùng token
+// đã bị lộ mà không bị phát hiện. 10 giây đủ để xử lý hai tab cùng tải và
+// một lần gửi lại do mạng chập, nhưng quá ngắn để khai thác trong thực tế.
+//
+// Các nhà cung cấp lớn cũng làm vậy — Auth0 gọi là "rotation leeway".
+const RefreshGracePeriod = 10 * time.Second
 
 // Mã lỗi trả về cho client. Frontend dựa vào chúng để quyết định hành động:
 // gặp UNAUTHORIZED thì thử refresh token, gặp FORBIDDEN thì báo thiếu quyền.

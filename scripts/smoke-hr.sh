@@ -13,6 +13,12 @@ cd "$(dirname "$0")/.."
 set -a; [ -f .env ] && . ./.env; set +a
 
 BASE="${PUBLIC_BASE_URL:-http://localhost}/api/v1"
+
+# Gọi đăng nhập THẲNG vào api, bỏ qua nginx.
+#
+# nginx có giới hạn tốc độ riêng cho /auth/login. Script này đăng nhập nhiều
+# lần liên tiếp nên sẽ đụng giới hạn đó và đo nhầm — 429 thay vì kết quả thật.
+DIRECT="http://localhost:${API_PORT:-8080}/api/v1"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@abc.vn}"
 ADMIN_PASS="${ADMIN_PASS:?Đặt biến ADMIN_PASS trước khi chạy}"
 
@@ -39,6 +45,15 @@ JSON='Content-Type: application/json'
 
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 idof() { grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4; }
+
+# Xoá bộ đếm chặn dò mật khẩu.
+#
+# Bộ đếm sống 15 phút. Nếu lần chạy trước có login hỏng (do lỗi thật hoặc do
+# script đang sửa dở), lần chạy này sẽ bị chặn và ta đo nhầm 429 thay vì kết
+# quả thật — mất thời gian tìm nhầm chỗ.
+docker compose exec -T redis sh -c \
+  "redis-cli -a '$REDIS_PASSWORD' --no-auth-warning --scan --pattern 'login_fail:*' \
+   | xargs -r redis-cli -a '$REDIS_PASSWORD' --no-auth-warning DEL" >/dev/null 2>&1
 
 echo
 echo "═══ KIỂM CHỨNG NGHIỆP VỤ NHÂN SỰ ═══"
@@ -131,10 +146,10 @@ check "Tạo tài khoản lần hai → 409" 409 \
   "$(code -X POST "$BASE/employees/$EMP_ID/account" -H "$AUTH")"
 
 check "Đăng nhập bằng mật khẩu tạm → 200" 200 \
-  "$(code -X POST "$BASE/auth/login" -H "$JSON" \
+  "$(code -X POST "$DIRECT/auth/login" -H "$JSON" \
      -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}")"
 check "Bị bắt đổi mật khẩu ngay lần đầu" "true" \
-  "$(curl -s -X POST "$BASE/auth/login" -H "$JSON" \
+  "$(curl -s -X POST "$DIRECT/auth/login" -H "$JSON" \
      -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}" \
      | grep -o '"must_change_password":[a-z]*' | cut -d: -f2)"
 
@@ -149,7 +164,7 @@ check "Nâng lên manager → 200" 200 \
   "$(code -X PUT "$BASE/employees/$EMP_ID/roles" -H "$AUTH" -H "$JSON" \
      -d '{"roles":["employee","manager"]}')"
 check "Phạm vi dữ liệu đổi theo vai trò" '"scope":"department"' \
-  "$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $(curl -s -X POST "$BASE/auth/login" \
+  "$(curl -s "$DIRECT/auth/me" -H "Authorization: Bearer $(curl -s -X POST "$DIRECT/auth/login" \
      -H "$JSON" -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}" \
      | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)" | grep -o '"scope":"[^"]*"')"
 
@@ -157,7 +172,7 @@ check "Vô hiệu hoá tài khoản → 200" 200 \
   "$(code -X PUT "$BASE/employees/$EMP_ID/account/active" -H "$AUTH" -H "$JSON" \
      -d '{"active":false}')"
 check "Tài khoản đã tắt không đăng nhập được → 403" 403 \
-  "$(code -X POST "$BASE/auth/login" -H "$JSON" \
+  "$(code -X POST "$DIRECT/auth/login" -H "$JSON" \
      -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}")"
 
 # ----------------------------------------------------------------- ảnh đại diện

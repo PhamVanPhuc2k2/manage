@@ -203,16 +203,34 @@ func (u *Usecase) Refresh(ctx context.Context, refreshToken, ip, ua string) (*To
 			"Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.")
 	}
 
-	if err != nil {
+	// --- DÙNG LẠI TRONG THỜI GIAN ÂN HẠN ---
+	//
+	// Gần như chắc chắn là hai tab cùng gọi refresh, hoặc client gửi lại vì
+	// phản hồi lần trước rơi mất. Cấp phiên mới bình thường.
+	//
+	// Phiên gắn với token cũ đã bị xoá ở lần refresh đầu nên không tra được
+	// tên thiết bị — chấp nhận mất thông tin đó, đổi lấy việc người dùng
+	// không bị đá ra ngoài vô cớ.
+	inGrace := errors.Is(err, domainauth.ErrTokenReusedInGrace)
+	if inGrace {
+		log.Info().
+			Str("user_id", userID.String()).
+			Msg("refresh token dùng lại trong thời gian ân hạn — nhiều tab hoặc gửi lại do mạng")
+	} else if err != nil {
 		return nil, apperror.New(apperror.KindUnauthorized, "Phiên đăng nhập đã hết hạn.")
 	}
 
-	session, err := u.sessions.Get(ctx, sessionID)
-	if err != nil || session == nil {
-		return nil, apperror.New(apperror.KindUnauthorized, "Phiên đăng nhập đã kết thúc.")
+	deviceName := ""
+	if !inGrace {
+		session, err := u.sessions.Get(ctx, sessionID)
+		if err != nil || session == nil {
+			return nil, apperror.New(apperror.KindUnauthorized, "Phiên đăng nhập đã kết thúc.")
+		}
+		deviceName = session.DeviceName
+		userID = session.UserID
 	}
 
-	user, err := u.users.FindByID(ctx, session.UserID)
+	user, err := u.users.FindByID(ctx, userID)
 	if err != nil || user == nil {
 		_ = u.sessions.Delete(ctx, sessionID)
 		return nil, apperror.New(apperror.KindUnauthorized, "Tài khoản không còn hiệu lực.")
@@ -223,12 +241,13 @@ func (u *Usecase) Refresh(ctx context.Context, refreshToken, ip, ua string) (*To
 	}
 
 	// Huỷ phiên cũ rồi tạo phiên mới — không tái dùng session_id.
+	// Trong trường hợp ân hạn thì phiên cũ đã không còn, gọi Delete vô hại.
 	_ = u.sessions.Delete(ctx, sessionID)
 
 	return u.issueSession(ctx, user, LoginInput{
 		IP:         ip,
 		UserAgent:  ua,
-		DeviceName: session.DeviceName,
+		DeviceName: deviceName,
 	})
 }
 

@@ -128,8 +128,18 @@ func (r *EmployeeRepository) SoftDelete(ctx context.Context, id uuid.UUID) error
 		return domainhr.ErrNotFound
 	}
 
+	// Đặt CẢ deleted_at chứ không chỉ is_active.
+	//
+	// Chỉ số unique trên email là chỉ số một phần: UNIQUE (lower(email))
+	// WHERE deleted_at IS NULL. Không đặt deleted_at thì hàng cũ vẫn giữ chỗ
+	// email đó vĩnh viễn — nhân viên nghỉ rồi quay lại sẽ không bao giờ tạo
+	// được tài khoản mới, và lỗi hiện ra là 500 chứ không nói rõ vì sao.
+	//
+	// Hàng vẫn nằm lại trong bảng (xoá mềm) nên user_roles và assigned_by
+	// không bị gãy tham chiếu.
 	if _, err := tx.Exec(ctx,
-		`UPDATE users SET is_active = FALSE WHERE employee_id = $1`, id); err != nil {
+		`UPDATE users SET is_active = FALSE, deleted_at = NOW()
+		 WHERE employee_id = $1 AND deleted_at IS NULL`, id); err != nil {
 		return fmt.Errorf("vô hiệu hoá tài khoản: %w", err)
 	}
 

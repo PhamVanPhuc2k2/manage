@@ -83,11 +83,42 @@ NEW=$(json -b /tmp/admin.cookie -c /tmp/admin2.cookie -X POST "$BASE/auth/refres
 check "Refresh → cấp token mới" "yes" "$([ -n "$NEW" ] && [ "$NEW" != "$TOKEN" ] && echo yes || echo no)"
 check "Token mới dùng được → 200" 200 "$(code "$BASE/auth/me" -H "Authorization: Bearer $NEW")"
 
-# Dùng lại refresh token CŨ: phải bị coi là đánh cắp.
-check "Dùng lại refresh token cũ → 401" 401 \
-  "$(code -b /tmp/admin.cookie -X POST "$BASE/auth/refresh")"
-check "Token mới bị huỷ theo (chống đánh cắp) → 401" 401 \
-  "$(code "$BASE/auth/me" -H "Authorization: Bearer $NEW")"
+# --- Hai tab cùng F5 ---
+#
+# Đây là lỗi thật đã từng xảy ra: hai tab cùng gọi refresh với cùng một
+# cookie, một tab thắng, tab kia bị coi là đánh cắp token và hệ thống huỷ
+# sạch phiên — CẢ HAI tab đều bị đăng xuất. Thời gian ân hạn sửa việc này.
+cp /tmp/admin.cookie /tmp/tabA.cookie
+cp /tmp/admin.cookie /tmp/tabB.cookie
+json -b /tmp/tabA.cookie -X POST "$BASE/auth/refresh" > /tmp/tabA.json &
+json -b /tmp/tabB.cookie -X POST "$BASE/auth/refresh" > /tmp/tabB.json &
+wait
+TOK_A=$(grep -o '"access_token":"[^"]*"' /tmp/tabA.json | cut -d'"' -f4)
+TOK_B=$(grep -o '"access_token":"[^"]*"' /tmp/tabB.json | cut -d'"' -f4)
+check "Hai tab cùng F5: tab 1 vẫn dùng được" 200 \
+  "$([ -n "$TOK_A" ] && code "$BASE/auth/me" -H "Authorization: Bearer $TOK_A" || echo "no-token")"
+check "Hai tab cùng F5: tab 2 vẫn dùng được" 200 \
+  "$([ -n "$TOK_B" ] && code "$BASE/auth/me" -H "Authorization: Bearer $TOK_B" || echo "no-token")"
+
+# --- Đánh cắp thật: dùng lại SAU thời gian ân hạn ---
+#
+# Phải chờ qua 10 giây ân hạn, nếu không sẽ đo nhầm sang nhánh "nhiều tab".
+STOLEN=/tmp/stolen.cookie
+TOKEN=$(json -c "$STOLEN" -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" \
+  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+cp "$STOLEN" /tmp/thief.cookie
+OWNER_TOKEN=$(json -b "$STOLEN" -c "$STOLEN" -X POST "$BASE/auth/refresh" \
+  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+
+echo "  · chờ qua 10 giây ân hạn..."
+DEADLINE=$(( $(date +%s) + 13 ))
+until [ "$(date +%s)" -ge "$DEADLINE" ]; do sleep 2; done
+
+check "Dùng lại refresh token cũ sau ân hạn → 401" 401 \
+  "$(code -b /tmp/thief.cookie -X POST "$BASE/auth/refresh")"
+check "Chống đánh cắp: huỷ luôn token của chủ nhân → 401" 401 \
+  "$(code "$BASE/auth/me" -H "Authorization: Bearer $OWNER_TOKEN")"
 
 # Đăng nhập lại để có phiên sạch.
 TOKEN=$(json -c /tmp/admin.cookie -X POST "$BASE/auth/login" \

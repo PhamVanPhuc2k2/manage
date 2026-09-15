@@ -77,6 +77,7 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 |---|---|
 | [doc/TASKS.md](doc/TASKS.md) | Lộ trình đầy đủ 7 phase, mô hình dữ liệu, bảng rủi ro |
 | [doc/PHASE-0-SETUP.md](doc/PHASE-0-SETUP.md) | Hướng dẫn chi tiết Phase 0 kèm mã nguồn và các lỗi đã gặp thật |
+| [doc/PHASE-1-SETUP.md](doc/PHASE-1-SETUP.md) | Thiết kế xác thực và phân quyền: chiến lược token, chống đánh cắp, phạm vi dữ liệu |
 
 ## Lộ trình
 
@@ -100,7 +101,7 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 Hai script chạy lại bất cứ lúc nào, tự tạo và tự dọn dữ liệu kiểm thử:
 
 ```bash
-ADMIN_PASS='...' bash scripts/smoke-auth.sh   # 21 mục bảo mật
+ADMIN_PASS='...' bash scripts/smoke-auth.sh   # 23 mục bảo mật
 ADMIN_PASS='...' bash scripts/smoke-hr.sh     # 26 mục nghiệp vụ nhân sự
 ```
 

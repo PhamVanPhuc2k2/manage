@@ -70,18 +70,32 @@ func (s *RefreshStore) Save(
 //
 //	{0}                       — token không tồn tại
 //	{1, session_id, user_id}  — hợp lệ, vừa đánh dấu đã dùng
-//	{2, session_id, user_id}  — ĐÃ DÙNG TRƯỚC ĐÓ, nghi bị đánh cắp
+//	{2, session_id, user_id}  — dùng lại SAU thời gian ân hạn → nghi đánh cắp
+//	{3, session_id, user_id}  — dùng lại TRONG thời gian ân hạn → chấp nhận
+//
+// ARGV[1] là thời điểm hiện tại (mili giây), ARGV[2] là độ dài ân hạn.
+// Thời gian do Go truyền vào chứ không lấy từ Redis: lệnh Lua phải tất định
+// để nhân bản Redis không lệch nhau.
 const consumeScript = `
 local used = redis.call('HGET', KEYS[1], 'used')
 if not used then
     return {0}
 end
+
 local sid = redis.call('HGET', KEYS[1], 'session_id')
 local uid = redis.call('HGET', KEYS[1], 'user_id')
+
 if used == '1' then
+    local usedAt = tonumber(redis.call('HGET', KEYS[1], 'used_at') or '0')
+    local now = tonumber(ARGV[1])
+    local grace = tonumber(ARGV[2])
+    if usedAt > 0 and (now - usedAt) <= grace then
+        return {3, sid, uid}
+    end
     return {2, sid, uid}
 end
-redis.call('HSET', KEYS[1], 'used', '1')
+
+redis.call('HSET', KEYS[1], 'used', '1', 'used_at', ARGV[1])
 return {1, sid, uid}
 `
 
@@ -89,7 +103,11 @@ func (s *RefreshStore) Consume(
 	ctx context.Context,
 	tokenHash string,
 ) (sessionID, userID uuid.UUID, err error) {
-	res, evalErr := s.client.Eval(ctx, consumeScript, []string{refreshKey(tokenHash)}).Slice()
+	now := time.Now().UnixMilli()
+	grace := domainauth.RefreshGracePeriod.Milliseconds()
+
+	res, evalErr := s.client.Eval(ctx, consumeScript,
+		[]string{refreshKey(tokenHash)}, now, grace).Slice()
 	if evalErr != nil && !errors.Is(evalErr, goredis.Nil) {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("tiêu refresh token: %w", evalErr)
 	}
@@ -111,10 +129,13 @@ func (s *RefreshStore) Consume(
 		return uuid.Nil, uuid.Nil, domainauth.ErrTokenInvalid
 	}
 
-	if code == 2 {
+	switch code {
+	case 2:
 		// Trả kèm userID để usecase huỷ được TOÀN BỘ phiên của người này,
 		// kể cả khi phiên gắn với token cũ đã bị xoá từ lần refresh trước.
 		return sessionID, userID, domainauth.ErrTokenReused
+	case 3:
+		return sessionID, userID, domainauth.ErrTokenReusedInGrace
 	}
 	return sessionID, userID, nil
 }
