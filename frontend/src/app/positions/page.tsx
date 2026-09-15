@@ -8,7 +8,7 @@ import { PositionForm } from "@/features/positions/PositionForm";
 import { useDeletePosition, usePositions } from "@/features/positions/queries";
 import type { Position } from "@/features/positions/types";
 import { ApiError } from "@/lib/api-client";
-import { usePermission } from "@/lib/auth/AuthProvider";
+import { usePermission } from "@/lib/auth/useAuth";
 
 const formatVND = (n?: number) =>
   n === undefined || n === null

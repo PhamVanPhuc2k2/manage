@@ -11,7 +11,7 @@ import {
 } from "@/features/departments/queries";
 import type { Department } from "@/features/departments/types";
 import { ApiError } from "@/lib/api-client";
-import { usePermission } from "@/lib/auth/AuthProvider";
+import { usePermission } from "@/lib/auth/useAuth";
 
 /**
  * Làm phẳng cây thành danh sách kèm độ sâu.

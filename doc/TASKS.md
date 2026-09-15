@@ -52,7 +52,7 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 - Next.js 16 (App Router), TypeScript, React 19
 - TailwindCSS + shadcn/ui
 - TanStack Query cho dữ liệu từ server (cache, làm mới, optimistic update)
-- Trạng thái client dùng React Context. **Chưa dùng Zustand** — trạng thái toàn cục duy nhất hiện nay là phiên đăng nhập, Context xử lý đủ. Thêm khi nào có trạng thái dùng chung thật sự (bộ lọc chia sẻ giữa màn hình, bong bóng chat ở Phase 5)
+- Zustand cho trạng thái client (phiên đăng nhập). Chọn Zustand thay Context vì store đọc ghi được **cả ngoài React** — `api-client` không phải component nên không dùng Context được, và việc tách đôi trạng thái đã từng gây lỗi thật (xem PHASE-1-SETUP.md)
 - `react-hook-form` + `zod`
 - WebSocket client tự viết, có auto-reconnect + exponential backoff
 

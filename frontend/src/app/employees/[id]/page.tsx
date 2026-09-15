@@ -23,7 +23,7 @@ import {
 import { useRoles } from "@/features/roles/queries";
 import { SCOPE_LABEL } from "@/features/roles/types";
 import { ApiError } from "@/lib/api-client";
-import { usePermission } from "@/lib/auth/AuthProvider";
+import { usePermission } from "@/lib/auth/useAuth";
 
 const formatDate = (s?: string) =>
   s ? new Date(s).toLocaleDateString("vi-VN") : "—";

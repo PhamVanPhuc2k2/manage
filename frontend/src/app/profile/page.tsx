@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { logoutAll } from "@/features/auth/api";
 import { useSessions } from "@/features/auth/queries";
 import { ApiError } from "@/lib/api-client";
-import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAuth } from "@/lib/auth/useAuth";
 
 const formatTime = (s: string) =>
   new Date(s).toLocaleString("vi-VN", {

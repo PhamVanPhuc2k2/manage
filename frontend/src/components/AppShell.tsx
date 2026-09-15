@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAuth, usePermission } from "@/lib/auth/useAuth";
 
 const NAV = [
   { href: "/employees", label: "Nhân viên", permission: "employee:read" },
@@ -19,7 +19,8 @@ const NAV = [
  * mật: ai cũng gọi được API bằng curl. Quyết định thật nằm ở backend.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout, can } = useAuth();
+  const { user, loading, logout } = useAuth();
+  const { can } = usePermission();
   const router = useRouter();
   const pathname = usePathname();
 

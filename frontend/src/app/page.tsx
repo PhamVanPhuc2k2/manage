@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAuth } from "@/lib/auth/useAuth";
 
 /**
  * Trang gốc chỉ điều hướng: đã đăng nhập thì vào danh sách nhân viên,

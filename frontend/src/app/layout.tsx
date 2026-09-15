@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/lib/auth/AuthProvider";
+import { AuthBootstrap } from "@/components/AuthBootstrap";
 import { QueryProvider } from "@/lib/query-provider";
 
 export const metadata: Metadata = {
@@ -15,14 +15,17 @@ export default function RootLayout({
     <html lang="vi">
       <body className="bg-white text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100">
         {/*
-          QueryProvider bọc NGOÀI AuthProvider.
+          Không còn AuthProvider bọc cây component.
 
-          Thứ tự này để sau có thể dùng react-query bên trong AuthProvider
-          (ví dụ cache thông tin người dùng hiện tại). Đảo lại thì AuthProvider
-          không truy cập được query client.
+          Trạng thái đăng nhập nằm trong store Zustand — một biến toàn cục,
+          component nào cần thì tự đọc. AuthBootstrap chỉ chạy một effect lúc
+          ứng dụng vừa tải để khôi phục phiên từ cookie refresh.
+
+          QueryProvider vẫn phải là Provider thật vì QueryClient cần tạo riêng
+          cho mỗi request khi render phía máy chủ.
         */}
         <QueryProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthBootstrap>{children}</AuthBootstrap>
         </QueryProvider>
       </body>
     </html>

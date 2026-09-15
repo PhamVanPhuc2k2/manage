@@ -1,7 +1,6 @@
-import { tokenStore } from "./auth/token-store";
+import { isTokenExpiringSoon, useAuthStore } from "./auth/store";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api/v1";
 
 export class ApiError extends Error {
   constructor(
@@ -37,21 +36,23 @@ export type PageMeta = {
 /* ------------------------------------------------------------------ *
  * Gộp các lần refresh đồng thời
  *
- * ĐÂY là đoạn quan trọng nhất của file này.
- *
  * Khi access token hết hạn, thường có nhiều request cùng lỗi 401 một lúc
  * (một trang đang tải 5 widget). Nếu mỗi request tự gọi refresh thì sẽ có
- * 5 lần refresh song song — và vì backend XOAY VÒNG refresh token, 4 trong
- * 5 lần sẽ dùng token đã tiêu, kích hoạt cơ chế phát hiện đánh cắp và
- * ĐĂNG XUẤT NGƯỜI DÙNG VÔ CỚ.
+ * 5 lần refresh song song — và vì backend XOAY VÒNG refresh token, các lần
+ * sau sẽ dùng token đã tiêu.
  *
- * Biến dưới đây bảo đảm mọi request cùng chờ MỘT lời gọi refresh duy nhất.
- * Bỏ nó đi thì lỗi sinh ra rất khó lần ra nguyên nhân: người dùng thỉnh
- * thoảng bị đá ra ngoài mà không rõ vì sao.
+ * Backend có thời gian ân hạn 10 giây nên việc đó không còn gây đăng xuất,
+ * nhưng vẫn là 5 request thừa và 5 phiên mới vô ích. Biến dưới đây bảo đảm
+ * mọi request trong CÙNG MỘT TAB chờ chung một lời gọi refresh.
+ *
+ * Lưu ý: cách này KHÔNG chặn được nhiều tab — mỗi tab có bản sao module
+ * riêng. Trường hợp nhiều tab do thời gian ân hạn ở backend lo.
  * ------------------------------------------------------------------ */
 let refreshPromise: Promise<string | null> | null = null;
 
 async function doRefresh(): Promise<string | null> {
+  const auth = useAuthStore.getState();
+
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: "POST",
@@ -60,7 +61,12 @@ async function doRefresh(): Promise<string | null> {
     });
 
     if (!res.ok) {
-      tokenStore.clear();
+      // Xoá CẢ token lẫn user.
+      //
+      // Đây là chỗ trước đây sai: chỉ xoá token, còn `user` vẫn nằm trong
+      // React state nên giao diện tưởng vẫn đang đăng nhập và hiện một trang
+      // hỏng. Nay cả hai nằm chung một store nên không thể lệch nữa.
+      auth.clear();
       return null;
     }
 
@@ -70,14 +76,14 @@ async function doRefresh(): Promise<string | null> {
     }>;
 
     if (!body.data?.access_token) {
-      tokenStore.clear();
+      auth.clear();
       return null;
     }
 
-    tokenStore.set(body.data.access_token, body.data.expires_at);
+    auth.setToken(body.data.access_token, body.data.expires_at);
     return body.data.access_token;
   } catch {
-    tokenStore.clear();
+    auth.clear();
     return null;
   }
 }
@@ -92,8 +98,8 @@ export async function refreshAccessToken(): Promise<string | null> {
 }
 
 async function getValidToken(): Promise<string | null> {
-  const token = tokenStore.get();
-  if (token && !tokenStore.isExpiringSoon()) return token;
+  const token = useAuthStore.getState().accessToken;
+  if (token && !isTokenExpiringSoon()) return token;
   return refreshAccessToken();
 }
 
@@ -103,10 +109,10 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   skipAuth?: boolean;
 };
 
-async function request<T>(path: string, opts: RequestOptions = {}): Promise<{
-  data: T;
-  meta?: PageMeta;
-}> {
+async function request<T>(
+  path: string,
+  opts: RequestOptions = {},
+): Promise<{ data: T; meta?: PageMeta }> {
   const { body, skipAuth, headers, ...rest } = opts;
 
   const send = async (token: string | null): Promise<Response> => {

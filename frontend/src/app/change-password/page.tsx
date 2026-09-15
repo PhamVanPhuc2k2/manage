@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useChangePassword } from "@/features/auth/queries";
 import { ApiError } from "@/lib/api-client";
-import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAuth } from "@/lib/auth/useAuth";
 
 export default function ChangePasswordPage() {
   const { user, loading } = useAuth();

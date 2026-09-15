@@ -1511,6 +1511,26 @@ async function getValidToken(): Promise<string> {
 }
 ```
 
+### Vì sao trạng thái đăng nhập dùng Zustand chứ không phải React Context
+
+Bản đầu tiên tách làm đôi: access token nằm trong một biến module (`tokenStore`), còn `user` nằm trong React state của `AuthProvider`. Lý do của sự chia đôi là `api-client` cần đọc token nhưng nó không phải component React nên không dùng được Context.
+
+**Chia đôi thì hai nửa lệch nhau được, và đã lệch thật.** `api-client` xoá token ở ba chỗ khi refresh thất bại, nhưng không đụng được vào `user`. Hậu quả: phiên bị huỷ từ nơi khác (bấm "đăng xuất mọi thiết bị" ở máy khác, hoặc admin vô hiệu hoá tài khoản) thì token bị xoá còn `user` vẫn còn — `AppShell` tưởng đang đăng nhập nên tiếp tục render, người dùng nhìn thấy một trang hỏng với mọi bảng báo lỗi thay vì được đưa về trang đăng nhập.
+
+Zustand đọc ghi được ở cả hai phía:
+
+```ts
+// trong component — có selector nên chỉ render lại khi đúng phần đó đổi
+const user = useAuthStore((s) => s.user);
+
+// ở api-client, ngoài React
+useAuthStore.getState().clear();
+```
+
+Nhờ vậy chỉ còn **một** đường xoá phiên, và nó xoá token lẫn `user` trong cùng một thao tác — không còn cách nào làm lệch.
+
+Bài học chung: khi một phần trạng thái phải đọc được từ ngoài React, đừng tách nó ra khỏi phần còn lại. Cái giá không phải là thêm một thư viện mà là một lỗi rất khó tái hiện.
+
 ### Bảo vệ route
 
 `middleware.ts` của Next.js chỉ kiểm tra **sự tồn tại** của cookie refresh và chuyển hướng. Nó không được coi là kiểm soát bảo mật — đó chỉ là để trải nghiệm mượt. Quyết định thật nằm ở backend.
