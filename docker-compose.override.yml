@@ -34,6 +34,12 @@ services:
       # trong container — các package có binary native sẽ hỏng.
       - frontend-node-modules:/app/node_modules
       - frontend-next:/app/.next
+      # Kho gói của pnpm cũng phải nằm trong volume, KHÔNG rơi vào bind mount.
+      #
+      # Thiếu dòng này, chạy `pnpm install` hay `pnpm add` trong container sẽ
+      # tạo 1.3GB và hơn 20.000 file ngay trong thư mục dự án trên máy host —
+      # làm chậm mọi thao tác git và suýt lọt vào commit.
+      - frontend-pnpm-store:/app/.pnpm-store
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
 
@@ -86,3 +92,4 @@ volumes:
   worker-tmp:
   frontend-node-modules:
   frontend-next:
+  frontend-pnpm-store:

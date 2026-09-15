@@ -51,7 +51,8 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 **Frontend**
 - Next.js 16 (App Router), TypeScript, React 19
 - TailwindCSS + shadcn/ui
-- TanStack Query (server state), Zustand (client state)
+- TanStack Query cho dữ liệu từ server (cache, làm mới, optimistic update)
+- Trạng thái client dùng React Context. **Chưa dùng Zustand** — trạng thái toàn cục duy nhất hiện nay là phiên đăng nhập, Context xử lý đủ. Thêm khi nào có trạng thái dùng chung thật sự (bộ lọc chia sẻ giữa màn hình, bong bóng chat ở Phase 5)
 - `react-hook-form` + `zod`
 - WebSocket client tự viết, có auto-reconnect + exponential backoff
 
@@ -123,7 +124,10 @@ manage/
 │   └── src/
 │       ├── app/                  # App Router: (auth)/ (dashboard)/
 │       ├── components/           # ui/, layout/, feature/
-│       ├── features/             # mỗi feature: api.ts, hooks.ts, types.ts, components/
+│       ├── features/             # mỗi feature: types.ts, api.ts, queries.ts
+│       │                         #   types.ts   — kiểu dữ liệu và nhãn hiển thị
+│       │                         #   api.ts     — hàm gọi HTTP thuần, không biết react
+│       │                         #   queries.ts — khoá cache + hook useQuery/useMutation
 │       ├── lib/                  # api-client, ws-client, auth, utils
 │       └── stores/
 ├── docker-compose.yml            # Định nghĩa gốc, dùng chung mọi môi trường

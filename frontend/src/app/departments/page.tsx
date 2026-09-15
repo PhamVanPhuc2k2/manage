@@ -1,21 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { AppShell } from "@/components/AppShell";
-import { api, ApiError } from "@/lib/api-client";
+import { useDepartmentTree } from "@/features/departments/queries";
+import type { Department } from "@/features/departments/types";
+import { ApiError } from "@/lib/api-client";
 import { usePermission } from "@/lib/auth/AuthProvider";
-
-type Department = {
-  id: string;
-  parent_id?: string;
-  code: string;
-  name: string;
-  description?: string;
-  manager_name?: string;
-  employee_count: number;
-  children?: Department[];
-};
 
 /** Vẽ một nhánh của cây, thụt lề theo độ sâu. */
 function TreeNode({ node, depth }: { node: Department; depth: number }) {
@@ -41,36 +30,7 @@ function TreeNode({ node, depth }: { node: Department; depth: number }) {
 
 export default function DepartmentsPage() {
   const { can } = usePermission();
-
-  const [tree, setTree] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Gọi API bên trong hàm async, không setState đồng bộ ngay trong thân
-  // effect — React 19 cảnh báo vì nó gây render dây chuyền.
-  //
-  // Cờ `cancelled` cũng sửa một lỗi thật: nếu người dùng rời trang trước khi
-  // request xong, setState trên component đã unmount sẽ báo lỗi.
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { data } = await api.get<Department[]>("/departments/tree");
-        if (!cancelled) setTree(data ?? []);
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof ApiError ? e.message : "Không tải được danh sách");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data: tree = [], isPending, error } = useDepartmentTree();
 
   return (
     <AppShell>
@@ -85,7 +45,7 @@ export default function DepartmentsPage() {
 
       {error && (
         <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          {error}
+          {error instanceof ApiError ? error.message : "Không tải được danh sách"}
         </div>
       )}
 
@@ -100,22 +60,23 @@ export default function DepartmentsPage() {
             </tr>
           </thead>
           <tbody>
-            {loading && (
+            {isPending && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-neutral-500">
                   Đang tải...
                 </td>
               </tr>
             )}
-            {!loading && tree.length === 0 && (
+            {!isPending && tree.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-neutral-500">
                   Chưa có phòng ban nào
                 </td>
               </tr>
             )}
-            {!loading &&
-              tree.map((d) => <TreeNode key={d.id} node={d} depth={0} />)}
+            {tree.map((d) => (
+              <TreeNode key={d.id} node={d} depth={0} />
+            ))}
           </tbody>
         </table>
       </div>

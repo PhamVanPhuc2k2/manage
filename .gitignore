@@ -9,6 +9,14 @@ node_modules/
 .next/
 out/
 
+# Kho gói của pnpm.
+#
+# Nếu chạy `pnpm install` trong container mà không đặt store-dir, pnpm sẽ tạo
+# thư mục này NGAY TRONG thư mục dự án — 1.3GB và hơn 20.000 file. Dòng dưới
+# chặn nó lọt vào git; docker-compose.override.yml gắn một named volume vào
+# đúng đường dẫn này để nó không rơi ra máy host nữa.
+.pnpm-store/
+
 # Môi trường — KHÔNG BAO GIỜ commit
 .env
 .env.local

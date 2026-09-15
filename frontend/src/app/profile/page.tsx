@@ -1,20 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
-import { api, ApiError } from "@/lib/api-client";
+import { logoutAll } from "@/features/auth/api";
+import { useSessions } from "@/features/auth/queries";
+import { ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth/AuthProvider";
-
-type Session = {
-  id: string;
-  device_name: string;
-  ip: string;
-  created_at: string;
-  last_seen_at: string;
-  current: boolean;
-};
 
 const formatTime = (s: string) =>
   new Date(s).toLocaleString("vi-VN", {
@@ -25,41 +17,22 @@ const formatTime = (s: string) =>
     minute: "2-digit",
   });
 
+const SCOPE_LABEL: Record<string, string> = {
+  all: "Toàn công ty",
+  department: "Phòng ban",
+  self: "Cá nhân",
+};
+
 export default function ProfilePage() {
   const { user, logout } = useAuth();
-
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  // Xem ghi chú ở trang phòng ban: không setState đồng bộ trong thân effect,
-  // và có cờ cancelled để tránh setState sau khi component đã unmount.
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { data } = await api.get<Session[]>("/auth/sessions");
-        if (!cancelled) setSessions(data ?? []);
-      } catch (e) {
-        if (!cancelled) {
-          setError(
-            e instanceof ApiError ? e.message : "Không tải được danh sách thiết bị",
-          );
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data: sessions = [], isPending, error } = useSessions();
 
   async function handleLogoutAll() {
     try {
-      await api.post("/auth/logout-all");
+      await logoutAll();
     } finally {
-      // logout-all cắt cả phiên hiện tại, nên phải dọn phía client
-      // và về trang đăng nhập.
+      // logout-all cắt cả phiên hiện tại, nên phải dọn phía client và về
+      // trang đăng nhập dù lệnh trên có lỗi hay không.
       await logout();
     }
   }
@@ -84,11 +57,7 @@ export default function ProfilePage() {
           </div>
           <div className="flex justify-between">
             <dt className="text-neutral-500">Phạm vi dữ liệu</dt>
-            <dd>
-              {{ all: "Toàn công ty", department: "Phòng ban", self: "Cá nhân" }[
-                user?.scope ?? "self"
-              ] ?? user?.scope}
-            </dd>
+            <dd>{SCOPE_LABEL[user?.scope ?? "self"] ?? user?.scope}</dd>
           </div>
         </dl>
 
@@ -113,7 +82,9 @@ export default function ProfilePage() {
 
         {error && (
           <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-            {error}
+            {error instanceof ApiError
+              ? error.message
+              : "Không tải được danh sách thiết bị"}
           </div>
         )}
 
@@ -128,6 +99,13 @@ export default function ProfilePage() {
               </tr>
             </thead>
             <tbody>
+              {isPending && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-neutral-500">
+                    Đang tải...
+                  </td>
+                </tr>
+              )}
               {sessions.map((s) => (
                 <tr
                   key={s.id}

@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { api, ApiError } from "@/lib/api-client";
+import { useChangePassword } from "@/features/auth/queries";
+import { ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 export default function ChangePasswordPage() {
@@ -13,33 +14,38 @@ export default function ChangePasswordPage() {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+
+  // useMutation lo giúp trạng thái đang gửi và lỗi từ server, nên component
+  // chỉ còn phải giữ lỗi kiểm tra tại chỗ.
+  const changePassword = useChangePassword();
+
+  const error =
+    localError ??
+    (changePassword.error instanceof ApiError
+      ? changePassword.error.message
+      : changePassword.error
+        ? "Không đổi được mật khẩu"
+        : null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setLocalError(null);
 
     // Kiểm tra trùng khớp ở client chỉ để phản hồi nhanh — backend vẫn
     // kiểm tra độ mạnh mật khẩu đầy đủ.
     if (newPassword !== confirm) {
-      setError("Hai lần nhập mật khẩu mới không khớp");
+      setLocalError("Hai lần nhập mật khẩu mới không khớp");
       return;
     }
 
-    setSubmitting(true);
     try {
-      await api.post("/auth/change-password", {
-        old_password: oldPassword,
-        new_password: newPassword,
-      });
+      await changePassword.mutateAsync({ oldPassword, newPassword });
       setDone(true);
       setTimeout(() => router.push("/employees"), 1200);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không đổi được mật khẩu");
-    } finally {
-      setSubmitting(false);
+    } catch {
+      // Lỗi đã nằm trong changePassword.error, không cần xử lý thêm.
     }
   }
 
@@ -104,10 +110,10 @@ export default function ChangePasswordPage() {
 
           <button
             type="submit"
-            disabled={submitting || done}
+            disabled={changePassword.isPending || done}
             className="w-full rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900"
           >
-            {submitting ? "Đang xử lý..." : "Đổi mật khẩu"}
+            {changePassword.isPending ? "Đang xử lý..." : "Đổi mật khẩu"}
           </button>
         </form>
       </div>
