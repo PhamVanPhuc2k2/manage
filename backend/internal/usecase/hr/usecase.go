@@ -28,6 +28,10 @@ type Usecase struct {
 	// riêng chức năng tệp là không.
 	storage domainhr.FileStorage
 
+	// welcomeMailer có thể nil; khi đó tạo tài khoản vẫn thành công, chỉ
+	// không gửi mail — mật khẩu tạm vẫn trả về trong response để HR đưa tay.
+	welcomeMailer WelcomeMailer
+
 	// onEmployeeDeactivated được gọi khi một nhân viên bị vô hiệu hoá,
 	// để module auth cắt phiên đăng nhập của họ.
 	//

@@ -172,6 +172,8 @@ func run() error {
 	//
 	// Dùng callback thay vì import trực tiếp để tránh phụ thuộc vòng giữa
 	// hai module.
+	hrUC.SetWelcomeMailer(mailer)
+
 	hrUC.SetOnEmployeeDeactivated(func(ctx context.Context, userID uuid.UUID) {
 		if err := authUC.LogoutAll(ctx, userID); err != nil {
 			log.Error().Err(err).Str("user_id", userID.String()).
@@ -202,6 +204,7 @@ func run() error {
 			Employee:   handler.NewEmployeeHandler(hrUC),
 			Department: handler.NewDepartmentHandler(hrUC),
 			Position:   handler.NewPositionHandler(hrUC),
+			Role:       handler.NewRoleHandler(hrUC),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,

@@ -45,3 +45,79 @@ export async function updateEmployee(id: string, body: unknown): Promise<Employe
 export async function deactivateEmployee(id: string): Promise<void> {
   await api.delete(`/employees/${id}`);
 }
+
+// ------------------------------------------------- tài khoản và vai trò
+
+export type AccountCreated = {
+  user_id: string;
+  email: string;
+  /** Chỉ trả về đúng một lần, lúc vừa tạo. Không lưu ở đâu khác. */
+  temp_password: string;
+};
+
+export async function createAccount(employeeId: string): Promise<AccountCreated> {
+  const { data } = await api.post<AccountCreated>(`/employees/${employeeId}/account`);
+  return data;
+}
+
+export async function setAccountActive(
+  employeeId: string,
+  active: boolean,
+): Promise<void> {
+  await api.put(`/employees/${employeeId}/account/active`, { active });
+}
+
+export type EmployeeRoles = {
+  employee_id: string;
+  user_id: string;
+  roles: string[];
+};
+
+export async function getEmployeeRoles(employeeId: string): Promise<EmployeeRoles> {
+  const { data } = await api.get<EmployeeRoles>(`/employees/${employeeId}/roles`);
+  return data;
+}
+
+export async function setEmployeeRoles(
+  employeeId: string,
+  roles: string[],
+): Promise<EmployeeRoles> {
+  const { data } = await api.put<EmployeeRoles>(`/employees/${employeeId}/roles`, {
+    roles,
+  });
+  return data;
+}
+
+// ---------------------------------------------------------- ảnh đại diện
+
+export type AvatarTicket = {
+  upload_url: string;
+  key: string;
+  expires_in: number;
+};
+
+export async function requestAvatarUpload(
+  employeeId: string,
+  contentType: string,
+): Promise<AvatarTicket> {
+  const { data } = await api.post<AvatarTicket>(
+    `/employees/${employeeId}/avatar/upload-url`,
+    { content_type: contentType },
+  );
+  return data;
+}
+
+export async function confirmAvatar(
+  employeeId: string,
+  key: string,
+): Promise<{ avatar_url: string }> {
+  const { data } = await api.post<{ avatar_url: string }>(
+    `/employees/${employeeId}/avatar/confirm`,
+    { key },
+  );
+  return data;
+}
+
+export async function removeAvatar(employeeId: string): Promise<void> {
+  await api.delete(`/employees/${employeeId}/avatar`);
+}

@@ -41,7 +41,7 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 ## 2. Stack kỹ thuật
 
 **Backend**
-- Go 1.25, router `go-chi/chi/v5`
+- Go 1.27, router `go-chi/chi/v5`
 - PostgreSQL 16 — dữ liệu nghiệp vụ
 - Redis 7 — session, refresh token, presence, cache, rate limit
 - RabbitMQ 3.13 — hàng đợi sự kiện, fan-out realtime, job nền
@@ -341,49 +341,55 @@ Lệnh chạy:
 
 **Mục tiêu:** Đăng nhập được, phân quyền hoạt động, quản lý đầy đủ nhân viên và phòng ban.
 
+> **Trạng thái: đã xong.** Kiểm chứng bằng hai script trong `scripts/`:
+> `smoke-auth.sh` (21 mục bảo mật) và `smoke-hr.sh` (26 mục nghiệp vụ), đều đạt toàn bộ.
+>
+> Hai việc còn để lại có chủ ý: nhập nhân viên từ Excel (cần hạ tầng báo tiến
+> độ của Phase 5) và sơ đồ tổ chức dạng đồ hoạ (API cây đã có, chỉ thiếu phần vẽ).
+
 ### Domain & migration
-- [ ] Migration: `companies`, `departments`, `positions`, `employees`, `users`
-- [ ] Migration RBAC: `roles`, `permissions`, `role_permissions`, `user_roles`
-- [ ] Entity domain + interface repository cho employee, department, position
-- [ ] Seed dữ liệu: công ty mẫu, 5 vai trò (`admin`, `director`, `manager`, `hr`, `employee`), tài khoản admin đầu tiên
+- [x] Migration: `companies`, `departments`, `positions`, `employees`, `users`
+- [x] Migration RBAC: `roles`, `permissions`, `role_permissions`, `user_roles`
+- [x] Entity domain + interface repository cho employee, department, position
+- [x] Seed dữ liệu: công ty mẫu, 5 vai trò (`admin`, `director`, `manager`, `hr`, `employee`), tài khoản admin đầu tiên
 
 ### Xác thực
-- [ ] Băm mật khẩu bằng bcrypt (cost ≥ 12)
-- [ ] Package JWT: phát hành / xác minh access token (15 phút), refresh token (7 ngày)
-- [ ] Lưu refresh token vào Redis kèm khoá theo thiết bị, hỗ trợ thu hồi
-- [ ] `POST /api/v1/auth/login`
-- [ ] `POST /api/v1/auth/refresh` — có xoay vòng refresh token (rotation)
-- [ ] `POST /api/v1/auth/logout` — thu hồi token của thiết bị hiện tại
-- [ ] `POST /api/v1/auth/logout-all` — thu hồi mọi thiết bị
-- [ ] `GET /api/v1/auth/me`
-- [ ] Đổi mật khẩu, quên mật khẩu (gửi mail qua RabbitMQ worker)
-- [ ] Rate limit theo IP + theo tài khoản cho endpoint login (chống brute force)
+- [x] Băm mật khẩu bằng bcrypt (cost ≥ 12)
+- [x] Package JWT: phát hành / xác minh access token (15 phút), refresh token (7 ngày)
+- [x] Lưu refresh token vào Redis kèm khoá theo thiết bị, hỗ trợ thu hồi
+- [x] `POST /api/v1/auth/login`
+- [x] `POST /api/v1/auth/refresh` — có xoay vòng refresh token (rotation)
+- [x] `POST /api/v1/auth/logout` — thu hồi token của thiết bị hiện tại
+- [x] `POST /api/v1/auth/logout-all` — thu hồi mọi thiết bị
+- [x] `GET /api/v1/auth/me`
+- [x] Đổi mật khẩu, quên mật khẩu (gửi mail qua RabbitMQ worker)
+- [x] Rate limit theo IP + theo tài khoản cho endpoint login (chống brute force)
 
 ### Phân quyền
-- [ ] Middleware `RequireAuth` — giải mã token, nạp thông tin user vào context
-- [ ] Middleware `RequirePermission("employee:update")` — kiểm tra quyền chi tiết
-- [ ] Kiểm tra phạm vi dữ liệu: trưởng phòng chỉ xem được nhân viên phòng mình; giám đốc xem toàn bộ
-- [ ] API quản trị vai trò: gán / gỡ vai trò cho người dùng
+- [x] Middleware `RequireAuth` — giải mã token, nạp thông tin user vào context
+- [x] Middleware `RequirePermission("employee:update")` — kiểm tra quyền chi tiết
+- [x] Kiểm tra phạm vi dữ liệu: trưởng phòng chỉ xem được nhân viên phòng mình; giám đốc xem toàn bộ
+- [x] API quản trị vai trò: gán / gỡ vai trò cho người dùng
 
 ### Nhân sự
-- [ ] CRUD phòng ban, hỗ trợ cấu trúc cây, chặn tạo vòng lặp cha-con
-- [ ] CRUD chức vụ
-- [ ] CRUD nhân viên: tạo, sửa, xem, vô hiệu hoá (soft delete, không xoá cứng)
-- [ ] Tìm kiếm + lọc nhân viên: theo phòng ban, chức vụ, trạng thái, hình thức làm việc
-- [ ] Phân trang chuẩn (cursor hoặc offset) áp dụng cho mọi API danh sách
-- [ ] Tải lên avatar, lưu Cloudflare R2, trả về presigned URL
+- [x] CRUD phòng ban, hỗ trợ cấu trúc cây, chặn tạo vòng lặp cha-con
+- [x] CRUD chức vụ
+- [x] CRUD nhân viên: tạo, sửa, xem, vô hiệu hoá (soft delete, không xoá cứng)
+- [x] Tìm kiếm + lọc nhân viên: theo phòng ban, chức vụ, trạng thái, hình thức làm việc
+- [x] Phân trang chuẩn (cursor hoặc offset) áp dụng cho mọi API danh sách
+- [x] Tải lên avatar, lưu Cloudflare R2, trả về presigned URL
 - [ ] Nhập nhân viên hàng loạt từ CSV/Excel (xử lý nền qua RabbitMQ, báo kết quả qua thông báo)
 - [ ] Xem sơ đồ tổ chức (org chart) dạng cây
 
 ### Frontend Phase 1
-- [ ] Trang đăng nhập + xử lý refresh token ngầm
-- [ ] Middleware Next.js bảo vệ route, chuyển hướng khi chưa đăng nhập
-- [ ] Hiển thị/ẩn thành phần UI theo quyền (`usePermission` hook)
-- [ ] Trang danh sách nhân viên: bảng, lọc, tìm kiếm, phân trang
-- [ ] Form tạo/sửa nhân viên, validate bằng zod
-- [ ] Trang chi tiết nhân viên (hồ sơ, phòng ban, cấp trên)
-- [ ] Trang quản lý phòng ban + sơ đồ tổ chức
-- [ ] Trang hồ sơ cá nhân, đổi mật khẩu
+- [x] Trang đăng nhập + xử lý refresh token ngầm
+- [x] Middleware Next.js bảo vệ route, chuyển hướng khi chưa đăng nhập
+- [x] Hiển thị/ẩn thành phần UI theo quyền (`usePermission` hook)
+- [x] Trang danh sách nhân viên: bảng, lọc, tìm kiếm, phân trang
+- [x] Form tạo/sửa nhân viên, validate bằng zod
+- [x] Trang chi tiết nhân viên (hồ sơ, phòng ban, cấp trên)
+- [x] Trang quản lý phòng ban + sơ đồ tổ chức
+- [x] Trang hồ sơ cá nhân, đổi mật khẩu
 
 ---
 

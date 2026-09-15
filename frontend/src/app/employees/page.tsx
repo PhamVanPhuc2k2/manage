@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
 import { useEmployees } from "@/features/employees/queries";
@@ -50,9 +51,12 @@ export default function EmployeesPage() {
 
         {/* Ẩn nút chỉ là trang trí — backend vẫn kiểm tra quyền đầy đủ. */}
         {can("employee:create") && (
-          <button className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900">
+          <Link
+            href="/employees/new"
+            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
+          >
             Thêm nhân viên
-          </button>
+          </Link>
         )}
       </div>
 
@@ -125,7 +129,14 @@ export default function EmployeesPage() {
                 className="border-t border-neutral-200 dark:border-neutral-800"
               >
                 <td className="px-4 py-2 font-mono text-xs">{e.employee_code}</td>
-                <td className="px-4 py-2">{e.full_name}</td>
+                <td className="px-4 py-2">
+                  <Link
+                    href={`/employees/${e.id}`}
+                    className="font-medium underline-offset-4 hover:underline"
+                  >
+                    {e.full_name}
+                  </Link>
+                </td>
                 <td className="px-4 py-2 text-neutral-500">{e.email}</td>
                 <td className="px-4 py-2">{e.department_name || "—"}</td>
                 <td className="px-4 py-2">{e.position_name || "—"}</td>

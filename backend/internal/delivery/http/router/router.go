@@ -41,6 +41,7 @@ type Deps struct {
 	Employee   *handler.EmployeeHandler
 	Department *handler.DepartmentHandler
 	Position   *handler.PositionHandler
+	Role       *handler.RoleHandler
 }
 
 func New(d Deps) http.Handler {
@@ -166,7 +167,28 @@ func New(d Deps) http.Handler {
 					Post("/{id}/avatar/confirm", d.Employee.ConfirmAvatar)
 				r.With(appmw.RequirePermission(domainauth.PermEmployeeUpdate)).
 					Delete("/{id}/avatar", d.Employee.RemoveAvatar)
+
+				// --- Tài khoản đăng nhập của nhân viên ---
+				//
+				// Dùng quyền employee:create (admin và HR) chứ không phải
+				// employee:update. Tạo tài khoản là cấp quyền truy cập hệ
+				// thống — nặng hơn hẳn việc sửa số điện thoại. Trưởng phòng
+				// có employee:update nhưng không nên tạo được tài khoản.
+				r.With(appmw.RequirePermission(domainauth.PermEmployeeCreate)).
+					Post("/{id}/account", d.Employee.CreateAccount)
+				r.With(appmw.RequirePermission(domainauth.PermEmployeeCreate)).
+					Put("/{id}/account/active", d.Employee.SetAccountActive)
+
+				// --- Vai trò của nhân viên ---
+				r.With(appmw.RequirePermission(domainauth.PermRoleRead)).
+					Get("/{id}/roles", d.Employee.GetRoles)
+				r.With(appmw.RequirePermission(domainauth.PermRoleAssign)).
+					Put("/{id}/roles", d.Employee.SetRoles)
 			})
+
+			// --- Danh mục vai trò ---
+			r.With(appmw.RequirePermission(domainauth.PermRoleRead)).
+				Get("/roles", d.Role.List)
 
 			// --- Phòng ban ---
 			r.Route("/departments", func(r chi.Router) {

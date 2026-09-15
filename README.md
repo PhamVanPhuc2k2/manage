@@ -2,7 +2,7 @@
 
 Hệ thống quản trị nội bộ doanh nghiệp: nhân sự, phòng ban, dự án, giao việc, chấm công, lương, cùng thông báo và chat thời gian thực.
 
-**Trạng thái:** Phase 0 (nền tảng) đã xong và chạy được. Đang chuẩn bị Phase 1.
+**Trạng thái:** Phase 0 và Phase 1 đã xong và chạy được. Đang chuẩn bị Phase 2.
 
 ## Kiến trúc
 
@@ -83,8 +83,8 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 | Phase | Nội dung | Trạng thái |
 |---|---|---|
 | 0 | Nền tảng: Docker, api + worker, hot reload, CI | Xong |
-| 1 | Xác thực JWT, phân quyền RBAC, nhân viên, phòng ban | Kế tiếp |
-| 2 | Dự án, giao việc, bảng Kanban | |
+| 1 | Xác thực JWT, phân quyền RBAC, nhân viên, phòng ban, chức vụ | Xong |
+| 2 | Dự án, giao việc, bảng Kanban | Kế tiếp |
 | 3 | Chấm công theo presence realtime, nghỉ phép | |
 | 4 | Lương, phiếu lương | |
 | 5 | WebSocket: thông báo và chat | |
@@ -94,3 +94,20 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 
 - **Không commit `.env`.** File này chứa mật khẩu và đã nằm trong `.gitignore`. Mật khẩu trong `.env.example` chỉ là giá trị mẫu cho môi trường dev — phải đổi hết trước khi lên production.
 - **Đổi `JWT_SECRET`** trước khi deploy. Ứng dụng sẽ từ chối khởi động ở chế độ production nếu còn dùng giá trị mặc định.
+
+## Kiểm chứng
+
+Hai script chạy lại bất cứ lúc nào, tự tạo và tự dọn dữ liệu kiểm thử:
+
+```bash
+ADMIN_PASS='...' bash scripts/smoke-auth.sh   # 21 mục bảo mật
+ADMIN_PASS='...' bash scripts/smoke-hr.sh     # 26 mục nghiệp vụ nhân sự
+```
+
+`smoke-auth.sh` kiểm tra những thứ dễ hỏng âm thầm: giả mạo JWT, xoay vòng
+refresh token, phát hiện token bị đánh cắp, đăng xuất có hiệu lực tức thì,
+chống dò mật khẩu và chống dò email.
+
+`smoke-hr.sh` kiểm tra nghiệp vụ: chặn vòng lặp trong cây phòng ban, chặn xoá
+phòng còn người, tìm kiếm tiếng Việt không dấu, tạo tài khoản, đổi vai trò và
+phạm vi dữ liệu đổi theo.
