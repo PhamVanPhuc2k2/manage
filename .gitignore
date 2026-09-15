@@ -1,0 +1,22 @@
+# Go
+/backend/tmp/
+*.exe
+*.test
+coverage.out
+
+# Node
+node_modules/
+.next/
+out/
+
+# Môi trường — KHÔNG BAO GIỜ commit
+.env
+.env.local
+*.local
+
+# IDE
+.vscode/
+.idea/
+
+# Chứng chỉ TLS
+docker/nginx/certs/

@@ -1,0 +1,51 @@
+# Cấu hình theo schema v2 của golangci-lint (bản 2.x).
+# Bản v1 dùng schema khác, không tương thích ngược.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard   # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose       # response body không đóng → rò rỉ kết nối
+    - noctx           # HTTP request không có context
+    - rowserrcheck    # quên kiểm tra rows.Err() sau khi duyệt
+    - sqlclosecheck
+    - misspell
+    - revive
+    - gosec
+    - nilerr          # trả về nil trong khi err != nil
+    - contextcheck
+
+  settings:
+    errcheck:
+      # Bỏ qua các hàm mà lỗi thật sự không xử lý được gì.
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+    revive:
+      rules:
+        # Comment trong dự án viết bằng tiếng Việt, không theo chuẩn
+        # godoc tiếng Anh ("Xxx ...").
+        - name: exported
+          disabled: true
+    gosec:
+      excludes:
+        - G104  # đã có errcheck lo phần lỗi bị bỏ qua
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

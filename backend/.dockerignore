@@ -1,0 +1,5 @@
+tmp/
+**/*_test.go
+**/testdata/
+.git/
+coverage.out

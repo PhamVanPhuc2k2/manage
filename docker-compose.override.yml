@@ -1,0 +1,93 @@
+# File này Docker Compose TỰ ĐỘNG nạp khi chạy `docker compose up`.
+# Vì vậy dev là mặc định, còn production phải chỉ định file rõ ràng —
+# đúng chiều an toàn: quên gõ lệnh thì ra dev, không phải ra production.
+
+services:
+  # ---------------------------------------------------------------------
+  # Bind mount source code vào container để Air thấy được thay đổi.
+  #
+  # Volume ẩn danh cho /app/tmp rất quan trọng: nó ngăn thư mục build của
+  # Air bên trong container ghi ngược ra host, tránh xung đột khi api và
+  # worker cùng build, và tránh làm bẩn repo bằng binary Linux.
+  # ---------------------------------------------------------------------
+  api:
+    volumes:
+      - ./backend:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      - api-tmp:/app/tmp
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+  worker:
+    volumes:
+      - ./backend:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      - worker-tmp:/app/tmp
+
+  frontend:
+    volumes:
+      - ./frontend:/app
+      # node_modules để trong named volume, KHÔNG bind mount từ host.
+      # Bind mount sẽ khiến node_modules của Windows đè lên bản Linux
+      # trong container — các package có binary native sẽ hỏng.
+      - frontend-node-modules:/app/node_modules
+      - frontend-next:/app/.next
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+  # ---------------------------------------------------------------------
+  # Mở port hạ tầng ra host để debug bằng công cụ trên máy thật.
+  # KHÔNG có ở production.
+  # ---------------------------------------------------------------------
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  rabbitmq:
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_UI_PORT:-15672}:15672"   # giao diện quản trị
+
+  minio:
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_UI_PORT:-9001}:9001"
+
+  # ---------------------------------------------------------------------
+  # Công cụ chỉ dùng khi dev
+  # ---------------------------------------------------------------------
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: dracula
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+
+  # Máy chủ mail giả — bắt mọi email hệ thống gửi đi, xem trên giao diện web.
+  # Nhờ nó, khi làm chức năng quên mật khẩu ở Phase 1 bạn không cần SMTP thật.
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+    ports:
+      - "${MAILHOG_UI_PORT:-8025}:8025"
+    networks: [backend]
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  api-tmp:
+  worker-tmp:
+  frontend-node-modules:
+  frontend-next:

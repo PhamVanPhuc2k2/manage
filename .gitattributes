@@ -1,0 +1,34 @@
+# Mặc định: git tự chuẩn hoá xuống LF khi lưu vào repo.
+* text=auto eol=lf
+
+# Những file BẮT BUỘC giữ LF — container Linux không chạy được nếu dính CRLF.
+# Đây là nguồn của lỗi kinh điển "exec format error" / "no such file or directory"
+# khi clone repo trên Windows rồi build Docker.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+Makefile        text eol=lf
+*.conf          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.toml          text eol=lf
+*.go            text eol=lf
+*.sql           text eol=lf
+.env.example    text eol=lf
+
+# Script PowerShell chạy trên Windows: giữ CRLF.
+*.ps1           text eol=crlf
+
+# File nhị phân: không đụng vào.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.woff          binary
+*.woff2         binary
+*.pdf           binary
+
+# Lockfile: đánh dấu là file sinh tự động để GitHub thu gọn khi xem diff.
+pnpm-lock.yaml  linguist-generated=true
+go.sum          linguist-generated=true

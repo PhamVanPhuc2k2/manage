@@ -1,0 +1,256 @@
+name: manage
+
+# ---------------------------------------------------------------------------
+# Khối YAML dùng lại. api và worker có cùng cách build và cùng biến môi trường.
+# ---------------------------------------------------------------------------
+x-go-build: &go-build
+  context: ./backend
+  dockerfile: ../docker/backend/Dockerfile
+
+x-go-env: &go-env
+  ENV: ${ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-debug}
+  POSTGRES_DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+  REDIS_ADDR: redis:6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+  JWT_SECRET: ${JWT_SECRET}
+  JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+  JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-168h}
+  TZ: Asia/Ho_Chi_Minh
+
+services:
+  # =========================================================================
+  # HẠ TẦNG
+  # =========================================================================
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Bật checksum để phát hiện hỏng dữ liệu sớm.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Script trong thư mục này CHỈ chạy lần đầu, khi volume còn rỗng.
+      # Sửa script rồi muốn chạy lại thì phải xoá volume (make destroy).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [backend]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      # RabbitMQ khởi động chậm, 60s là con số thực tế chứ không thừa.
+      start_period: 60s
+    networks: [backend]
+
+  minio:
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks: [backend]
+
+  # Container chạy một lần để tạo bucket rồi thoát.
+  minio-init:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/avatars;
+      mc mb --ignore-existing local/attachments;
+      mc mb --ignore-existing local/payslips;
+      mc anonymous set download local/avatars;
+      echo 'đã tạo xong bucket';
+      "
+    restart: "no"
+    networks: [backend]
+
+  # =========================================================================
+  # MIGRATION — chạy một lần rồi thoát, TRƯỚC khi api và worker khởi động.
+  #
+  # Tách riêng để khi scale api lên nhiều replica, migration không chạy
+  # đồng thời nhiều lần gây xung đột khoá.
+  # =========================================================================
+  migrate:
+    image: migrate/migrate:v4.18.1
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [backend]
+
+  # =========================================================================
+  # ỨNG DỤNG
+  # =========================================================================
+  api:
+    build:
+      <<: *go-build
+      target: dev
+      args:
+        BINARY: api
+    restart: unless-stopped
+    environment:
+      <<: *go-env
+      APP_NAME: api
+      HTTP_PORT: 8080
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_BASE_URL},http://localhost:${FRONTEND_PORT:-3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    # Dài vì Phase 5 sẽ giữ kết nối WebSocket cần đóng sạch.
+    stop_grace_period: 60s
+    networks: [backend, proxy]
+
+  worker:
+    build:
+      <<: *go-build
+      target: dev
+      args:
+        BINARY: worker
+    restart: unless-stopped
+    environment:
+      <<: *go-env
+      APP_NAME: worker
+      WORKER_CONCURRENCY: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # Worker không có HTTP endpoint. Kiểm tra bằng cách xem tiến trình còn chạy không.
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'worker/server' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    # Đủ dài để xử lý nốt job đang cầm.
+    stop_grace_period: 120s
+    networks: [backend]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend/Dockerfile
+      target: dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: ${PUBLIC_BASE_URL}/api/v1
+      NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_URL}/ws
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [proxy]
+
+  # =========================================================================
+  # CỔNG VÀO — container DUY NHẤT mở port ra host ở production
+  # =========================================================================
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # Dùng 127.0.0.1 chứ KHÔNG dùng localhost: `listen 80` của nginx chỉ bind
+      # IPv4, trong khi localhost trong container phân giải ra ::1 trước —
+      # healthcheck sẽ luôn báo "connection refused".
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks: [proxy]
+
+networks:
+  # Mạng nội bộ: database, cache, message broker, worker.
+  backend:
+    driver: bridge
+  # Mạng biên: nginx, api, frontend.
+  proxy:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitmqdata:
+  miniodata:

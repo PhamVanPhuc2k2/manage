@@ -1,0 +1,94 @@
+# Manage — Hệ thống quản lý công ty
+
+Hệ thống quản trị nội bộ doanh nghiệp: nhân sự, phòng ban, dự án, giao việc, chấm công, lương, cùng thông báo và chat thời gian thực.
+
+**Trạng thái:** Phase 0 (nền tảng) đã xong và chạy được. Đang chuẩn bị Phase 1.
+
+## Kiến trúc
+
+Monolith theo module, hai binary chạy độc lập:
+
+| Thành phần | Vai trò |
+|---|---|
+| `api` | HTTP REST (và WebSocket từ Phase 5) |
+| `worker` | Job nền qua RabbitMQ: gửi mail, tính lương, xuất Excel |
+
+Hai binary dùng chung toàn bộ `internal/`, chỉ khác tầng `delivery`.
+
+**Stack:** Go 1.25 + go-chi · PostgreSQL 16 · Redis 7 · RabbitMQ 3.13 · MinIO · Next.js 16 · nginx — toàn bộ chạy trong Docker.
+
+Backend theo Clean Architecture: `delivery` → `usecase` → `domain` ← `repository`.
+
+## Chạy thử
+
+Chỉ cần cài Docker, không cần Go hay Node trên máy.
+
+```bash
+git clone https://github.com/PhamVanPhuc2k2/manage.git
+cd manage
+cp .env.example .env
+```
+
+Mở `.env` và **kiểm tra các cổng có bị chiếm không** (IIS, Laravel Herd, XAMPP hay chiếm cổng 80 và 9001). Nếu có, đổi `NGINX_PORT` và sửa `PUBLIC_BASE_URL` cho khớp.
+
+```bash
+# Linux, macOS, WSL
+make init && make smoke
+
+# Windows PowerShell (không cần cài make)
+.\dev.ps1 init
+.\dev.ps1 smoke
+```
+
+Kết quả mong đợi của `smoke`:
+
+```json
+{"data":{"database_time":"...","job_queued":true,"redis_ok":true,"request_id":"..."}}
+```
+
+kèm một dòng log của `worker` mang **đúng `request_id`** đó — chứng minh cả hai chuỗi đã thông:
+
+```
+Trình duyệt ─▶ nginx ─▶ api ─▶ PostgreSQL
+                         └──▶ RabbitMQ ─▶ worker
+```
+
+## Lệnh hay dùng
+
+| Việc | `make` | `dev.ps1` |
+|---|---|---|
+| Khởi động | `make up` | `.\dev.ps1 up` |
+| Xem log | `make logs s=worker` | `.\dev.ps1 logs worker` |
+| Trạng thái | `make ps` | `.\dev.ps1 ps` |
+| Kiểm tra nhanh | `make smoke` | `.\dev.ps1 smoke` |
+| Mở psql | `make psql` | `.\dev.ps1 psql` |
+| Xem hàng đợi | `make queues` | `.\dev.ps1 queues` |
+| Lint Go | `make lint` | `.\dev.ps1 lint` |
+| Tạo migration | `make migrate-create n=create_users` | `.\dev.ps1 migrate-create create_users` |
+| Xem hết lệnh | `make help` | `.\dev.ps1 help` |
+
+Sửa file `.go` là Air tự build lại trong container, không cần restart.
+
+## Tài liệu
+
+| File | Nội dung |
+|---|---|
+| [doc/TASKS.md](doc/TASKS.md) | Lộ trình đầy đủ 7 phase, mô hình dữ liệu, bảng rủi ro |
+| [doc/PHASE-0-SETUP.md](doc/PHASE-0-SETUP.md) | Hướng dẫn chi tiết Phase 0 kèm mã nguồn và các lỗi đã gặp thật |
+
+## Lộ trình
+
+| Phase | Nội dung | Trạng thái |
+|---|---|---|
+| 0 | Nền tảng: Docker, api + worker, hot reload, CI | Xong |
+| 1 | Xác thực JWT, phân quyền RBAC, nhân viên, phòng ban | Kế tiếp |
+| 2 | Dự án, giao việc, bảng Kanban | |
+| 3 | Chấm công theo presence realtime, nghỉ phép | |
+| 4 | Lương, phiếu lương | |
+| 5 | WebSocket: thông báo và chat | |
+| 6 | Hoàn thiện, bảo mật, giám sát, vận hành | |
+
+## Lưu ý
+
+- **Không commit `.env`.** File này chứa mật khẩu và đã nằm trong `.gitignore`. Mật khẩu trong `.env.example` chỉ là giá trị mẫu cho môi trường dev — phải đổi hết trước khi lên production.
+- **Đổi `JWT_SECRET`** trước khi deploy. Ứng dụng sẽ từ chối khởi động ở chế độ production nếu còn dùng giá trị mặc định.

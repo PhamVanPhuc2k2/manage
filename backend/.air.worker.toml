@@ -1,0 +1,40 @@
+root = "/app"
+tmp_dir = "tmp/worker"
+
+[build]
+  cmd = "go build -o ./tmp/worker/server ./cmd/worker"
+  bin = "./tmp/worker/server"
+
+  include_ext = ["go", "sql", "yaml", "toml"]
+  include_dir = ["cmd/worker", "internal", "pkg"]
+  exclude_dir = ["tmp", "node_modules", ".git", "migrations"]
+  exclude_regex = ["_test\\.go"]
+  exclude_unchanged = true
+  follow_symlink = false
+
+  delay = 500
+  stop_on_error = true
+
+  # Xem giải thích trong .air.api.toml
+  send_interrupt = true
+  kill_delay = "3s"
+
+  poll = true
+  poll_interval = 500
+
+[log]
+  time = true
+  main_only = false
+
+[color]
+  main = "blue"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true

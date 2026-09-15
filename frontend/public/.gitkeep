@@ -1,0 +1,2 @@
+# Thư mục chứa tệp tĩnh phục vụ trực tiếp (favicon, ảnh, robots.txt).
+# Dockerfile production COPY thư mục này nên nó phải tồn tại kể cả khi rỗng.

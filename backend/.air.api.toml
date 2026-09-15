@@ -1,0 +1,49 @@
+root = "/app"
+tmp_dir = "tmp/api"
+
+[build]
+  cmd = "go build -o ./tmp/api/server ./cmd/api"
+  bin = "./tmp/api/server"
+
+  include_ext = ["go", "sql", "yaml", "toml"]
+  include_dir = ["cmd/api", "internal", "pkg"]
+  exclude_dir = ["tmp", "node_modules", ".git", "migrations"]
+  exclude_regex = ["_test\\.go"]
+  exclude_unchanged = true
+  follow_symlink = false
+
+  # Đợi 500ms sau thay đổi cuối mới build — tránh build 5 lần
+  # khi IDE lưu nhiều file cùng lúc.
+  delay = 500
+
+  stop_on_error = true
+
+  # Air mặc định kill -9 tiến trình cũ. Như vậy code graceful shutdown
+  # KHÔNG BAO GIỜ chạy trong lúc dev, và bạn chỉ phát hiện điều đó khi
+  # deploy production. Hai dòng dưới khiến Air gửi SIGINT rồi chờ 3 giây —
+  # giống hệt cách `docker stop` hành xử.
+  send_interrupt = true
+  kill_delay = "3s"
+
+  # BẮT BUỘC trên Windows và macOS: bind mount của Docker Desktop không
+  # phát sự kiện inotify tin cậy. Không bật polling thì Air không thấy
+  # file thay đổi.
+  poll = true
+  poll_interval = 500
+
+[log]
+  time = true
+  main_only = false
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true
