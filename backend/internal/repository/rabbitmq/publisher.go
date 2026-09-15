@@ -9,8 +9,8 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	domainsystem "github.com/yourorg/manage/internal/domain/system"
-	mq "github.com/yourorg/manage/pkg/rabbitmq"
+	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
+	mq "github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
 )
 
 type JobPublisher struct {

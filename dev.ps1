@@ -178,6 +178,26 @@ Ví dụ:
 
     "test" { Invoke-Compose exec -T api sh -c "cd /app && go test ./... -count=1" }
 
+    "fe-lint" { Invoke-Compose exec -T frontend sh -c "pnpm lint" }
+
+    "fe-build" {
+        # BẮT BUỘC đặt NODE_ENV=production. Container dev chạy với
+        # NODE_ENV=development, và build production trong môi trường đó khiến
+        # React nạp nhầm bundle — lỗi hiện ra rất khó hiểu:
+        #   Error occurred prerendering page "/_global-error"
+        #   TypeError: Cannot read properties of null (reading 'useContext')
+        Invoke-Compose exec -T -e NODE_ENV=production frontend sh -c "pnpm build"
+    }
+
+    "smoke-auth" {
+        # Chạy bảng kiểm chứng bảo mật Phase 1.
+        if (-not $env:ADMIN_PASS) {
+            Write-Host "Đặt mật khẩu admin trước: `$env:ADMIN_PASS='...'" -ForegroundColor Red
+            exit 1
+        }
+        bash scripts/smoke-auth.sh
+    }
+
     "psql" { Invoke-Compose exec postgres psql -U $pgUser -d $pgDb }
 
     "redis-cli" { Invoke-Compose exec redis redis-cli -a $redisPass }
@@ -227,11 +247,11 @@ Ví dụ:
         foreach ($b in @("api", "worker")) {
             docker build -f docker/backend/Dockerfile --target prod `
                 --build-arg BINARY=$b --build-arg GIT_SHA=$sha --build-arg BUILD_TIME=$bt `
-                -t "ghcr.io/yourorg/manage-$b`:$sha" ./backend
+                -t "ghcr.io/PhamVanPhuc2k2/manage-$b`:$sha" ./backend
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
         docker build -f docker/frontend/Dockerfile --target prod `
-            -t "ghcr.io/yourorg/manage-frontend`:$sha" ./frontend
+            -t "ghcr.io/PhamVanPhuc2k2/manage-frontend`:$sha" ./frontend
     }
 
     "prod-up" {

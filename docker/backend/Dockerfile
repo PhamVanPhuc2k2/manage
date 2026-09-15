@@ -3,12 +3,21 @@
 # =============================================================================
 # base — phần dùng chung: toolchain Go + dependency đã tải.
 # Tách riêng để tầng cache dependency không bị xoá mỗi khi sửa code.
+#
+# KHÔNG dùng `apk add` ở bất kỳ stage nào. Lý do:
+#   - Mirror của Alpine thỉnh thoảng lỗi hoặc bị chặn, làm build treo hàng
+#     chục phút mà không báo gì rõ ràng.
+#   - Thứ ta cần đều có cách khác: chứng chỉ CA copy từ image golang, dữ liệu
+#     múi giờ nhúng thẳng vào binary bằng `import _ "time/tzdata"`, còn wget
+#     và pgrep thì busybox của alpine đã có sẵn.
+#   - Ít phụ thuộc mạng lúc build nghĩa là build tái lập được và nhanh hơn.
+#
+# Go không cần binary `git`: nó tải module qua GOPROXY (proxy.golang.org),
+# chỉ những module trỏ thẳng vào VCS mới cần git — dự án này không có.
 # =============================================================================
-FROM golang:1.25-alpine AS base
+FROM golang:1.27-alpine AS base
 
 WORKDIR /app
-
-RUN apk add --no-cache git ca-certificates tzdata
 
 # Copy go.mod/go.sum TRƯỚC, tải dependency, RỒI mới copy code.
 # Nhờ thứ tự này, sửa code không làm mất cache dependency —
@@ -63,21 +72,22 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       ./cmd/${BINARY}
 
 # =============================================================================
-# prod — image cuối cùng. Chỉ chứa binary, chứng chỉ CA và dữ liệu múi giờ.
-# Mục tiêu: dưới 30MB.
+# prod — image cuối cùng. Chỉ chứa binary và chứng chỉ CA.
+# Kích thước thực tế đo được: api 32.5MB, worker 27.1MB.
 # =============================================================================
 FROM alpine:3.21 AS prod
 
-# wget và pgrep đã có sẵn trong busybox của alpine nên healthcheck dùng được
-# ngay, không cần cài thêm gói.
-RUN apk add --no-cache ca-certificates tzdata && \
-    addgroup -g 1001 -S app && \
+# Chứng chỉ CA copy từ image golang thay vì cài bằng apk — cần cho mọi
+# kết nối TLS đi ra (SMTP, S3, API bên ngoài).
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
+# Chạy bằng user thường. Nếu container bị chiếm quyền, kẻ tấn công không có root.
+# addgroup/adduser là applet của busybox, có sẵn trong alpine.
+RUN addgroup -g 1001 -S app && \
     adduser -u 1001 -S app -G app -H -D
 
 COPY --from=builder /out/server /usr/local/bin/server
 
-# Chạy bằng user thường. Nếu container bị chiếm quyền,
-# kẻ tấn công không có root.
 USER app
 
 ENV TZ=Asia/Ho_Chi_Minh

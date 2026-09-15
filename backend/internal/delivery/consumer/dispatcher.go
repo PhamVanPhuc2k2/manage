@@ -11,9 +11,9 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog"
 
-	domainsystem "github.com/yourorg/manage/internal/domain/system"
-	"github.com/yourorg/manage/pkg/logger"
-	mq "github.com/yourorg/manage/pkg/rabbitmq"
+	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
+	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	mq "github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
 )
 
 type HandlerFunc func(ctx context.Context, job domainsystem.Job) error

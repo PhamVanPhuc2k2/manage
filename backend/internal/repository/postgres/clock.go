@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/yourorg/manage/pkg/postgres"
+	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
 )
 
 type ClockRepository struct {

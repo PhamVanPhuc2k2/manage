@@ -143,10 +143,23 @@ build-images: ## Build image production tại máy
 	docker build -f docker/backend/Dockerfile --target prod \
 		--build-arg BINARY=api --build-arg GIT_SHA=$(GIT_SHA) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
-		-t ghcr.io/yourorg/manage-api:$(GIT_SHA) ./backend
+		-t ghcr.io/PhamVanPhuc2k2/manage-api:$(GIT_SHA) ./backend
 	docker build -f docker/backend/Dockerfile --target prod \
 		--build-arg BINARY=worker --build-arg GIT_SHA=$(GIT_SHA) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
-		-t ghcr.io/yourorg/manage-worker:$(GIT_SHA) ./backend
+		-t ghcr.io/PhamVanPhuc2k2/manage-worker:$(GIT_SHA) ./backend
 	docker build -f docker/frontend/Dockerfile --target prod \
-		-t ghcr.io/yourorg/manage-frontend:$(GIT_SHA) ./frontend
+		-t ghcr.io/PhamVanPhuc2k2/manage-frontend:$(GIT_SHA) ./frontend
+
+.PHONY: fe-lint
+fe-lint: ## Kiểm tra code frontend
+	$(COMPOSE) exec -T frontend sh -c "pnpm lint"
+
+.PHONY: fe-build
+fe-build: ## Build thử frontend production
+	@# BẮT BUỘC đặt NODE_ENV=production. Container dev chạy với
+	@# NODE_ENV=development, và build production trong môi trường đó khiến
+	@# React nạp nhầm bundle — lỗi hiện ra rất khó hiểu:
+	@#   Error occurred prerendering page "/_global-error"
+	@#   TypeError: Cannot read properties of null (reading 'useContext')
+	$(COMPOSE) exec -T -e NODE_ENV=production frontend sh -c "pnpm build"

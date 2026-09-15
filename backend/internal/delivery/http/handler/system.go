@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	domainsystem "github.com/yourorg/manage/internal/domain/system"
-	"github.com/yourorg/manage/pkg/apperror"
-	"github.com/yourorg/manage/pkg/httpx"
+	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
+	"github.com/PhamVanPhuc2k2/manage/pkg/apperror"
+	"github.com/PhamVanPhuc2k2/manage/pkg/httpx"
 )
 
 // PingUsecase là interface mà handler cần.

@@ -33,6 +33,15 @@ type Config struct {
 	JWTRefreshTTL time.Duration `mapstructure:"JWT_REFRESH_TTL"`
 
 	CORSAllowedOrigins []string `mapstructure:"CORS_ALLOWED_ORIGINS"`
+
+	// Địa chỉ công khai, dùng để dựng link trong mail đặt lại mật khẩu.
+	PublicBaseURL string `mapstructure:"PUBLIC_BASE_URL"`
+
+	SMTPHost string `mapstructure:"SMTP_HOST"`
+	SMTPPort int    `mapstructure:"SMTP_PORT"`
+	SMTPFrom string `mapstructure:"SMTP_FROM"`
+	SMTPUser string `mapstructure:"SMTP_USER"`
+	SMTPPass string `mapstructure:"SMTP_PASS"`
 }
 
 func (c Config) IsProduction() bool { return c.Env == "production" }
@@ -72,6 +81,15 @@ func Load(appName string) (*Config, error) {
 	setDefault("JWT_REFRESH_TTL", "168h")
 
 	setDefault("CORS_ALLOWED_ORIGINS", []string{"http://localhost", "http://localhost:3000"})
+	setDefault("PUBLIC_BASE_URL", "http://localhost")
+
+	// Mặc định trỏ vào MailHog của môi trường dev — không cần xác thực,
+	// xem mail tại http://localhost:8025
+	setDefault("SMTP_HOST", "mailhog")
+	setDefault("SMTP_PORT", 1025)
+	setDefault("SMTP_FROM", "no-reply@manage.local")
+	setDefault("SMTP_USER", "")
+	setDefault("SMTP_PASS", "")
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {

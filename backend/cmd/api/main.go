@@ -11,17 +11,29 @@ import (
 	"syscall"
 	"time"
 
+	// Nhúng dữ liệu múi giờ vào binary.
+	//
+	// Không có nó, image production (không cài gói tzdata) sẽ không hiểu
+	// "Asia/Ho_Chi_Minh" và time.LoadLocation trả lỗi — mọi tính toán giờ
+	// giấc sẽ âm thầm chạy theo UTC.
+	_ "time/tzdata"
+
+	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/yourorg/manage/internal/delivery/http/router"
-	repopg "github.com/yourorg/manage/internal/repository/postgres"
-	repomq "github.com/yourorg/manage/internal/repository/rabbitmq"
-	reporedis "github.com/yourorg/manage/internal/repository/redis"
-	ucsystem "github.com/yourorg/manage/internal/usecase/system"
-	"github.com/yourorg/manage/pkg/config"
-	"github.com/yourorg/manage/pkg/logger"
-	"github.com/yourorg/manage/pkg/postgres"
-	"github.com/yourorg/manage/pkg/rabbitmq"
+	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/handler"
+	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/router"
+	repopg "github.com/PhamVanPhuc2k2/manage/internal/repository/postgres"
+	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
+	reporedis "github.com/PhamVanPhuc2k2/manage/internal/repository/redis"
+	ucauth "github.com/PhamVanPhuc2k2/manage/internal/usecase/auth"
+	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
+	ucsystem "github.com/PhamVanPhuc2k2/manage/internal/usecase/system"
+	"github.com/PhamVanPhuc2k2/manage/pkg/config"
+	"github.com/PhamVanPhuc2k2/manage/pkg/jwt"
+	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
+	"github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
 )
 
 // Ba biến này được nhúng lúc build qua -ldflags -X.
@@ -76,27 +88,86 @@ func run() error {
 	}
 	defer func() { _ = mqClient.Close() }()
 
-	// --- Nối dây các tầng (composition root) ---
+	jwtMgr, err := jwt.NewManager(cfg.JWTSecret, cfg.JWTAccessTTL, "manage")
+	if err != nil {
+		return err
+	}
+
+	// =====================================================================
+	// COMPOSITION ROOT — nơi DUY NHẤT biết cả interface lẫn bản hiện thực.
 	//
-	// Đây là NƠI DUY NHẤT biết cả interface lẫn bản hiện thực cụ thể.
 	// Mọi tầng khác chỉ biết interface. Muốn đổi PostgreSQL sang thứ khác
 	// thì sửa đúng ở đây, không đụng vào usecase.
+	// =====================================================================
+
+	// --- Repository ---
 	clockRepo := repopg.NewClockRepository(db)
 	cacheRepo := reporedis.NewCacheRepository(rdb)
 	publisher := repomq.NewJobPublisher(mqClient)
 
+	userRepo := repopg.NewUserRepository(db)
+	authReader := repopg.NewAuthorizationReader(db)
+	companyRepo := repopg.NewCompanyRepository(db)
+	deptRepo := repopg.NewDepartmentRepository(db)
+	posRepo := repopg.NewPositionRepository(db)
+	empRepo := repopg.NewEmployeeRepository(db)
+	roleRepo := repopg.NewRoleRepository(db)
+
+	sessionStore := reporedis.NewSessionStore(rdb)
+	refreshStore := reporedis.NewRefreshStore(rdb)
+	throttle := reporedis.NewLoginThrottle(rdb)
+	resetStore := reporedis.NewPasswordResetStore(rdb)
+	mailer := repomq.NewMailer(mqClient)
+
+	// --- Usecase ---
 	pingUC := ucsystem.NewPingUsecase(clockRepo, cacheRepo, publisher)
+
+	authUC := ucauth.NewUsecase(
+		userRepo, authReader, sessionStore, refreshStore, throttle, resetStore,
+		jwtMgr, mailer,
+		ucauth.Config{
+			AccessTTL:     cfg.JWTAccessTTL,
+			RefreshTTL:    cfg.JWTRefreshTTL,
+			PublicBaseURL: cfg.PublicBaseURL,
+		},
+	)
+
+	hrUC := uchr.NewUsecase(companyRepo, deptRepo, posRepo, empRepo, userRepo, roleRepo)
+
+	// Nối hr với auth: vô hiệu hoá nhân viên phải cắt luôn phiên đăng nhập
+	// của họ, nếu không họ vẫn dùng được hệ thống tới khi token hết hạn.
+	//
+	// Dùng callback thay vì import trực tiếp để tránh phụ thuộc vòng giữa
+	// hai module.
+	hrUC.SetOnEmployeeDeactivated(func(ctx context.Context, userID uuid.UUID) {
+		if err := authUC.LogoutAll(ctx, userID); err != nil {
+			log.Error().Err(err).Str("user_id", userID.String()).
+				Msg("không cắt được phiên của nhân viên vừa bị vô hiệu hoá")
+		}
+	})
+
+	// --- Handler ---
+	// Cookie Secure chỉ bật khi chạy HTTPS. Bật ở môi trường dev HTTP sẽ
+	// khiến trình duyệt vứt cookie đi và refresh không bao giờ hoạt động.
+	secureCookie := cfg.IsProduction()
 
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler: router.New(router.Deps{
-			Config:   cfg,
-			Logger:   log,
-			Version:  version,
-			PingUC:   pingUC,
-			Postgres: db,
-			Redis:    rdb,
-			RabbitMQ: mqClient,
+			Config:     cfg,
+			Logger:     log,
+			Version:    version,
+			Postgres:   db,
+			Redis:      rdb,
+			RabbitMQ:   mqClient,
+			JWT:        jwtMgr,
+			Sessions:   sessionStore,
+			AuthReader: authReader,
+			PingUC:     pingUC,
+			Auth:       handler.NewAuthHandler(authUC, secureCookie),
+			Employee:   handler.NewEmployeeHandler(hrUC),
+			Department: handler.NewDepartmentHandler(hrUC),
+			Position:   handler.NewPositionHandler(hrUC),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,

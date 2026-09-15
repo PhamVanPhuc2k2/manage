@@ -9,12 +9,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yourorg/manage/internal/delivery/consumer"
-	domainsystem "github.com/yourorg/manage/internal/domain/system"
-	"github.com/yourorg/manage/pkg/config"
-	"github.com/yourorg/manage/pkg/logger"
-	"github.com/yourorg/manage/pkg/postgres"
-	"github.com/yourorg/manage/pkg/rabbitmq"
+	// Nhúng dữ liệu múi giờ vào binary.
+	//
+	// Không có nó, image production (không cài gói tzdata) sẽ không hiểu
+	// "Asia/Ho_Chi_Minh" và time.LoadLocation trả lỗi — mọi tính toán giờ
+	// giấc sẽ âm thầm chạy theo UTC.
+	_ "time/tzdata"
+
+	"github.com/PhamVanPhuc2k2/manage/internal/delivery/consumer"
+	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
+	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
+	"github.com/PhamVanPhuc2k2/manage/pkg/config"
+	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
+	"github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
 )
 
 var (
@@ -63,11 +71,23 @@ func run() error {
 
 	dispatcher := consumer.NewDispatcher(mqClient, log)
 
+	mailSender := consumer.NewMailSender(
+		cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom, cfg.SMTPUser, cfg.SMTPPass)
+
 	// Đăng ký handler cho từng loại job.
 	// Phase sau chỉ cần thêm dòng vào đây.
-	if err := dispatcher.Register(domainsystem.JobSystemPing, consumer.HandleSystemPing); err != nil {
-		return fmt.Errorf("đăng ký job %s: %w", domainsystem.JobSystemPing, err)
+	jobs := map[string]consumer.HandlerFunc{
+		domainsystem.JobSystemPing:       consumer.HandleSystemPing,
+		repomq.JobSendPasswordReset:      mailSender.HandlePasswordReset,
+		repomq.JobSendSuspiciousActivity: mailSender.HandleSuspiciousActivity,
+		repomq.JobSendWelcome:            mailSender.HandleWelcome,
 	}
+	for name, fn := range jobs {
+		if err := dispatcher.Register(name, fn); err != nil {
+			return fmt.Errorf("đăng ký job %s: %w", name, err)
+		}
+	}
+	log.Info().Int("jobs", len(jobs)).Msg("đã đăng ký handler")
 
 	errCh := make(chan error, 1)
 	go func() {

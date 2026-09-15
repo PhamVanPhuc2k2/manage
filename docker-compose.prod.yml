@@ -46,7 +46,7 @@ services:
     <<: *prod-common
     # Không build tại chỗ — kéo image đã build và quét bảo mật trong CI.
     build: !reset null
-    image: ghcr.io/yourorg/manage-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/PhamVanPhuc2k2/manage-api:${IMAGE_TAG:-latest}
     volumes: []
     ports: []
     read_only: true          # container không ghi được vào filesystem
@@ -65,7 +65,7 @@ services:
   worker:
     <<: *prod-common
     build: !reset null
-    image: ghcr.io/yourorg/manage-worker:${IMAGE_TAG:-latest}
+    image: ghcr.io/PhamVanPhuc2k2/manage-worker:${IMAGE_TAG:-latest}
     volumes: []
     read_only: true
     tmpfs: [/tmp]
@@ -84,7 +84,7 @@ services:
   frontend:
     <<: *prod-common
     build: !reset null
-    image: ghcr.io/yourorg/manage-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/PhamVanPhuc2k2/manage-frontend:${IMAGE_TAG:-latest}
     volumes: []
     ports: []
     environment:

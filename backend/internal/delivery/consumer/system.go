@@ -3,8 +3,8 @@ package consumer
 import (
 	"context"
 
-	domainsystem "github.com/yourorg/manage/internal/domain/system"
-	"github.com/yourorg/manage/pkg/logger"
+	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
+	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
 )
 
 // HandleSystemPing xử lý job system.ping.
