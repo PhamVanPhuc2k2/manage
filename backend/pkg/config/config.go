@@ -32,6 +32,12 @@ type Config struct {
 	JWTAccessTTL  time.Duration `mapstructure:"JWT_ACCESS_TTL"`
 	JWTRefreshTTL time.Duration `mapstructure:"JWT_REFRESH_TTL"`
 
+	// AuthOTPEnabled bật bước nhập mã xác minh sau khi nhập đúng mật khẩu.
+	//
+	// Mặc định BẬT. Tắt được để chạy kiểm thử tự động và để cứu hoả khi SMTP
+	// chết — nhưng tắt nghĩa là mật khẩu lộ là vào được hệ thống.
+	AuthOTPEnabled bool `mapstructure:"AUTH_OTP_ENABLED"`
+
 	CORSAllowedOrigins []string `mapstructure:"CORS_ALLOWED_ORIGINS"`
 
 	// Địa chỉ công khai, dùng để dựng link trong mail đặt lại mật khẩu.
@@ -86,6 +92,7 @@ func Load(appName string) (*Config, error) {
 	setDefault("JWT_SECRET", "")
 	setDefault("JWT_ACCESS_TTL", "15m")
 	setDefault("JWT_REFRESH_TTL", "168h")
+	setDefault("AUTH_OTP_ENABLED", true)
 
 	setDefault("CORS_ALLOWED_ORIGINS", []string{"http://localhost", "http://localhost:3000"})
 	setDefault("PUBLIC_BASE_URL", "http://localhost")

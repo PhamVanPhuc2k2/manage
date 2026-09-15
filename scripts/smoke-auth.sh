@@ -40,6 +40,59 @@ check() { # check "mô tả" "mong đợi" "thực tế"
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 json() { curl -s "$@"; }
 
+MAILHOG="http://localhost:${MAILHOG_UI_PORT:-8025}"
+
+# Đọc mã OTP mới nhất trong MailHog.
+#
+# Cố ý đi đường vòng qua hộp thư thay vì đọc thẳng Redis: mã phải đi hết
+# api → RabbitMQ → worker → SMTP mới tới được đây, và đó đúng là đoạn hay
+# hỏng nhất. Đọc Redis thì kiểm chứng được mỗi phép so chuỗi.
+otp_code() {
+  local i body
+  for i in $(seq 1 40); do
+    body=$(json "$MAILHOG/api/v2/messages?limit=1" | awk -F'"Body":"' '{print $2}')
+    # Trong thân thư chỉ có đúng một dãy 6 chữ số: chính là mã.
+    # ("5 phút" một chữ số, địa chỉ IP nhiều nhất ba chữ số một nhóm.)
+    case "$body" in
+      *[0-9][0-9][0-9][0-9][0-9][0-9]*)
+        echo "$body" | grep -o '[0-9]\{6\}' | head -1
+        return 0
+        ;;
+    esac
+    sleep 0.25
+  done
+  return 1
+}
+
+# Đăng nhập trọn vẹn, in ra access token.
+#
+# Chạy được với cả hai cấu hình: AUTH_OTP_ENABLED=true thì đi hai bước,
+# false thì bước một đã trả token. Script không cần biết máy chủ đang bật
+# hay tắt — nó hỏi phản hồi.
+login_otp() { # login_otp <email> <password> [cookie_jar]
+  local email="$1" pass="$2" jar="${3:-/dev/null}" res tok ch
+
+  # Dọn hộp thư để không nhặt nhầm mã của lần đăng nhập trước.
+  curl -s -X DELETE "$MAILHOG/api/v1/messages" >/dev/null
+
+  res=$(json -c "$jar" -X POST "$DIRECT/auth/login" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$email\",\"password\":\"$pass\"}")
+
+  tok=$(echo "$res" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+  if [ -n "$tok" ]; then echo "$tok"; return 0; fi
+
+  ch=$(echo "$res" | grep -o '"challenge_id":"[^"]*"' | cut -d'"' -f4)
+  [ -n "$ch" ] || return 1
+
+  local otp
+  otp=$(otp_code) || return 1
+
+  json -c "$jar" -X POST "$DIRECT/auth/verify-otp" -H 'Content-Type: application/json' \
+    -d "{\"challenge_id\":\"$ch\",\"code\":\"$otp\"}" \
+    | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4
+}
+
+
 # Xoá bộ đếm chặn đăng nhập để chạy lại script không bị khoá.
 reset_throttle() {
   docker compose exec -T redis sh -c \
@@ -57,15 +110,61 @@ reset_throttle
 echo "── Xác thực ──"
 check "Không token → 401" 401 "$(code "$BASE/employees")"
 
-TOKEN=$(json -c /tmp/admin.cookie -X POST "$BASE/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" \
-  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+TOKEN=$(login_otp "$ADMIN_EMAIL" "$ADMIN_PASS" /tmp/admin.cookie)
 AUTH="Authorization: Bearer $TOKEN"
 check "Đăng nhập admin → có token" "yes" "$([ -n "$TOKEN" ] && echo yes || echo no)"
 check "Cookie refresh httpOnly được đặt" "yes" \
   "$(grep -q manage_refresh /tmp/admin.cookie && echo yes || echo no)"
 check "/auth/me với token hợp lệ → 200" 200 "$(code "$BASE/auth/me" -H "$AUTH")"
+
+# ------------------------------------------------------------ OTP đăng nhập
+echo
+echo "── Mã xác minh đăng nhập ──"
+
+OTP_JAR=/tmp/otp-step1.cookie
+STEP1=$(curl -s -X DELETE "$MAILHOG/api/v1/messages" >/dev/null; \
+  json -c "$OTP_JAR" -X POST "$DIRECT/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}")
+
+check "Mật khẩu đúng → đòi mã, chưa cấp token" "yes" \
+  "$(echo "$STEP1" | grep -q '"otp_required":true' \
+     && ! echo "$STEP1" | grep -q 'access_token' && echo yes || echo no)"
+
+# Bước một KHÔNG được đặt cookie refresh. Đặt ở đây là cấp nửa phiên cho
+# người mới qua mật khẩu — đúng thứ OTP sinh ra để chặn.
+check "Bước một KHÔNG đặt cookie refresh" "yes" \
+  "$(grep -q manage_refresh "$OTP_JAR" && echo no || echo yes)"
+
+check "Email hiển thị bị che bớt" "yes" \
+  "$(echo "$STEP1" | grep -q '"masked_email":"[^"]*\*' && echo yes || echo no)"
+
+OTP_CH=$(echo "$STEP1" | grep -o '"challenge_id":"[^"]*"' | cut -d'"' -f4)
+check "Sai mã → 401" 401 \
+  "$(code -X POST "$DIRECT/auth/verify-otp" -H 'Content-Type: application/json' \
+     -d "{\"challenge_id\":\"$OTP_CH\",\"code\":\"000000\"}")"
+check "Sai mã → nói rõ còn mấy lần" "yes" \
+  "$(json -X POST "$DIRECT/auth/verify-otp" -H 'Content-Type: application/json' \
+     -d "{\"challenge_id\":\"$OTP_CH\",\"code\":\"000000\"}" \
+     | grep -q 'lần thử' && echo yes || echo no)"
+
+# Gửi lại ngay lập tức phải bị chặn, nếu không kẻ tấn công cứ bấm gửi lại là
+# bộ đếm số lần thử không bao giờ chạm trần.
+check "Gửi lại mã quá sớm → 429" 429 \
+  "$(code -X POST "$DIRECT/auth/resend-otp" -H 'Content-Type: application/json' \
+     -d "{\"challenge_id\":\"$OTP_CH\"}")"
+
+# Đã sai 2 lần ở trên; thêm 3 lần nữa là chạm trần 5.
+for _ in 1 2 3; do
+  code -X POST "$DIRECT/auth/verify-otp" -H 'Content-Type: application/json' \
+    -d "{\"challenge_id\":\"$OTP_CH\",\"code\":\"000000\"}" >/dev/null
+done
+check "Sai 5 lần → thử thách bị huỷ, mã đúng cũng vô dụng" 401 \
+  "$(code -X POST "$DIRECT/auth/verify-otp" -H 'Content-Type: application/json' \
+     -d "{\"challenge_id\":\"$OTP_CH\",\"code\":\"$(otp_code)\"}")"
+
+check "Thử thách bịa → 401" 401 \
+  "$(code -X POST "$DIRECT/auth/verify-otp" -H 'Content-Type: application/json' \
+     -d '{"challenge_id":"khong-ton-tai","code":"123456"}')"
 
 # ------------------------------------------------------------ giả mạo JWT
 echo
@@ -114,9 +213,7 @@ count_sessions() {
 }
 
 GRACE_JAR=/tmp/grace.cookie
-G_TOKEN=$(json -c "$GRACE_JAR" -X POST "$DIRECT/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" \
-  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+G_TOKEN=$(login_otp "$ADMIN_EMAIL" "$ADMIN_PASS" "$GRACE_JAR")
 N_BEFORE=$(count_sessions "$G_TOKEN")
 
 cp "$GRACE_JAR" /tmp/g1.cookie
@@ -138,8 +235,7 @@ check "Hai tab F5: cả hai token cùng trỏ một phiên" 200 \
 # 10 giây là được cấp một phiên mới hợp lệ. Phiên vừa cắt sống lại dưới id
 # khác, và người dùng tưởng mình đã thoát.
 LO_JAR=/tmp/logout-grace.cookie
-json -c "$LO_JAR" -X POST "$DIRECT/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" >/dev/null
+login_otp "$ADMIN_EMAIL" "$ADMIN_PASS" "$LO_JAR" >/dev/null
 cp "$LO_JAR" /tmp/logout-old.cookie
 LO_TOKEN=$(json -b "$LO_JAR" -c "$LO_JAR" -X POST "$BASE/auth/refresh" \
   | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
@@ -152,9 +248,7 @@ check "Đăng xuất rồi dùng lại token cũ trong ân hạn → 401" 401 \
 #
 # Phải chờ qua 10 giây ân hạn, nếu không sẽ đo nhầm sang nhánh "nhiều tab".
 STOLEN=/tmp/stolen.cookie
-TOKEN=$(json -c "$STOLEN" -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" \
-  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+TOKEN=$(login_otp "$ADMIN_EMAIL" "$ADMIN_PASS" "$STOLEN")
 cp "$STOLEN" /tmp/thief.cookie
 OWNER_TOKEN=$(json -b "$STOLEN" -c "$STOLEN" -X POST "$BASE/auth/refresh" \
   | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
@@ -169,10 +263,7 @@ check "Chống đánh cắp: huỷ luôn token của chủ nhân → 401" 401 \
   "$(code "$BASE/auth/me" -H "Authorization: Bearer $OWNER_TOKEN")"
 
 # Đăng nhập lại để có phiên sạch.
-TOKEN=$(json -c /tmp/admin.cookie -X POST "$BASE/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" \
-  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+TOKEN=$(login_otp "$ADMIN_EMAIL" "$ADMIN_PASS" /tmp/admin.cookie)
 AUTH="Authorization: Bearer $TOKEN"
 
 BEFORE=$(code "$BASE/auth/me" -H "$AUTH")
@@ -202,9 +293,7 @@ reset_throttle
 
 # Đăng nhập lại sau khi xoá bộ đếm. Gọi thẳng api để không bị giới hạn của
 # nginx tính gộp với loạt request vừa rồi.
-TOKEN=$(json -X POST "$DIRECT/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" \
-  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+TOKEN=$(login_otp "$ADMIN_EMAIL" "$ADMIN_PASS")
 AUTH="Authorization: Bearer $TOKEN"
 
 # ------------------------------------------------------------- phân trang

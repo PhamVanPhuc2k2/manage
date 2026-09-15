@@ -18,6 +18,7 @@ import (
 type Mailer interface {
 	SendPasswordReset(ctx context.Context, email, name, resetURL string) error
 	SendSuspiciousActivity(ctx context.Context, email, name, ip, userAgent string) error
+	SendLoginOTP(ctx context.Context, email, name, code string, ttlMinutes int, ip string) error
 }
 
 type Config struct {
@@ -25,6 +26,13 @@ type Config struct {
 	RefreshTTL    time.Duration
 	ResetTokenTTL time.Duration
 	PublicBaseURL string
+
+	// OTPEnabled bật bước xác minh mã ở lần đăng nhập.
+	//
+	// Có công tắc vì hai lý do: môi trường kiểm thử tự động cần tắt để chạy
+	// nhanh, và nếu SMTP hỏng thì tắt tạm còn hơn cả công ty không vào được
+	// hệ thống. Mặc định BẬT — an toàn phải là mặc định, không phải tuỳ chọn.
+	OTPEnabled bool
 }
 
 type Usecase struct {
@@ -34,6 +42,7 @@ type Usecase struct {
 	refresh  domainauth.RefreshStore
 	throttle domainauth.LoginThrottle
 	reset    domainauth.PasswordResetStore
+	otp      domainauth.OTPStore
 	jwt      *jwt.Manager
 	mailer   Mailer
 	cfg      Config
@@ -46,6 +55,7 @@ func NewUsecase(
 	refresh domainauth.RefreshStore,
 	throttle domainauth.LoginThrottle,
 	reset domainauth.PasswordResetStore,
+	otp domainauth.OTPStore,
 	jwtMgr *jwt.Manager,
 	mailer Mailer,
 	cfg Config,
@@ -60,6 +70,7 @@ func NewUsecase(
 		refresh:  refresh,
 		throttle: throttle,
 		reset:    reset,
+		otp:      otp,
 		jwt:      jwtMgr,
 		mailer:   mailer,
 		cfg:      cfg,

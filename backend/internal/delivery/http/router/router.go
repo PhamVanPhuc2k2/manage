@@ -129,6 +129,11 @@ func New(d Deps) http.Handler {
 		// =================================================================
 		r.Group(func(r chi.Router) {
 			r.Post("/auth/login", d.Auth.Login)
+			// Hai endpoint của bước hai. Vẫn công khai: người gọi chưa có
+			// token — họ mới qua được mật khẩu. Thứ bảo vệ chúng là id thử
+			// thách ngẫu nhiên, bộ đếm 5 lần sai và giới hạn gửi lại.
+			r.Post("/auth/verify-otp", d.Auth.VerifyOTP)
+			r.Post("/auth/resend-otp", d.Auth.ResendOTP)
 			r.Post("/auth/refresh", d.Auth.Refresh)
 			r.Post("/auth/forgot-password", d.Auth.ForgotPassword)
 			r.Post("/auth/reset-password", d.Auth.ResetPassword)

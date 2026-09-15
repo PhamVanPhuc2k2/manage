@@ -57,6 +57,58 @@ type RefreshStore interface {
 	Consume(ctx context.Context, tokenHash string, reserveSessionID uuid.UUID) (RefreshConsumed, error)
 }
 
+// OTPChallenge là thứ được giữ lại giữa hai bước đăng nhập.
+//
+// Nó lưu bối cảnh của lần đăng nhập đang dở: ai đang đăng nhập, từ đâu. Có
+// nó thì phiên cấp ra ở bước hai mang đúng IP và tên thiết bị của bước một,
+// chứ không phải của request xác minh.
+type OTPChallenge struct {
+	UserID     uuid.UUID
+	Email      string
+	IP         string
+	UserAgent  string
+	DeviceName string
+}
+
+// OTPVerified là kết quả xác minh đúng mã.
+type OTPVerified struct {
+	Challenge OTPChallenge
+}
+
+// OTPStore lưu thử thách OTP giữa bước nhập mật khẩu và bước nhập mã.
+//
+// Nằm ở Redis vì nó đúng nghĩa là dữ liệu tạm: sống 5 phút rồi tự biến mất,
+// không cần sao lưu, không ai truy vấn lịch sử. Đưa vào PostgreSQL thì phải
+// tự viết job dọn rác cho một thứ mà Redis dọn miễn phí.
+type OTPStore interface {
+	// Create lưu thử thách kèm mã ĐÃ BĂM.
+	//
+	// challengeHash là băm của id thử thách — id thật chỉ nằm ở client, hệt
+	// như refresh token. Ai đọc được Redis cũng không mạo danh được phiên
+	// đăng nhập đang dở.
+	Create(ctx context.Context, challengeHash string, c OTPChallenge, codeHash string, ttl time.Duration) error
+
+	// Verify so mã và đếm số lần sai trong MỘT thao tác nguyên khối.
+	//
+	// Phải nguyên khối: đọc rồi so ở Go thì nhiều request song song cùng đọc
+	// được một giá trị attempts, và bộ đếm 5 lần trở thành vô nghĩa — đúng
+	// cái mà OTP 6 chữ số dựa vào để an toàn.
+	//
+	// Trả về attemptsLeft khi mã sai, để giao diện nói rõ còn mấy lần.
+	Verify(ctx context.Context, challengeHash, codeHash string, maxAttempts int) (OTPVerified, int, error)
+
+	// Resend thay mã mới vào thử thách đang có, kèm chặn gửi lại quá dày.
+	//
+	// Thay mã chứ không tạo thử thách mới: giữ nguyên bộ đếm số lần thử,
+	// nếu không kẻ tấn công cứ bấm gửi lại là bộ đếm về 0.
+	//
+	// Khi trả ErrOTPResendTooSoon, tham số thứ hai là thời gian còn phải chờ.
+	Resend(ctx context.Context, challengeHash, newCodeHash string, cooldown time.Duration, maxResends int, now time.Time) (OTPChallenge, time.Duration, error)
+
+	// Delete xoá thử thách (dùng khi huỷ giữa chừng).
+	Delete(ctx context.Context, challengeHash string) error
+}
+
 // LoginThrottle chặn dò mật khẩu. Đếm theo cả IP lẫn tài khoản:
 // chỉ đếm theo IP thì kẻ tấn công đổi IP là thoát; chỉ đếm theo tài khoản
 // thì ai cũng khoá được tài khoản người khác bằng cách cố tình nhập sai.

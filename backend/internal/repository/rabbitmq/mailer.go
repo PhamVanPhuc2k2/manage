@@ -12,6 +12,7 @@ const (
 	JobSendPasswordReset      = "mail.password_reset"
 	JobSendSuspiciousActivity = "mail.suspicious_activity"
 	JobSendWelcome            = "mail.welcome"
+	JobSendLoginOTP           = "mail.login_otp"
 )
 
 // Mailer đẩy việc gửi mail sang worker.
@@ -46,6 +47,31 @@ func (m *Mailer) SendSuspiciousActivity(ctx context.Context, email, name, ip, us
 			"name":       name,
 			"ip":         ip,
 			"user_agent": userAgent,
+		},
+	})
+}
+
+// SendLoginOTP đẩy mã đăng nhập sang worker.
+//
+// Mã đi qua hàng đợi như mọi mail khác, nhưng đây là mail DUY NHẤT mà người
+// dùng đang ngồi chờ ngay lúc đó. Hàng đợi tắc thì họ không đăng nhập được —
+// đó là cái giá của việc bắt buộc OTP, và là lý do có công tắc AUTH_OTP_ENABLED.
+//
+// Mã nằm trong payload của message. Đừng log payload này ở bất cứ đâu.
+func (m *Mailer) SendLoginOTP(
+	ctx context.Context,
+	email, name, code string,
+	ttlMinutes int,
+	ip string,
+) error {
+	return m.publisher.Publish(ctx, domainsystem.Job{
+		Name: JobSendLoginOTP,
+		Payload: map[string]any{
+			"email":       email,
+			"name":        name,
+			"code":        code,
+			"ttl_minutes": ttlMinutes,
+			"ip":          ip,
 		},
 	})
 }

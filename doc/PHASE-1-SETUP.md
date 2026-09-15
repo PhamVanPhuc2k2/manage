@@ -140,6 +140,49 @@ Cả bốn chiều đều có trong `scripts/smoke-auth.sh`: hai tab cùng F5 ph
 
 Đây là cơ chế duy nhất giúp phát hiện token bị đánh cắp mà không cần thiết bị theo dõi gì thêm. Bỏ nó đi thì refresh token bị lộ có thể dùng vô thời hạn mà không ai biết.
 
+### Đăng nhập hai bước: mã xác minh qua email
+
+Mật khẩu đúng **không** còn đồng nghĩa với đăng nhập xong. Sau bước mật khẩu, hệ thống gửi mã 6 chữ số tới email của nhân viên; token chỉ ra đời khi nhập đúng mã.
+
+```
+POST /auth/login       email + mật khẩu
+   → 200 { otp_required: true, challenge_id, masked_email, expires_at }
+     KHÔNG token, KHÔNG cookie, KHÔNG phiên nào được tạo
+
+POST /auth/verify-otp  challenge_id + mã
+   → 200 { access_token, ... } + cookie refresh   ← phiên ra đời Ở ĐÂY
+
+POST /auth/resend-otp  challenge_id
+   → 200, hoặc 429 nếu bấm quá sớm / quá nhiều lần
+```
+
+Điểm quan trọng nhất của thiết kế này nằm ở chỗ bước một **không để lại gì có thể dùng được**. Đặt cookie refresh ở bước một, hay tạo sẵn phiên rồi đánh dấu "chưa xác minh", là tự tay dựng lại đúng lỗ hổng mà OTP sinh ra để bịt: kẻ có mật khẩu đã cầm được nửa phiên.
+
+Các tham số và lý do chọn (`internal/domain/auth/entity.go`):
+
+| Tham số | Giá trị | Vì sao |
+|---|---|---|
+| Số chữ số | 6 | Một triệu khả năng. Tăng lên 8 chỉ làm người dùng gõ sai nhiều hơn, trong khi tấm chắn thật là giới hạn số lần thử |
+| Hạn mã | 5 phút | Đủ để mở hộp thư, ngắn để mã lọt ra ngoài cũng vô dụng |
+| Số lần nhập sai | 5 | **Điều kiện tiên quyết.** OTP 6 chữ số không giới hạn lần thử thì vét cạn xong trong vài phút |
+| Gửi lại | cách nhau 60 giây, tối đa 3 lần | Không chặn thì kẻ tấn công cứ bấm gửi lại là bộ đếm 5 lần không bao giờ chạm trần |
+
+Ba chi tiết dễ làm sai:
+
+**Mã lưu dưới dạng băm, id thử thách cũng vậy.** Giống hệt refresh token: ai đọc được Redis cũng không đi tiếp được. Mã không bao giờ xuất hiện trong log — log thường được gom về một nơi mà nhiều người đọc được.
+
+**So mã và đếm số lần sai phải nằm trong một lệnh Lua.** Đọc rồi so ở Go thì nhiều request song song cùng đọc thấy `attempts = 0`, và giới hạn 5 lần trở thành trang trí.
+
+**Đọc lại tài khoản từ database ở bước hai, không tin bản chụp của bước một.** Giữa hai bước có thể tới 5 phút; trong 5 phút đó nhân viên có thể đã bị cho nghỉ.
+
+Bước hai cũng phải nằm trong vùng giới hạn tốc độ của nginx cùng với `/auth/login` — bỏ nó ra ngoài là để hở đúng chỗ cần chặn nhất, vì kẻ tấn công chỉ việc mở thử thách mới để làm mới bộ đếm.
+
+Công tắc `AUTH_OTP_ENABLED` mặc định **bật**. Tắt được để chạy kiểm thử tự động và để cứu hoả khi SMTP chết — nhưng tắt nghĩa là mật khẩu lộ là vào được hệ thống.
+
+Cái giá phải trả, nói thẳng: **hàng đợi tắc thì cả công ty không đăng nhập được.** Mail đăng nhập là mail duy nhất người dùng đang ngồi chờ ngay lúc đó. Đây là lý do có công tắc, và là việc cần theo dõi ở Phase 6.
+
+Bước tiếp theo tự nhiên (chưa làm): **nhớ thiết bị tin cậy**. Chỉ hỏi mã khi đăng nhập từ thiết bị lạ, đặt một cookie ký sống 30 ngày cho thiết bị đã xác minh. Google và GitHub đều làm vậy. Nó biến OTP từ phiền hà hàng ngày thành phiền hà mỗi tháng một lần, mà vẫn giữ nguyên tác dụng.
+
 ### 3.4 Mô hình phân quyền
 
 Ba tầng, kiểm tra theo thứ tự:
@@ -249,7 +292,9 @@ Cố ý để lại, kèm lý do:
 
 | Việc | Vì sao hoãn |
 |---|---|
-| Xác thực hai lớp (2FA) | Chưa cần cho hệ thống nội bộ. Thêm được bất cứ lúc nào mà không đụng thiết kế hiện tại |
+| ~~Xác thực hai lớp (2FA)~~ | **Đã làm** — mã OTP 6 chữ số gửi qua email ở mỗi lần đăng nhập. Xem mục "Đăng nhập hai bước" ở trên |
+| 2FA bằng ứng dụng (TOTP) | OTP qua email đã chặn được trường hợp lộ mật khẩu. TOTP chỉ hơn khi chính hộp thư bị chiếm — cân nhắc cho tài khoản admin ở Phase 6 |
+| Nhớ thiết bị tin cậy | Cần cookie ký riêng và bảng thiết bị. Làm cùng lúc với trang quản lý thiết bị ở Phase 6 |
 | Đăng nhập bằng Google/Microsoft | Chờ xem công ty dùng Workspace hay M365 rồi mới quyết |
 | Nhập nhân viên hàng loạt từ Excel | Cần hạ tầng báo tiến độ (Phase 5). Làm cuối Phase 1 nếu còn thời gian |
 | Sơ đồ tổ chức dạng đồ hoạ | API cây đã có ở Phase 1; phần vẽ để sau, không chặn việc gì |
@@ -489,7 +534,8 @@ CREATE TRIGGER trg_users_updated       BEFORE UPDATE ON users
 |---|---|---|---|
 | `session:{session_id}` | Hash | 7 ngày | Phiên đang hoạt động: user_id, device, ip, ua |
 | `user_sessions:{user_id}` | Set | 7 ngày | Danh sách session_id, phục vụ "đăng xuất tất cả" |
-| `refresh:{token_hash}` | Hash | 7 ngày | session_id, used (bool) — phát hiện tái sử dụng |
+| `refresh:{token_hash}` | Hash | 7 ngày | session_id, user_id, used, used_at, next_session |
+| `otp:{challenge_hash}` | Hash | 5 phút | user_id, code_hash, attempts, resends — đăng nhập bước hai |
 | `pwreset:{token_hash}` | String | 30 phút | user_id, dùng một lần |
 | `login_fail:ip:{ip}` | String | 15 phút | Đếm số lần sai theo IP |
 | `login_fail:user:{email}` | String | 15 phút | Đếm số lần sai theo tài khoản |
@@ -1620,6 +1666,62 @@ Chạy tay từng mục, đừng tin là "chắc đúng".
 
 Hai dòng cuối là hậu quả dây chuyền của hai dòng ngay trên chúng — bản vá
 nào cũng nên đọc lại chỗ nó vừa đổi giả định.
+
+---
+
+## 16.1. Vì sao phiên đăng nhập lại sinh nhiều lỗi ngầm đến thế
+
+Nhìn lại bảng trên: quá nửa số dòng thuộc về phiên và token. Không phải ngẫu nhiên. Phiên đăng nhập có bốn đặc điểm mà hầu như không phần nào khác của hệ thống có đủ cả bốn.
+
+**1. Nó nằm rải ở năm nơi cùng lúc.** Một danh sách nhân viên chỉ có một bản gốc: hàng trong PostgreSQL. Một phiên đăng nhập thì nằm ở: access token trong bộ nhớ trình duyệt, cookie refresh trong trình duyệt, bản ghi phiên trong Redis, bản ghi refresh token trong Redis, và hàng `users` trong PostgreSQL. Mọi thao tác động tới danh tính đều phải giữ năm nơi đó khớp nhau. Lỗi sinh ra từ việc cập nhật được ba, quên hai.
+
+**2. Yêu cầu của nó mang dấu âm.** Phần lớn tính năng là "sau khi làm X, điều Y phải đúng" — sai thì màn hình trắng, API trả 500, ai cũng thấy. Phiên thì ngược lại: "sau khi làm X, điều Y phải **thôi** hoạt động". Thu hồi hỏng **không tạo ra lỗi nào cả**. Không exception, không log, không cảnh báo. Một thứ đáng lẽ phải chết thì vẫn sống, và cách duy nhất để biết là có phép thử khẳng định "chỗ này phải trả 401".
+
+> Đúng hai lỗi ở hai dòng cuối bảng trên đều thuộc loại này. Cả hai đều chạy trơn tru, không một dòng log bất thường.
+
+**3. Thời gian là tham số thật.** TTL, thời gian ân hạn, lệch đồng hồ giữa các máy, đua nhau lúc token sắp hết hạn. Phép thử không điều khiển được thời gian thì không nhìn thấy nhóm lỗi này.
+
+**4. Đồng thời là chuyện thường ngày, không phải ngoại lệ.** Người dùng mở năm tab. Điện thoại mất sóng rồi gửi lại. Trình duyệt khôi phục phiên làm việc và bắn mười request một lúc. Suy nghĩ theo kiểu "một request tại một thời điểm" ở đây là sai ngay từ đầu.
+
+Và điều nguy hiểm nhất: **mọi module khác đều có quyền phải huỷ phiên.** Đổi mật khẩu, đổi vai trò, cho nghỉ việc, khoá tài khoản, xoá nhân viên — mỗi thứ là một nơi phải nhớ gọi thu hồi. Module phiên không biết ai đang phụ thuộc vào mình. Thêm một tính năng ở Phase 4 mà quên gọi, không có gì báo cho bạn biết.
+
+### Dự án lớn giải quyết bằng cách nào
+
+Không ai giải bằng "cẩn thận hơn". Họ đổi cấu trúc để cái sai không còn chỗ tồn tại.
+
+**Số hiệu phiên bản thay cho việc đi tìm từng phiên.** Đây là kỹ thuật quan trọng nhất và cũng rẻ nhất. Thêm một cột vào `users`, ví dụ `sessions_valid_after TIMESTAMPTZ`. Nhúng thời điểm phát hành vào token. Middleware từ chối mọi token phát hành trước mốc đó.
+
+Từ đó, "huỷ toàn bộ phiên" không còn là đi liệt kê và xoá từng phiên nữa, mà là **một phép gán**:
+
+```sql
+UPDATE users SET sessions_valid_after = NOW() WHERE id = $1;
+```
+
+Cái hay nằm ở chỗ nó gộp được vào cùng transaction với hành động gây ra nó:
+
+```sql
+-- Cho nghỉ việc: xoá mềm VÀ huỷ phiên, trong một giao dịch, không thể lệch
+UPDATE users SET is_active = FALSE, deleted_at = NOW(), sessions_valid_after = NOW()
+WHERE employee_id = $1;
+```
+
+Cả hai lỗi ở cuối bảng cạm bẫy đều **biến mất về mặt cấu trúc** dưới mô hình này: không còn bước "tra tài khoản rồi gọi thu hồi" để mà quên, cũng không còn phiên nào sống sót được. Django (`get_session_auth_hash`), Rails/Devise, Firebase (`tokensValidAfterTime`), GitHub đều dùng ý tưởng này.
+
+**Thu hồi là sự kiện, không phải lời gọi hàm.** Thay vì mỗi module tự nhớ gọi `LogoutAll`, module phiên lắng nghe các sự kiện miền: `user.password_changed`, `user.deactivated`, `user.roles_changed`. Thêm tính năng mới chỉ cần phát sự kiện đúng tên. Dự án này đã đi nửa đường — callback `onEmployeeDeactivated` chính là hình thức sơ khai của nó, và RabbitMQ đã sẵn sàng cho phần còn lại.
+
+**Một nơi duy nhất trả lời "token này còn hiệu lực không".** OAuth2 gọi là token introspection (RFC 7662). Mỗi dịch vụ tự đoán lấy là bắt đầu lệch nhau.
+
+**Access token ngắn + refresh xoay vòng + phát hiện tái sử dụng + thời gian ân hạn.** Chính là thứ dự án này đang làm; đây là khuyến nghị của OAuth 2.1 BCP, và "ân hạn" là tên gọi chuẩn trong ngành (Auth0 gọi là *rotation leeway*).
+
+**Token gắn với thiết bị** (DPoP, mTLS) cho hệ thống giá trị cao: token bị đánh cắp đem sang máy khác cũng vô dụng. Đắt và phức tạp, chỉ đáng khi dữ liệu đủ quý.
+
+**Kiểm chứng chiều âm, tự động, chạy mọi lần.** Vì thu hồi hỏng trong im lặng, mỗi đường thu hồi phải có một phép thử khẳng định 401. Đó chính xác là việc `scripts/smoke-auth.sh` đang làm, và là lý do nó bắt được cả hai lỗi trên.
+
+**Ghi log mọi lần thu hồi, kèm lý do.** Rồi cảnh báo khi thấy "token được dùng sau thời điểm bị thu hồi" — dấu hiệu hoặc có lỗ hổng, hoặc đang bị tấn công.
+
+### Việc nên làm cho dự án này
+
+Thêm `sessions_valid_after` vào bảng `users` ở Phase 2, trước khi có thêm module nào đụng tới danh tính. Càng nhiều nơi phải nhớ gọi thu hồi thì càng chắc chắn có một nơi quên — và nơi quên đó sẽ không báo cho ai biết.
 
 ---
 

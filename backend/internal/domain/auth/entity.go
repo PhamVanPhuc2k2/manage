@@ -27,6 +27,37 @@ var (
 	ErrTokenReusedInGrace = errors.New("refresh token dùng lại trong thời gian ân hạn")
 )
 
+// Lỗi của bước xác minh OTP.
+//
+// Tách riêng ErrOTPWrongCode với ErrOTPNotFound là CÓ CHỦ Ý và ngược với
+// quy tắc "một thông báo chung" ở màn hình đăng nhập. Ở đây người dùng đã
+// qua bước mật khẩu, ta biết chắc họ là ai; giấu đi chuyện "mã sai" chỉ làm
+// họ loay hoay không biết nên nhập lại hay bấm gửi lại mã.
+var (
+	ErrOTPNotFound        = errors.New("phiên xác minh không tồn tại hoặc đã hết hạn")
+	ErrOTPWrongCode       = errors.New("mã xác minh không đúng")
+	ErrOTPTooManyAttempts = errors.New("nhập sai mã quá nhiều lần")
+	ErrOTPResendTooSoon   = errors.New("gửi lại mã quá sớm")
+	ErrOTPTooManyResends  = errors.New("gửi lại mã quá nhiều lần")
+)
+
+// Tham số của bước xác minh OTP.
+//
+// Vì sao 6 chữ số là đủ? Một triệu khả năng, tối đa 5 lần thử, thử thách
+// sống 5 phút và chỉ gửi lại được 3 lần. Kẻ tấn công đoán mò có xác suất
+// 5/1.000.000 mỗi phiên, và không kéo dài phiên ra được. Tăng lên 8 chữ số
+// chỉ làm người dùng gõ sai nhiều hơn.
+//
+// Điều kiện tiên quyết: phải chặn được số lần thử. OTP 6 chữ số KHÔNG có
+// giới hạn lần thử thì vét cạn xong trong vài phút.
+const (
+	OTPDigits         = 6
+	OTPTTL            = 5 * time.Minute
+	OTPMaxAttempts    = 5
+	OTPResendCooldown = 60 * time.Second
+	OTPMaxResends     = 3
+)
+
 // RefreshGracePeriod là khoảng thời gian sau lần dùng đầu tiên mà việc dùng
 // lại refresh token vẫn được chấp nhận.
 //

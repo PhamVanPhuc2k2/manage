@@ -101,13 +101,21 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 Hai script chạy lại bất cứ lúc nào, tự tạo và tự dọn dữ liệu kiểm thử:
 
 ```bash
-ADMIN_PASS='...' bash scripts/smoke-auth.sh   # 26 mục bảo mật
+ADMIN_PASS='...' bash scripts/smoke-auth.sh   # 34 mục bảo mật
 ADMIN_PASS='...' bash scripts/smoke-hr.sh     # 31 mục nghiệp vụ nhân sự
 ```
 
 `smoke-auth.sh` kiểm tra những thứ dễ hỏng âm thầm: giả mạo JWT, xoay vòng
 refresh token, phát hiện token bị đánh cắp, đăng xuất có hiệu lực tức thì,
-chống dò mật khẩu và chống dò email.
+mã xác minh đăng nhập, chống dò mật khẩu và chống dò email.
+
+> Đăng nhập cần mã OTP gửi qua email. Ở môi trường dev, mở
+> **http://localhost:8025** (MailHog) để lấy mã. Hai script kiểm chứng cũng
+> đọc mã từ đó — tức là chúng đi đúng đường thư thật:
+> api → RabbitMQ → worker → SMTP.
+>
+> Tắt bằng `AUTH_OTP_ENABLED=false` trong `.env` nếu cần, nhưng tắt nghĩa là
+> ai có mật khẩu là vào được.
 
 `smoke-hr.sh` kiểm tra nghiệp vụ: chặn vòng lặp trong cây phòng ban, chặn xoá
 phòng còn người, tìm kiếm tiếng Việt không dấu, tạo tài khoản, đổi vai trò và

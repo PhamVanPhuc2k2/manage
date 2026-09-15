@@ -81,6 +81,7 @@ func run() error {
 		repomq.JobSendPasswordReset:      mailSender.HandlePasswordReset,
 		repomq.JobSendSuspiciousActivity: mailSender.HandleSuspiciousActivity,
 		repomq.JobSendWelcome:            mailSender.HandleWelcome,
+		repomq.JobSendLoginOTP:           mailSender.HandleLoginOTP,
 	}
 	for name, fn := range jobs {
 		if err := dispatcher.Register(name, fn); err != nil {

@@ -119,6 +119,52 @@ Hệ thống Quản lý Công ty`, name, ip, ua)
 	return nil
 }
 
+func (s *MailSender) HandleLoginOTP(ctx context.Context, job domainsystem.Job) error {
+	log := logger.FromContext(ctx)
+
+	email, _ := job.Payload["email"].(string)
+	name, _ := job.Payload["name"].(string)
+	code, _ := job.Payload["code"].(string)
+	ip, _ := job.Payload["ip"].(string)
+
+	// JSON không có kiểu số nguyên: mọi số về tới đây đều là float64.
+	ttl := 5
+	if v, ok := job.Payload["ttl_minutes"].(float64); ok && v > 0 {
+		ttl = int(v)
+	}
+
+	if email == "" || code == "" {
+		log.Error().Msg("job gửi mã đăng nhập thiếu dữ liệu")
+		return nil
+	}
+
+	body := fmt.Sprintf(`Xin chào %s,
+
+Mã xác minh đăng nhập của bạn là:
+
+    %s
+
+Mã có hiệu lực trong %d phút và chỉ dùng được một lần.
+
+Yêu cầu đăng nhập đến từ địa chỉ IP: %s
+
+Nếu bạn KHÔNG đăng nhập, ai đó đang giữ mật khẩu của bạn. Hãy đổi mật khẩu
+ngay và báo bộ phận kỹ thuật. Không đưa mã này cho bất kỳ ai, kể cả người
+tự xưng là nhân viên hỗ trợ.
+
+--
+Hệ thống Quản lý Công ty`, name, code, ttl, ip)
+
+	if err := s.send(email, "Mã xác minh đăng nhập", body); err != nil {
+		return fmt.Errorf("gửi mã đăng nhập: %w", err)
+	}
+
+	// Chỉ log người nhận, TUYỆT ĐỐI không log mã. Log thường được gom về
+	// một nơi mà nhiều người đọc được — mã nằm trong đó là OTP thành vô nghĩa.
+	log.Info().Str("to", email).Msg("đã gửi mã đăng nhập")
+	return nil
+}
+
 func (s *MailSender) HandleWelcome(ctx context.Context, job domainsystem.Job) error {
 	log := logger.FromContext(ctx)
 

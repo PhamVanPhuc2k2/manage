@@ -46,7 +46,28 @@ func errInvalidCredentials() error {
 	return apperror.New(apperror.KindUnauthorized, "Email hoặc mật khẩu không đúng")
 }
 
-func (u *Usecase) Login(ctx context.Context, in LoginInput) (*TokenPair, error) {
+// LoginResult là kết quả của bước một.
+//
+// Đúng một trong hai trường có giá trị: hoặc đăng nhập xong luôn (OTP tắt),
+// hoặc mới qua được mật khẩu và đang chờ mã.
+//
+// Gộp vào một kiểu thay vì trả hai giá trị rời để tầng delivery không thể
+// vô tình quên nhánh còn lại — quên nhánh OTP nghĩa là cấp token cho người
+// mới đi được nửa đường.
+type LoginResult struct {
+	Pair      *TokenPair
+	Challenge *OTPChallengeInfo
+}
+
+// OTPChallengeInfo là những gì client cần để đi tiếp bước hai.
+type OTPChallengeInfo struct {
+	ChallengeID string
+	ExpiresAt   time.Time
+	ResendAfter time.Duration
+	MaskedEmail string
+}
+
+func (u *Usecase) Login(ctx context.Context, in LoginInput) (*LoginResult, error) {
 	log := logger.FromContext(ctx)
 
 	// --- 1. Chặn dò mật khẩu TRƯỚC KHI chạm database ---
@@ -103,7 +124,24 @@ func (u *Usecase) Login(ctx context.Context, in LoginInput) (*TokenPair, error) 
 		}
 	}
 
-	return u.issueSession(ctx, user, uuid.New(), in)
+	// --- 6. Bước hai: mã xác minh gửi qua email ---
+	//
+	// Mật khẩu đúng KHÔNG đồng nghĩa với đăng nhập xong. Không có phiên nào
+	// được tạo ở đây, không token nào được cấp — chỉ một thử thách sống 5
+	// phút trong Redis.
+	if u.cfg.OTPEnabled {
+		challenge, err := u.startOTPChallenge(ctx, user, in)
+		if err != nil {
+			return nil, err
+		}
+		return &LoginResult{Challenge: challenge}, nil
+	}
+
+	pair, err := u.issueSession(ctx, user, uuid.New(), in)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginResult{Pair: pair}, nil
 }
 
 // issueSession tạo phiên MỚI với id cho trước rồi phát hành cặp token.

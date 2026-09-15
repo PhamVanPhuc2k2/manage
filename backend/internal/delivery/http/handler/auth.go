@@ -98,7 +98,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pair, err := h.uc.Login(r.Context(), ucauth.LoginInput{
+	res, err := h.uc.Login(r.Context(), ucauth.LoginInput{
 		Email:      strings.TrimSpace(req.Email),
 		Password:   req.Password,
 		IP:         clientIP(r),
@@ -110,6 +110,20 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Mật khẩu đúng nhưng chưa xong: trả về thử thách, KHÔNG token, KHÔNG
+	// cookie. Client hiểu là phải chuyển sang màn hình nhập mã.
+	if res.Challenge != nil {
+		httpx.OK(w, otpChallengeResponse{
+			OTPRequired:  true,
+			ChallengeID:  res.Challenge.ChallengeID,
+			ExpiresAt:    res.Challenge.ExpiresAt,
+			ResendAfterS: int(res.Challenge.ResendAfter.Seconds()),
+			MaskedEmail:  res.Challenge.MaskedEmail,
+		})
+		return
+	}
+
+	pair := res.Pair
 	h.setRefreshCookie(w, pair.RefreshToken, pair.RefreshExpiresAt)
 
 	// Access token trả trong BODY, không đặt vào cookie.
@@ -118,6 +132,74 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		AccessToken:        pair.AccessToken,
 		ExpiresAt:          pair.AccessExpiresAt,
 		MustChangePassword: pair.MustChangePassword,
+	})
+}
+
+// otpChallengeResponse là phản hồi của bước một khi OTP đang bật.
+//
+// Cờ otp_required luôn có mặt và luôn là true trong phản hồi này. Client
+// đọc đúng một trường đó để rẽ nhánh, thay vì phải đoán bằng cách xem
+// access_token có rỗng hay không — đoán kiểu ấy sẽ sai vào đúng ngày ai đó
+// đổi tên trường.
+type otpChallengeResponse struct {
+	OTPRequired  bool      `json:"otp_required"`
+	ChallengeID  string    `json:"challenge_id"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	ResendAfterS int       `json:"resend_after_seconds"`
+	MaskedEmail  string    `json:"masked_email"`
+}
+
+type verifyOTPRequest struct {
+	ChallengeID string `json:"challenge_id"`
+	Code        string `json:"code"`
+}
+
+// VerifyOTP hoàn tất đăng nhập: đây mới là nơi phiên và token ra đời.
+func (h *AuthHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
+	var req verifyOTPRequest
+	if err := decodeJSON(r, &req); err != nil {
+		Error(w, err, chimw.GetReqID(r.Context()))
+		return
+	}
+
+	pair, err := h.uc.VerifyOTP(r.Context(),
+		strings.TrimSpace(req.ChallengeID), req.Code, clientIP(r), r.UserAgent())
+	if err != nil {
+		Error(w, err, chimw.GetReqID(r.Context()))
+		return
+	}
+
+	h.setRefreshCookie(w, pair.RefreshToken, pair.RefreshExpiresAt)
+	httpx.OK(w, tokenResponse{
+		AccessToken:        pair.AccessToken,
+		ExpiresAt:          pair.AccessExpiresAt,
+		MustChangePassword: pair.MustChangePassword,
+	})
+}
+
+type resendOTPRequest struct {
+	ChallengeID string `json:"challenge_id"`
+}
+
+func (h *AuthHandler) ResendOTP(w http.ResponseWriter, r *http.Request) {
+	var req resendOTPRequest
+	if err := decodeJSON(r, &req); err != nil {
+		Error(w, err, chimw.GetReqID(r.Context()))
+		return
+	}
+
+	info, err := h.uc.ResendOTP(r.Context(), strings.TrimSpace(req.ChallengeID))
+	if err != nil {
+		Error(w, err, chimw.GetReqID(r.Context()))
+		return
+	}
+
+	httpx.OK(w, otpChallengeResponse{
+		OTPRequired:  true,
+		ChallengeID:  info.ChallengeID,
+		ExpiresAt:    info.ExpiresAt,
+		ResendAfterS: int(info.ResendAfter.Seconds()),
+		MaskedEmail:  info.MaskedEmail,
 	})
 }
 

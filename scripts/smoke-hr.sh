@@ -37,14 +37,52 @@ check() {
   fi
 }
 
-TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}" \
-  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
-AUTH="Authorization: Bearer $TOKEN"
 JSON='Content-Type: application/json'
 
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 idof() { grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4; }
+
+MAILHOG="http://localhost:${MAILHOG_UI_PORT:-8025}"
+
+# Đăng nhập trọn vẹn (hai bước nếu máy chủ bật OTP), in ra access token.
+#
+# Mã đọc từ MailHog, tức là đi đúng đường mail thật: api → RabbitMQ →
+# worker → SMTP. Bản sao của hàm này nằm trong smoke-auth.sh; hai script cố
+# ý chạy độc lập, không nguồn chung, để chạy lẻ từng cái vẫn được.
+# In ra PHẢN HỒI CUỐI CÙNG của luồng đăng nhập, không phải mỗi token: các
+# cờ như must_change_password nằm ở bước xác minh, phép thử cần đọc chúng.
+login_otp_json() { # login_otp_json <email> <password>
+  local email="$1" pass="$2" res ch otp i body
+
+  curl -s -X DELETE "$MAILHOG/api/v1/messages" >/dev/null
+
+  res=$(curl -s -X POST "$DIRECT/auth/login" -H "$JSON" \
+    -d "{\"email\":\"$email\",\"password\":\"$pass\"}")
+
+  # OTP tắt: bước một đã trả token.
+  if echo "$res" | grep -q '"access_token"'; then echo "$res"; return 0; fi
+
+  ch=$(echo "$res" | grep -o '"challenge_id":"[^"]*"' | cut -d'"' -f4)
+  if [ -z "$ch" ]; then echo "$res"; return 1; fi
+
+  for i in $(seq 1 40); do
+    body=$(curl -s "$MAILHOG/api/v2/messages?limit=1" | awk -F'"Body":"' '{print $2}')
+    otp=$(echo "$body" | grep -o '[0-9]\{6\}' | head -1)
+    [ -n "$otp" ] && break
+    sleep 0.25
+  done
+  [ -n "$otp" ] || return 1
+
+  curl -s -X POST "$DIRECT/auth/verify-otp" -H "$JSON" \
+    -d "{\"challenge_id\":\"$ch\",\"code\":\"$otp\"}"
+}
+
+login_otp() { # login_otp <email> <password>
+  login_otp_json "$1" "$2" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4
+}
+
+TOKEN=$(login_otp "$ADMIN_EMAIL" "$ADMIN_PASS")
+AUTH="Authorization: Bearer $TOKEN"
 
 # Xoá bộ đếm chặn dò mật khẩu.
 #
@@ -148,9 +186,10 @@ check "Tạo tài khoản lần hai → 409" 409 \
 check "Đăng nhập bằng mật khẩu tạm → 200" 200 \
   "$(code -X POST "$DIRECT/auth/login" -H "$JSON" \
      -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}")"
+# Cờ must_change_password nay nằm ở phản hồi của bước XÁC MINH, không phải
+# bước nhập mật khẩu — bước một chưa cấp gì cả.
 check "Bị bắt đổi mật khẩu ngay lần đầu" "true" \
-  "$(curl -s -X POST "$DIRECT/auth/login" -H "$JSON" \
-     -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}" \
+  "$(login_otp_json "smoke001@test.local" "$TEMP_PW" \
      | grep -o '"must_change_password":[a-z]*' | cut -d: -f2)"
 
 check "Vai trò mặc định là employee" '"roles":["employee"]' \
@@ -164,9 +203,9 @@ check "Nâng lên manager → 200" 200 \
   "$(code -X PUT "$BASE/employees/$EMP_ID/roles" -H "$AUTH" -H "$JSON" \
      -d '{"roles":["employee","manager"]}')"
 check "Phạm vi dữ liệu đổi theo vai trò" '"scope":"department"' \
-  "$(curl -s "$DIRECT/auth/me" -H "Authorization: Bearer $(curl -s -X POST "$DIRECT/auth/login" \
-     -H "$JSON" -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}" \
-     | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)" | grep -o '"scope":"[^"]*"')"
+  "$(curl -s "$DIRECT/auth/me" \
+     -H "Authorization: Bearer $(login_otp "smoke001@test.local" "$TEMP_PW")" \
+     | grep -o '"scope":"[^"]*"')"
 
 check "Vô hiệu hoá tài khoản → 200" 200 \
   "$(code -X PUT "$BASE/employees/$EMP_ID/account/active" -H "$AUTH" -H "$JSON" \
@@ -197,9 +236,7 @@ echo "── Nhân viên nghỉ việc ──"
 # Bật lại tài khoản để lấy một phiên đang sống, rồi cho nghỉ việc.
 curl -s -o /dev/null -X PUT "$BASE/employees/$EMP_ID/account/active" -H "$AUTH" -H "$JSON" \
   -d '{"active":true}'
-LEAVER=$(curl -s -X POST "$DIRECT/auth/login" -H "$JSON" \
-  -d "{\"email\":\"smoke001@test.local\",\"password\":\"$TEMP_PW\"}" \
-  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+LEAVER=$(login_otp "smoke001@test.local" "$TEMP_PW")
 check "Bật lại tài khoản, đăng nhập được" 200 \
   "$([ -n "$LEAVER" ] && code "$DIRECT/auth/me" -H "Authorization: Bearer $LEAVER" || echo no-token)"
 

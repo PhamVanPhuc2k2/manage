@@ -7,6 +7,37 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, refreshAccessToken } from "../api-client";
 import { useAuthStore } from "./store";
 
+type TokenResponse = {
+  otp_required?: false;
+  access_token: string;
+  expires_at: string;
+  must_change_password: boolean;
+};
+
+type OtpChallengeResponse = {
+  otp_required: true;
+  challenge_id: string;
+  expires_at: string;
+  resend_after_seconds: number;
+  masked_email: string;
+};
+
+type LoginResponse = TokenResponse | OtpChallengeResponse;
+
+/**
+ * Nhận token vừa cấp và nạp hồ sơ người dùng.
+ *
+ * Dùng chung cho đăng nhập một bước và đăng nhập qua OTP, để hai luồng không
+ * thể lệch nhau — lệch ở đây nghĩa là có luồng đặt token mà quên đặt user.
+ */
+async function adoptSession(data: TokenResponse) {
+  const store = useAuthStore.getState();
+  store.setToken(data.access_token, data.expires_at);
+
+  const me = await api.get("/auth/me");
+  store.setUser(me.data as never);
+}
+
 /**
  * Khởi động phiên khi ứng dụng vừa tải.
  *
@@ -56,24 +87,55 @@ export function useAuth() {
   const router = useRouter();
   const qc = useQueryClient();
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const { data } = await api.post<{
-        access_token: string;
-        expires_at: string;
-        must_change_password: boolean;
-      }>("/auth/login", { email, password }, { skipAuth: true });
+  /**
+   * Bước một: gửi email và mật khẩu.
+   *
+   * Trả về MỘT TRONG HAI: đăng nhập xong luôn (khi máy chủ tắt OTP), hoặc
+   * một thử thách cần nhập mã. Gọi chỗ này phải xử lý cả hai nhánh — đọc
+   * `otpRequired` chứ đừng đoán bằng cách xem có token hay không.
+   */
+  const login = useCallback(async (email: string, password: string) => {
+    const { data } = await api.post<LoginResponse>(
+      "/auth/login",
+      { email, password },
+      { skipAuth: true },
+    );
 
-      const store = useAuthStore.getState();
-      store.setToken(data.access_token, data.expires_at);
+    if (data.otp_required) {
+      return {
+        otpRequired: true as const,
+        challengeId: data.challenge_id,
+        maskedEmail: data.masked_email,
+        resendAfterSeconds: data.resend_after_seconds,
+      };
+    }
 
-      const me = await api.get("/auth/me");
-      store.setUser(me.data as never);
+    await adoptSession(data);
+    return {
+      otpRequired: false as const,
+      mustChangePassword: data.must_change_password,
+    };
+  }, []);
 
-      return { mustChangePassword: data.must_change_password };
-    },
-    [],
-  );
+  /** Bước hai: nhập mã nhận qua email. Đây mới là lúc phiên ra đời. */
+  const verifyOtp = useCallback(async (challengeId: string, code: string) => {
+    const { data } = await api.post<TokenResponse>(
+      "/auth/verify-otp",
+      { challenge_id: challengeId, code },
+      { skipAuth: true },
+    );
+
+    await adoptSession(data);
+    return { mustChangePassword: data.must_change_password };
+  }, []);
+
+  const resendOtp = useCallback(async (challengeId: string) => {
+    await api.post(
+      "/auth/resend-otp",
+      { challenge_id: challengeId },
+      { skipAuth: true },
+    );
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -96,7 +158,7 @@ export function useAuth() {
     }
   }, [router, qc]);
 
-  return { user, loading, login, logout };
+  return { user, loading, login, verifyOtp, resendOtp, logout };
 }
 
 /**

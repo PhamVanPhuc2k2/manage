@@ -143,20 +143,25 @@ func run() error {
 	refreshStore := reporedis.NewRefreshStore(rdb)
 	throttle := reporedis.NewLoginThrottle(rdb)
 	resetStore := reporedis.NewPasswordResetStore(rdb)
+	otpStore := reporedis.NewOTPStore(rdb)
 	mailer := repomq.NewMailer(mqClient)
 
 	// --- Usecase ---
 	pingUC := ucsystem.NewPingUsecase(clockRepo, cacheRepo, publisher)
 
 	authUC := ucauth.NewUsecase(
-		userRepo, authReader, sessionStore, refreshStore, throttle, resetStore,
+		userRepo, authReader, sessionStore, refreshStore, throttle, resetStore, otpStore,
 		jwtMgr, mailer,
 		ucauth.Config{
 			AccessTTL:     cfg.JWTAccessTTL,
 			RefreshTTL:    cfg.JWTRefreshTTL,
 			PublicBaseURL: cfg.PublicBaseURL,
+			OTPEnabled:    cfg.AuthOTPEnabled,
 		},
 	)
+	if !cfg.AuthOTPEnabled {
+		log.Warn().Msg("AUTH_OTP_ENABLED=false — đăng nhập chỉ cần mật khẩu")
+	}
 
 	// storage có thể nil — usecase kiểm tra nil ở mọi chỗ dùng tới tệp.
 	var fileStorage domainhr.FileStorage

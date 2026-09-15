@@ -17,6 +17,10 @@ out/
 # đúng đường dẫn này để nó không rơi ra máy host nữa.
 .pnpm-store/
 
+# Bộ nhớ đệm của tsc. Sinh ra mỗi lần chạy `tsc --noEmit` để kiểm tra kiểu,
+# nội dung là đường dẫn tuyệt đối trong container — vô nghĩa với máy khác.
+tsconfig.tsbuildinfo
+
 # Môi trường — KHÔNG BAO GIỜ commit
 .env
 .env.local

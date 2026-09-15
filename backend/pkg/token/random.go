@@ -33,6 +33,34 @@ func Hash(t string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// NumericCode sinh mã số ngẫu nhiên dùng cho OTP, ví dụ "042915".
+//
+// Giữ nguyên số 0 ở đầu: mã là một CHUỖI, không phải số. Sinh bằng
+// rand.Int(1_000_000) rồi định dạng "%06d" cũng ra kết quả đúng, nhưng chỉ
+// cần ai đó lỡ tay parse sang int là mất chữ số đầu và mã sai vĩnh viễn.
+//
+// Dùng rand.Int của crypto/rand chứ không phải math/rand: math/rand đoán
+// được toàn bộ dãy sau khi biết vài giá trị đầu.
+func NumericCode(digits int) (string, error) {
+	if digits < 4 {
+		digits = 4
+	}
+	const numbers = "0123456789"
+	max := big.NewInt(int64(len(numbers)))
+
+	b := make([]byte, digits)
+	for i := range b {
+		// rand.Int lấy mẫu đều trong [0, max) — không dùng phép chia dư,
+		// nên không lệch về phía các chữ số nhỏ.
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", fmt.Errorf("sinh mã OTP: %w", err)
+		}
+		b[i] = numbers[n.Int64()]
+	}
+	return string(b), nil
+}
+
 // Bỏ các ký tự dễ nhìn nhầm: 0/O, 1/l/I. Mật khẩu này được đọc qua điện
 // thoại hoặc chép tay nên tránh nhầm lẫn quan trọng hơn tăng độ dài.
 const passwordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#$%"
