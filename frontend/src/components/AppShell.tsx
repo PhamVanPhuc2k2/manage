@@ -7,6 +7,8 @@ import { useEffect } from "react";
 import { useAuth, usePermission } from "@/lib/auth/useAuth";
 
 const NAV = [
+  { href: "/projects", label: "Dự án", permission: "project:read" },
+  { href: "/tasks", label: "Công việc", permission: "task:read" },
   { href: "/employees", label: "Nhân viên", permission: "employee:read" },
   { href: "/departments", label: "Phòng ban", permission: "department:read" },
   { href: "/positions", label: "Chức vụ", permission: "position:read" },

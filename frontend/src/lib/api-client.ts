@@ -164,6 +164,11 @@ export const api = {
   put: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "PUT", body }),
 
+  // PATCH dùng cho sửa MỘT PHẦN bản ghi — ví dụ kéo-thả trên bảng Kanban chỉ
+  // đổi cột và vị trí, không gửi lại toàn bộ công việc như PUT.
+  patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    request<T>(path, { ...opts, method: "PATCH", body }),
+
   delete: <T>(path: string, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "DELETE" }),
 };

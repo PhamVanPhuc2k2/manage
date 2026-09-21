@@ -113,6 +113,19 @@ const (
 
 	PermRoleRead   = "role:read"
 	PermRoleAssign = "role:assign"
+
+	// Phase 2. Lưu ý: các quyền này chỉ trả lời "được làm loại việc này
+	// không". Việc "được đụng vào ĐÚNG dự án nào" do bảng project_members
+	// quyết định và kiểm tra ở tầng usecase.
+	PermProjectRead   = "project:read"
+	PermProjectCreate = "project:create"
+	PermProjectUpdate = "project:update"
+	PermProjectDelete = "project:delete"
+
+	PermTaskRead   = "task:read"
+	PermTaskCreate = "task:create"
+	PermTaskUpdate = "task:update"
+	PermTaskDelete = "task:delete"
 )
 
 // Actor là danh tính của người đang thực hiện request.

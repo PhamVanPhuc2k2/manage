@@ -24,12 +24,14 @@ import (
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/handler"
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/router"
 	domainhr "github.com/PhamVanPhuc2k2/manage/internal/domain/hr"
+	domainproject "github.com/PhamVanPhuc2k2/manage/internal/domain/project"
 	repopg "github.com/PhamVanPhuc2k2/manage/internal/repository/postgres"
 	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
 	reporedis "github.com/PhamVanPhuc2k2/manage/internal/repository/redis"
 	reposto "github.com/PhamVanPhuc2k2/manage/internal/repository/storage"
 	ucauth "github.com/PhamVanPhuc2k2/manage/internal/usecase/auth"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
+	ucproject "github.com/PhamVanPhuc2k2/manage/internal/usecase/project"
 	ucsystem "github.com/PhamVanPhuc2k2/manage/internal/usecase/system"
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
 	"github.com/PhamVanPhuc2k2/manage/pkg/jwt"
@@ -139,6 +141,20 @@ func run() error {
 	empRepo := repopg.NewEmployeeRepository(db)
 	roleRepo := repopg.NewRoleRepository(db)
 
+	projectRepo := repopg.NewProjectRepository(db)
+	projectMemberRepo := repopg.NewProjectMemberRepository(db)
+	taskRepo := repopg.NewTaskRepository(db)
+	taskCommentRepo := repopg.NewTaskCommentRepository(db)
+	taskAttachmentRepo := repopg.NewTaskAttachmentRepository(db)
+	taskActivityRepo := repopg.NewTaskActivityRepository(db)
+	taskTimelogRepo := repopg.NewTaskTimelogRepository(db)
+	projectReportRepo := repopg.NewProjectReportRepository(db)
+
+	// Cổng hẹp để module dự án tra cứu nhân viên. Module dự án chỉ biết
+	// interface domainproject.EmployeeLookup — nó không được và không cần
+	// biết dữ liệu nhân viên nằm ở đâu.
+	employeeLookup := repopg.NewEmployeeLookup(db)
+
 	sessionStore := reporedis.NewSessionStore(rdb)
 	refreshStore := reporedis.NewRefreshStore(rdb)
 	throttle := reporedis.NewLoginThrottle(rdb)
@@ -171,6 +187,25 @@ func run() error {
 
 	hrUC := uchr.NewUsecase(
 		companyRepo, deptRepo, posRepo, empRepo, userRepo, roleRepo, fileStorage)
+
+	// Module dự án dùng lại đúng lớp lưu trữ đó, nhưng qua interface của
+	// riêng nó — hai module không chia sẻ interface, chỉ chia sẻ bản hiện thực.
+	var projectStorage domainproject.FileStorage
+	if r2 != nil {
+		projectStorage = reposto.NewRepository(r2)
+	}
+
+	projectUC := ucproject.NewUsecase(
+		projectRepo, projectMemberRepo, taskRepo, taskCommentRepo,
+		taskAttachmentRepo, taskActivityRepo, taskTimelogRepo, projectReportRepo,
+		employeeLookup,
+		// hrUC đáp ứng CompanyLookup nhờ method CurrentCompanyID. Nối ở đây
+		// thay vì cho usecase/project import usecase/hr: hai tầng nghiệp vụ
+		// import chéo nhau là đường nhanh nhất tới phụ thuộc vòng.
+		hrUC,
+		projectStorage,
+		repomq.NewProjectEventPublisher(mqClient),
+	)
 
 	// Nối hr với auth: vô hiệu hoá nhân viên phải cắt luôn phiên đăng nhập
 	// của họ, nếu không họ vẫn dùng được hệ thống tới khi token hết hạn.
@@ -210,6 +245,8 @@ func run() error {
 			Department: handler.NewDepartmentHandler(hrUC),
 			Position:   handler.NewPositionHandler(hrUC),
 			Role:       handler.NewRoleHandler(hrUC),
+			Project:    handler.NewProjectHandler(projectUC),
+			Task:       handler.NewTaskHandler(projectUC),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,

@@ -337,6 +337,25 @@ func parseDatePtr(s *string) (*time.Time, error) {
 	return parseDate(*s)
 }
 
+// parseDateTimePtr nhận cả ngày trần lẫn mốc thời gian đầy đủ.
+//
+// Hạn công việc trên bảng Kanban thường chỉ cần ngày, nhưng việc gấp thì cần
+// đến giờ. Chấp nhận cả hai dạng để giao diện không phải ép người dùng nhập
+// giờ khi họ không quan tâm tới giờ.
+func parseDateTimePtr(s *string) (*time.Time, error) {
+	if s == nil {
+		return nil, nil
+	}
+	v := strings.TrimSpace(*s)
+	if v == "" {
+		return nil, nil
+	}
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return &t, nil
+	}
+	return parseDate(v)
+}
+
 func uuidPtrToString(id *uuid.UUID) *string {
 	if id == nil {
 		return nil

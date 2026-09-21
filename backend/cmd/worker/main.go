@@ -17,6 +17,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/consumer"
+	domainproject "github.com/PhamVanPhuc2k2/manage/internal/domain/project"
 	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
 	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
@@ -82,6 +83,14 @@ func run() error {
 		repomq.JobSendSuspiciousActivity: mailSender.HandleSuspiciousActivity,
 		repomq.JobSendWelcome:            mailSender.HandleWelcome,
 		repomq.JobSendLoginOTP:           mailSender.HandleLoginOTP,
+
+		// Sự kiện module dự án. Phase 2 mới ghi log; Phase 5 sẽ sinh thông
+		// báo thật từ chính các message này. Đăng ký ngay để sự kiện không
+		// rơi vào dead-letter queue vì thiếu handler.
+		domainproject.JobTaskAssigned:      consumer.HandleProjectEvent,
+		domainproject.JobTaskStatusChanged: consumer.HandleProjectEvent,
+		domainproject.JobTaskMentioned:     consumer.HandleProjectEvent,
+		domainproject.JobTaskDueSoon:       consumer.HandleProjectEvent,
 	}
 	for name, fn := range jobs {
 		if err := dispatcher.Register(name, fn); err != nil {

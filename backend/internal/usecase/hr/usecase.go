@@ -79,6 +79,15 @@ func (u *Usecase) companyID(ctx context.Context) (uuid.UUID, error) {
 	return c.ID, nil
 }
 
+// CurrentCompanyID công khai companyID cho module khác dùng.
+//
+// Tồn tại để module project biết nó đang làm việc cho công ty nào mà không
+// phải import repository của hr. Module project khai báo interface một
+// method (CompanyLookup) và composition root nối hrUC vào đó.
+func (u *Usecase) CurrentCompanyID(ctx context.Context) (uuid.UUID, error) {
+	return u.companyID(ctx)
+}
+
 // normalizePage chặn trên page_size.
 //
 // Không chặn thì ai đó gửi page_size=1000000 là kéo sập database.

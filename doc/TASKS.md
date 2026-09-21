@@ -406,30 +406,43 @@ Lệnh chạy:
 
 **Mục tiêu:** Tạo dự án, giao việc, theo dõi tiến độ bằng bảng Kanban.
 
+> **Trạng thái: đã xong.** Kiểm chứng bằng `scripts/smoke-project.sh`
+> (57 mục, đạt toàn bộ), chạy trên stack Docker thật.
+>
+> Hai điểm đáng ghi nhớ, phát hiện khi nghiệm thu chứ không phải khi đọc lại code:
+>
+> - **Tham số enum phải ép kiểu tường minh trong SQL.** Câu `UPDATE` của
+>   thao tác kéo-thả dùng `$2` ở hai chỗ: `status = $2` và `CASE WHEN $2 = 'todo'`.
+>   PostgreSQL suy ra `$2` là `text` theo vế thứ hai, rồi vế thứ nhất hỏng vì
+>   không có toán tử `task_status = text`. Viết `$2::task_status` ở MỌI chỗ.
+> - **UUID toàn số 0 không phải là "không truyền".** `owner_id` kiểu `uuid.UUID`
+>   trần khiến hai trường hợp đó trùng nhau, và nhánh "không truyền thì lấy
+>   người tạo" âm thầm nuốt luôn một id sai. Đổi sang con trỏ để phân biệt.
+
 ### Backend
-- [ ] Migration: `projects`, `project_members`, `tasks`, `task_comments`, `task_attachments`, `task_activities`
-- [ ] Domain + usecase cho project và task
-- [ ] CRUD dự án; chỉ chủ dự án hoặc giám đốc được sửa/đóng
-- [ ] Thêm/xoá thành viên dự án, gán vai trò trong dự án (owner / member / viewer)
-- [ ] CRUD task: tiêu đề, mô tả, người thực hiện, độ ưu tiên, deadline, ước lượng giờ
-- [ ] Task con (`parent_task_id`), chặn lồng quá 2 cấp
-- [ ] Chuyển trạng thái task: `todo → in_progress → review → done`, chặn bước nhảy không hợp lệ
-- [ ] Sắp xếp thứ tự task trong cột Kanban (dùng số thực hoặc chuỗi lexo để chèn giữa)
-- [ ] Bình luận task, hỗ trợ `@mention` → sinh thông báo
-- [ ] Đính kèm tệp vào task (Cloudflare R2)
-- [ ] Ghi nhật ký thay đổi task (`task_activities`) — ai đổi gì, lúc nào
-- [ ] Ghi nhận thời gian làm việc theo task (timelog), phục vụ báo cáo
-- [ ] API báo cáo: tiến độ dự án, task quá hạn, khối lượng việc theo nhân viên
-- [ ] Phát sự kiện lên RabbitMQ khi: giao task, đổi trạng thái, sắp đến hạn, bị mention
+- [x] Migration: `projects`, `project_members`, `tasks`, `task_comments`, `task_attachments`, `task_activities`
+- [x] Domain + usecase cho project và task
+- [x] CRUD dự án; chỉ chủ dự án hoặc giám đốc được sửa/đóng
+- [x] Thêm/xoá thành viên dự án, gán vai trò trong dự án (owner / member / viewer)
+- [x] CRUD task: tiêu đề, mô tả, người thực hiện, độ ưu tiên, deadline, ước lượng giờ
+- [x] Task con (`parent_task_id`), chặn lồng quá 2 cấp
+- [x] Chuyển trạng thái task: `todo → in_progress → review → done`, chặn bước nhảy không hợp lệ
+- [x] Sắp xếp thứ tự task trong cột Kanban (dùng số thực hoặc chuỗi lexo để chèn giữa)
+- [x] Bình luận task, hỗ trợ `@mention` → sinh thông báo
+- [x] Đính kèm tệp vào task (Cloudflare R2)
+- [x] Ghi nhật ký thay đổi task (`task_activities`) — ai đổi gì, lúc nào
+- [x] Ghi nhận thời gian làm việc theo task (timelog), phục vụ báo cáo
+- [x] API báo cáo: tiến độ dự án, task quá hạn, khối lượng việc theo nhân viên
+- [x] Phát sự kiện lên RabbitMQ khi: giao task, đổi trạng thái, sắp đến hạn, bị mention
 
 ### Frontend
-- [ ] Trang danh sách dự án (dạng thẻ + dạng bảng)
-- [ ] Trang tổng quan dự án: tiến độ, thành viên, task gần đây
-- [ ] Bảng Kanban kéo-thả (`dnd-kit`), cập nhật lạc quan (optimistic update)
-- [ ] Bảng danh sách task có lọc: người thực hiện, trạng thái, độ ưu tiên, deadline
-- [ ] Panel chi tiết task: mô tả, bình luận, tệp đính kèm, lịch sử thay đổi
-- [ ] Biểu đồ Gantt hoặc timeline đơn giản cho dự án
-- [ ] Trang "Việc của tôi" tổng hợp task xuyên dự án
+- [x] Trang danh sách dự án (dạng thẻ + dạng bảng)
+- [x] Trang tổng quan dự án: tiến độ, thành viên, task gần đây
+- [x] Bảng Kanban kéo-thả (`dnd-kit`), cập nhật lạc quan (optimistic update)
+- [x] Bảng danh sách task có lọc: người thực hiện, trạng thái, độ ưu tiên, deadline
+- [x] Panel chi tiết task: mô tả, bình luận, tệp đính kèm, lịch sử thay đổi
+- [x] Biểu đồ Gantt hoặc timeline đơn giản cho dự án
+- [x] Trang "Việc của tôi" tổng hợp task xuyên dự án
 
 ---
 

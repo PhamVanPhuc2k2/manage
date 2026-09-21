@@ -42,6 +42,8 @@ type Deps struct {
 	Department *handler.DepartmentHandler
 	Position   *handler.PositionHandler
 	Role       *handler.RoleHandler
+	Project    *handler.ProjectHandler
+	Task       *handler.TaskHandler
 }
 
 func New(d Deps) http.Handler {
@@ -210,6 +212,110 @@ func New(d Deps) http.Handler {
 				r.With(appmw.RequirePermission(domainauth.PermDepartmentDelete)).
 					Delete("/{id}", d.Department.Delete)
 			})
+
+			// --- Dự án ---
+			//
+			// Lưu ý về mô hình quyền: middleware dưới đây chỉ trả lời "người
+			// này có được làm loại việc đó không". Việc "được đụng vào ĐÚNG
+			// dự án nào" do tầng usecase kiểm tra qua bảng project_members —
+			// middleware không nhìn thấy bản ghi cụ thể nên không làm được.
+			r.Route("/projects", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermProjectRead)).
+					Get("/", d.Project.List)
+				r.With(appmw.RequirePermission(domainauth.PermProjectCreate)).
+					Post("/", d.Project.Create)
+				r.With(appmw.RequirePermission(domainauth.PermProjectRead)).
+					Get("/{id}", d.Project.Get)
+				r.With(appmw.RequirePermission(domainauth.PermProjectUpdate)).
+					Put("/{id}", d.Project.Update)
+				r.With(appmw.RequirePermission(domainauth.PermProjectDelete)).
+					Delete("/{id}", d.Project.Delete)
+
+				// Bảng Kanban và tiến độ đọc bằng quyền xem CÔNG VIỆC, không
+				// phải quyền xem dự án: người chỉ được xem danh sách dự án mà
+				// không được xem việc thì bảng Kanban là rỗng nghĩa.
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/{id}/board", d.Task.Board)
+				r.With(appmw.RequirePermission(domainauth.PermProjectRead)).
+					Get("/{id}/progress", d.Project.Progress)
+
+				// --- Thành viên dự án ---
+				r.With(appmw.RequirePermission(domainauth.PermProjectRead)).
+					Get("/{id}/members", d.Project.ListMembers)
+				r.With(appmw.RequirePermission(domainauth.PermProjectUpdate)).
+					Post("/{id}/members", d.Project.AddMember)
+				r.With(appmw.RequirePermission(domainauth.PermProjectUpdate)).
+					Put("/{id}/members/{employeeID}", d.Project.UpdateMemberRole)
+				// Gỡ thành viên dùng quyền project:read vì ai cũng TỰ RỜI dự
+				// án được. Việc gỡ NGƯỜI KHÁC do usecase chặn — nó là chỗ duy
+				// nhất biết người bị gỡ có phải chính người gọi hay không.
+				r.With(appmw.RequirePermission(domainauth.PermProjectRead)).
+					Delete("/{id}/members/{employeeID}", d.Project.RemoveMember)
+			})
+
+			// --- Công việc ---
+			r.Route("/tasks", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/", d.Task.List)
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/my", d.Task.MyTasks)
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/overdue", d.Task.Overdue)
+				r.With(appmw.RequirePermission(domainauth.PermTaskCreate)).
+					Post("/", d.Task.Create)
+
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/{taskID}", d.Task.Get)
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Put("/{taskID}", d.Task.Update)
+				r.With(appmw.RequirePermission(domainauth.PermTaskDelete)).
+					Delete("/{taskID}", d.Task.Delete)
+
+				// Kéo-thả trên Kanban. PATCH vì đây là sửa MỘT PHẦN trạng
+				// thái, không phải thay cả bản ghi như PUT.
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Patch("/{taskID}/move", d.Task.Move)
+
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/{taskID}/subtasks", d.Task.ListSubtasks)
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/{taskID}/activities", d.Task.ListActivities)
+
+				// --- Bình luận ---
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/{taskID}/comments", d.Task.ListComments)
+				// Bình luận dùng quyền task:update chứ không phải task:create:
+				// viết bình luận là góp vào một công việc đã có, không phải
+				// tạo công việc mới.
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Post("/{taskID}/comments", d.Task.CreateComment)
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Put("/comments/{commentID}", d.Task.UpdateComment)
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Delete("/comments/{commentID}", d.Task.DeleteComment)
+
+				// --- Tệp đính kèm ---
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/{taskID}/attachments", d.Task.ListAttachments)
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Post("/{taskID}/attachments/upload-url", d.Task.RequestAttachmentUpload)
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Post("/{taskID}/attachments/confirm", d.Task.ConfirmAttachment)
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Delete("/attachments/{attachmentID}", d.Task.DeleteAttachment)
+
+				// --- Ghi nhận thời gian ---
+				r.With(appmw.RequirePermission(domainauth.PermTaskRead)).
+					Get("/{taskID}/timelogs", d.Task.ListTimelogs)
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Post("/{taskID}/timelogs", d.Task.LogTime)
+				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
+					Delete("/timelogs/{timelogID}", d.Task.DeleteTimelog)
+			})
+
+			// --- Báo cáo khối lượng việc theo nhân viên ---
+			r.With(appmw.RequirePermission(domainauth.PermProjectRead)).
+				Get("/reports/workload", d.Project.Workload)
 
 			// --- Chức vụ ---
 			r.Route("/positions", func(r chi.Router) {
