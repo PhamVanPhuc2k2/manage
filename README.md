@@ -2,7 +2,7 @@
 
 Hệ thống quản trị nội bộ doanh nghiệp: nhân sự, phòng ban, dự án, giao việc, chấm công, lương, cùng thông báo và chat thời gian thực.
 
-**Trạng thái:** Phase 0 → 4 đã xong và chạy được (kèm hạ tầng WebSocket của Phase 5). Đang chuẩn bị phần chat của Phase 5.
+**Trạng thái:** Phase 0 → 5 đã xong và chạy được. Tiếp theo là Phase 6 (hoàn thiện & vận hành).
 
 ## Kiến trúc
 
@@ -10,7 +10,7 @@ Monolith theo module, hai binary chạy độc lập:
 
 | Thành phần | Vai trò |
 |---|---|
-| `api` | HTTP REST (và WebSocket từ Phase 5) |
+| `api` | HTTP REST và WebSocket (chat, thông báo, presence) |
 | `worker` | Job nền qua RabbitMQ: gửi mail, tính lương, xuất Excel |
 
 Hai binary dùng chung toàn bộ `internal/`, chỉ khác tầng `delivery`.
@@ -99,11 +99,16 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 
 ## Kiểm chứng
 
-Hai script chạy lại bất cứ lúc nào, tự tạo và tự dọn dữ liệu kiểm thử:
+Sáu script chạy lại bất cứ lúc nào, tự tạo và tự dọn dữ liệu kiểm thử. Tổng
+cộng 287 mục, chạy trên stack Docker thật chứ không phải mock:
 
 ```bash
-ADMIN_PASS='...' bash scripts/smoke-auth.sh   # 34 mục bảo mật
-ADMIN_PASS='...' bash scripts/smoke-hr.sh     # 31 mục nghiệp vụ nhân sự
+ADMIN_PASS='...' bash scripts/smoke-auth.sh        # 34 mục bảo mật
+ADMIN_PASS='...' bash scripts/smoke-hr.sh          # 31 mục nghiệp vụ nhân sự
+ADMIN_PASS='...' bash scripts/smoke-project.sh     # 57 mục dự án và công việc
+ADMIN_PASS='...' bash scripts/smoke-attendance.sh  # 48 mục chấm công và nghỉ phép
+ADMIN_PASS='...' bash scripts/smoke-payroll.sh     # 51 mục lương và phiếu lương
+ADMIN_PASS='...' bash scripts/smoke-chat.sh        # 66 mục thông báo và chat
 ```
 
 `smoke-auth.sh` kiểm tra những thứ dễ hỏng âm thầm: giả mạo JWT, xoay vòng
@@ -121,3 +126,15 @@ mã xác minh đăng nhập, chống dò mật khẩu và chống dò email.
 `smoke-hr.sh` kiểm tra nghiệp vụ: chặn vòng lặp trong cây phòng ban, chặn xoá
 phòng còn người, tìm kiếm tiếng Việt không dấu, tạo tài khoản, đổi vai trò và
 phạm vi dữ liệu đổi theo.
+
+`smoke-chat.sh` kiểm tra phần khó nhất của chat — những chỗ chỉ hỏng khi có
+hai người dùng cùng lúc: hai người cùng bấm "nhắn tin" phải rơi vào CÙNG một
+hội thoại, gửi lại cùng `client_message_id` không sinh tin trùng, người đã bị
+gỡ khỏi nhóm nhận 404 chứ không phải 403, và tin đã thu hồi không còn nội dung
+trong bất kỳ đường đọc nào. Nó cũng đi hết chuỗi thông báo thật:
+api → RabbitMQ → worker → bảng `notifications` → WebSocket.
+
+> Có những thứ script không kiểm được vì chúng cần một kết nối WebSocket
+> thật: fan-out giữa nhiều instance, chỉ báo "đang nhập", và hình dạng bản
+> tin đẩy xuống. Chúng được nghiệm thu bằng tay với hai container `api` chạy
+> song song — xem ghi chú Phase 5 trong [doc/TASKS.md](doc/TASKS.md).

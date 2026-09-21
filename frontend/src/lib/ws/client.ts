@@ -226,9 +226,17 @@ class WsClient {
    * Gửi / nhận
    * ---------------------------------------------------------------- */
 
-  send(type: string, payload?: unknown): void {
-    if (this.ws?.readyState !== WebSocket.OPEN) return;
+  /**
+   * Gửi một bản tin. Trả về false khi kết nối chưa mở.
+   *
+   * Có giá trị trả về để nơi gọi biết đường mà rơi sang REST — chat gửi tin
+   * qua đây là chính, và im lặng nuốt mất một tin nhắn vì kết nối vừa đứt là
+   * lỗi người dùng không bao giờ tha thứ.
+   */
+  send(type: string, payload?: unknown): boolean {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
     this.ws.send(JSON.stringify({ type, payload, ts: new Date().toISOString() }));
+    return true;
   }
 
   /** Đăng ký nhận bản tin. Trả về hàm huỷ đăng ký. */

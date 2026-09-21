@@ -105,6 +105,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Dựng Actor y như middleware RequireAuth của REST.
+	//
+	// Quyền nằm sẵn trong token nên không tốn thêm truy vấn nào. Giữ nó trên
+	// client để mọi bản tin nghiệp vụ gửi lên (chat) được kiểm quyền đúng như
+	// khi đi qua HTTP — thiếu bước này, WebSocket thành cửa sau đi vòng qua
+	// toàn bộ phân quyền.
+	perms := make(map[string]struct{}, len(claims.Permissions))
+	for _, p := range claims.Permissions {
+		perms[p] = struct{}{}
+	}
+	actor := &domainauth.Actor{
+		UserID:      claims.UserID,
+		EmployeeID:  claims.EmployeeID,
+		SessionID:   claims.SessionID,
+		Roles:       claims.Roles,
+		Permissions: perms,
+		Scope:       domainauth.Scope(claims.Scope),
+	}
+
 	client := &Client{
 		hub:         h.hub,
 		conn:        conn,
@@ -112,6 +131,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		connID:      uuid.New(),
 		userID:      claims.UserID,
 		employeeID:  claims.EmployeeID,
+		actor:       actor,
 		deviceInfo:  deviceInfo(r.UserAgent()),
 		connectedAt: time.Now(),
 		windowStart: time.Now(),

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
+	domainauth "github.com/PhamVanPhuc2k2/manage/internal/domain/auth"
 	domainrealtime "github.com/PhamVanPhuc2k2/manage/internal/domain/realtime"
 )
 
@@ -50,9 +51,17 @@ type Client struct {
 	conn *websocket.Conn
 	send chan []byte
 
-	connID      uuid.UUID
-	userID      uuid.UUID
-	employeeID  uuid.UUID
+	connID     uuid.UUID
+	userID     uuid.UUID
+	employeeID uuid.UUID
+
+	// actor là danh tính đầy đủ, dựng một lần lúc bắt tay.
+	//
+	// Giữ lại để các thao tác nghiệp vụ qua WebSocket kiểm tra quyền y như
+	// REST. Dựng lại ở mỗi bản tin sẽ là một lượt truy vấn cho mỗi lần gõ
+	// phím của mỗi người đang online.
+	actor *domainauth.Actor
+
 	deviceInfo  string
 	connectedAt time.Time
 
@@ -180,6 +189,14 @@ func (c *Client) readPump(ctx context.Context) {
 // từ chối: WebSocket không phải một cổng API thứ hai, nghiệp vụ đi qua REST
 // nơi đã có sẵn phân quyền và nhật ký.
 func (c *Client) handle(ctx context.Context, e domainrealtime.Envelope) {
+	// Chat là ngoại lệ có cân nhắc với nguyên tắc "nghiệp vụ đi qua REST":
+	// gửi tin, chỉ báo đang nhập và báo đã đọc đều nhạy cảm với độ trễ và
+	// xảy ra liên tục, nên một lượt HTTP cho mỗi lần là lãng phí thấy rõ.
+	// Quyền vẫn được kiểm tra y như REST — xem handleChat.
+	if c.handleChat(ctx, e) {
+		return
+	}
+
 	switch e.Type {
 	case domainrealtime.TypePing:
 		c.sendEnvelope(domainrealtime.TypePong, nil)

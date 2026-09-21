@@ -204,6 +204,19 @@ func (u *Usecase) publish(ctx context.Context, e domainproject.Event) {
 	if u.events == nil || len(e.Recipients) == 0 {
 		return
 	}
+
+	// Điền tên người gây ra sự kiện nếu chỗ gọi chưa điền.
+	//
+	// Điền Ở ĐÂY, một chỗ, thay vì ở từng chỗ phát sự kiện: module thông báo
+	// dựng câu tiêu đề từ tên này ("X đã giao việc cho bạn"), và chỉ cần một
+	// đường quên điền là người nhận thấy "Một thành viên đã giao việc" —
+	// đúng loại lỗi không ai báo nhưng làm thông báo mất giá trị.
+	if e.ActorName == "" && e.ActorID != uuid.Nil && u.employees != nil {
+		if names, err := u.employees.NamesOf(ctx, []uuid.UUID{e.ActorID}); err == nil {
+			e.ActorName = names[e.ActorID]
+		}
+	}
+
 	if err := u.events.PublishEvent(ctx, e); err != nil {
 		log := logger.FromContext(ctx)
 		log.Warn().Err(err).

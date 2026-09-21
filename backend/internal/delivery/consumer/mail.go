@@ -20,10 +20,17 @@ type MailSender struct {
 	from string
 	user string
 	pass string
+
+	// baseURL là địa chỉ công khai của hệ thống, dùng để dựng liên kết trong
+	// email. Thông báo chỉ lưu đường dẫn tương đối nên phần này phải ghép ở
+	// đây — đổi tên miền không được làm hỏng thông báo cũ.
+	baseURL string
 }
 
-func NewMailSender(host string, port int, from, user, pass string) *MailSender {
-	return &MailSender{host: host, port: port, from: from, user: user, pass: pass}
+func NewMailSender(host string, port int, from, user, pass, baseURL string) *MailSender {
+	return &MailSender{
+		host: host, port: port, from: from, user: user, pass: pass, baseURL: baseURL,
+	}
 }
 
 func (s *MailSender) send(to, subject, body string) error {
@@ -252,5 +259,52 @@ func (s *MailSender) HandlePayslip(ctx context.Context, job domainsystem.Job) er
 		Int("size", len(body)).
 		Msg("đã gửi phiếu lương")
 
+	return nil
+}
+
+// HandleNotification gửi email nhắc một thông báo quan trọng chưa đọc.
+//
+// Đường dẫn trong payload là đường dẫn tương đối; ghép với PUBLIC_BASE_URL ở
+// đây chứ không ở chỗ tạo thông báo, để đổi tên miền không làm hỏng mọi thông
+// báo đã lưu trong database.
+func (s *MailSender) HandleNotification(ctx context.Context, job domainsystem.Job) error {
+	log := logger.FromContext(ctx)
+
+	email, _ := job.Payload["email"].(string)
+	name, _ := job.Payload["name"].(string)
+	title, _ := job.Payload["title"].(string)
+	body, _ := job.Payload["body"].(string)
+	link, _ := job.Payload["link"].(string)
+
+	if email == "" || title == "" {
+		log.Warn().Msg("bỏ qua job nhắc thông báo: thiếu email hoặc tiêu đề")
+		return nil
+	}
+	if name == "" {
+		name = "bạn"
+	}
+
+	url := ""
+	if link != "" {
+		url = strings.TrimRight(s.baseURL, "/") + "/" + strings.TrimLeft(link, "/")
+	}
+
+	text := fmt.Sprintf(`Xin chào %s,
+
+Bạn có một thông báo chưa đọc trong hệ thống:
+
+%s
+%s
+%s
+Đăng nhập để xem chi tiết.
+
+--
+Hệ thống Quản lý Công ty`, name, title, body, url)
+
+	if err := s.send(email, title, text); err != nil {
+		return fmt.Errorf("gửi mail nhắc thông báo: %w", err)
+	}
+
+	log.Info().Str("to", email).Msg("đã gửi mail nhắc thông báo")
 	return nil
 }

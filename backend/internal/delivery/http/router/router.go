@@ -46,6 +46,8 @@ type Deps struct {
 	Task       *handler.TaskHandler
 	Attendance *handler.AttendanceHandler
 	Payroll    *handler.PayrollHandler
+	Notif      *handler.NotificationHandler
+	Chat       *handler.ChatHandler
 
 	// WS có thể nil trong test. Khi nil, route /ws đơn giản không tồn tại.
 	WS http.Handler
@@ -490,6 +492,71 @@ func New(d Deps) http.Handler {
 			// --- Báo cáo khối lượng việc theo nhân viên ---
 			r.With(appmw.RequirePermission(domainauth.PermProjectRead)).
 				Get("/reports/workload", d.Project.Workload)
+
+			// --- Thông báo ---
+			//
+			// KHÔNG có middleware quyền nào: thông báo là hộp thư cá nhân,
+			// mỗi người chỉ đọc được của chính mình và usecase khoá cứng theo
+			// actor. Thêm một quyền ở đây chỉ tạo ảo giác rằng có thể cấp nó
+			// cho người khác.
+			r.Route("/notifications", func(r chi.Router) {
+				r.Get("/", d.Notif.List)
+				r.Get("/summary", d.Notif.Summary)
+				r.Post("/read", d.Notif.MarkRead)
+				r.Post("/read-all", d.Notif.MarkAllRead)
+
+				r.Get("/preferences", d.Notif.Preferences)
+				r.Put("/preferences", d.Notif.SetPreference)
+			})
+
+			// --- Chat ---
+			//
+			// Mô hình quyền giống dự án: middleware chỉ trả lời "người này có
+			// được dùng chat không". Việc "được đọc hội thoại NÀO" do bảng
+			// conversation_members quyết định và tầng usecase kiểm tra.
+			r.Route("/chat", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Get("/conversations", d.Chat.ListConversations)
+				r.With(appmw.RequirePermission(domainauth.PermChatCreate)).
+					Post("/conversations", d.Chat.CreateConversation)
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Get("/unread", d.Chat.Unread)
+
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Get("/conversations/{id}", d.Chat.GetConversation)
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Put("/conversations/{id}", d.Chat.Rename)
+				// Ghim và tắt thông báo là tuỳ chọn RIÊNG của người xem, nên
+				// chỉ cần quyền đọc — không đụng gì tới người khác.
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Patch("/conversations/{id}/flags", d.Chat.SetFlags)
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Post("/conversations/{id}/leave", d.Chat.Leave)
+
+				r.With(appmw.RequirePermission(domainauth.PermChatCreate)).
+					Post("/conversations/{id}/members", d.Chat.AddMembers)
+				r.With(appmw.RequirePermission(domainauth.PermChatCreate)).
+					Delete("/conversations/{id}/members/{employeeID}", d.Chat.RemoveMember)
+				r.With(appmw.RequirePermission(domainauth.PermChatCreate)).
+					Put("/conversations/{id}/members/{employeeID}/admin", d.Chat.SetAdmin)
+
+				// --- Tin nhắn ---
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Get("/conversations/{id}/messages", d.Chat.History)
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Post("/conversations/{id}/messages", d.Chat.Send)
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Post("/conversations/{id}/read", d.Chat.MarkRead)
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Post("/conversations/{id}/upload-url", d.Chat.PresignUpload)
+
+				// Sửa và thu hồi dùng quyền đọc: usecase mới là chỗ biết tin
+				// nhắn đó có phải của người gọi hay không.
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Put("/messages/{messageID}", d.Chat.EditMessage)
+				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
+					Delete("/messages/{messageID}", d.Chat.DeleteMessage)
+			})
 
 			// --- Chức vụ ---
 			r.Route("/positions", func(r chi.Router) {

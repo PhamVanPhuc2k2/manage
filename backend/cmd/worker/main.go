@@ -26,7 +26,9 @@ import (
 	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
 	reporedis "github.com/PhamVanPhuc2k2/manage/internal/repository/redis"
 	ucatt "github.com/PhamVanPhuc2k2/manage/internal/usecase/attendance"
+	ucchat "github.com/PhamVanPhuc2k2/manage/internal/usecase/chat"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
+	ucnotif "github.com/PhamVanPhuc2k2/manage/internal/usecase/notification"
 	ucpay "github.com/PhamVanPhuc2k2/manage/internal/usecase/payroll"
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
@@ -90,7 +92,20 @@ func run() error {
 	dispatcher := consumer.NewDispatcher(mqClient, log)
 
 	mailSender := consumer.NewMailSender(
-		cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom, cfg.SMTPUser, cfg.SMTPPass)
+		cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom, cfg.SMTPUser, cfg.SMTPPass,
+		cfg.PublicBaseURL)
+
+	// Module thông báo ở worker đẩy realtime qua RabbitMQ chứ không qua hub:
+	// worker không giữ kết nối WebSocket nào. Fanout tới mọi instance api,
+	// và instance nào đang giữ người nhận sẽ chuyển tiếp.
+	notifUC := ucnotif.NewUsecase(
+		repopg.NewNotificationRepository(db),
+		repomq.NewPusher(mqClient),
+		reporedis.NewPresenceStore(rdb),
+		repopg.NewChatLookup(db),
+		repomq.NewMailer(mqClient),
+	)
+	projectConsumer := consumer.NewProjectConsumer(notifUC)
 
 	// Máy tính lương chạy Ở ĐÂY, không ở api: kỳ lương của công ty vài trăm
 	// người mất vài chục giây, quá lâu cho một request HTTP.
@@ -105,18 +120,18 @@ func run() error {
 		repomq.JobSendWelcome:            mailSender.HandleWelcome,
 		repomq.JobSendLoginOTP:           mailSender.HandleLoginOTP,
 		repomq.JobSendPayslip:            mailSender.HandlePayslip,
+		repomq.JobSendNotification:       mailSender.HandleNotification,
 
 		// Tính lương. Job này chịu được chạy lại: ReplaceForPeriod xoá sạch
 		// phiếu cũ rồi ghi bộ mới trong một giao dịch.
 		repomq.JobCalculatePayroll: payrollConsumer.HandleCalculate,
 
-		// Sự kiện module dự án. Phase 2 mới ghi log; Phase 5 sẽ sinh thông
-		// báo thật từ chính các message này. Đăng ký ngay để sự kiện không
-		// rơi vào dead-letter queue vì thiếu handler.
-		domainproject.JobTaskAssigned:      consumer.HandleProjectEvent,
-		domainproject.JobTaskStatusChanged: consumer.HandleProjectEvent,
-		domainproject.JobTaskMentioned:     consumer.HandleProjectEvent,
-		domainproject.JobTaskDueSoon:       consumer.HandleProjectEvent,
+		// Sự kiện module dự án, từ Phase 5 sinh thông báo thật. Cả bốn dùng
+		// chung một handler vì payload của chúng giống hệt nhau.
+		domainproject.JobTaskAssigned:      projectConsumer.Handle,
+		domainproject.JobTaskStatusChanged: projectConsumer.Handle,
+		domainproject.JobTaskMentioned:     projectConsumer.Handle,
+		domainproject.JobTaskDueSoon:       projectConsumer.Handle,
 	}
 	for name, fn := range jobs {
 		if err := dispatcher.Register(name, fn); err != nil {
@@ -183,6 +198,46 @@ func run() error {
 		},
 	})
 
+	// =====================================================================
+	// CÔNG VIỆC ĐỊNH KỲ — thông báo và chat
+	// =====================================================================
+
+	// Nhắc qua email những thông báo quan trọng chưa đọc.
+	//
+	// Chạy mỗi 5 phút chứ không mỗi phút: thông báo phải quá hạn chờ 15 phút
+	// mới được nhắc, nên quét dày hơn chỉ tốn truy vấn mà không nhắc sớm hơn
+	// được phút nào.
+	sched.Add(scheduler.Job{
+		Name:  "notification.email_reminders",
+		Every: 5 * time.Minute,
+		Run: func(ctx context.Context) error {
+			n, err := notifUC.SendEmailReminders(ctx)
+			if err == nil && n > 0 {
+				log.Info().Int("sent", n).Msg("đã gửi email nhắc thông báo")
+			}
+			return err
+		},
+	})
+
+	// Đồng bộ nhóm chat theo phòng ban và dự án.
+	//
+	// RunAtStart để nhóm có ngay sau lần triển khai đầu, không phải chờ tới
+	// chu kỳ sau. Job tự sửa mọi sai lệch nên chạy lại luôn vô hại.
+	chatUC := buildChatUsecase(db, rdb, mqClient)
+	sched.Add(scheduler.Job{
+		Name:       "chat.sync_auto_groups",
+		Every:      15 * time.Minute,
+		RunAtStart: true,
+		Run: func(ctx context.Context) error {
+			created, changed, err := chatUC.SyncAll(ctx)
+			if err == nil && (created > 0 || changed > 0) {
+				log.Info().Int("created", created).Int("changed", changed).
+					Msg("đã đồng bộ nhóm chat tự động")
+			}
+			return err
+		},
+	})
+
 	sched.Start(ctx)
 
 	errCh := make(chan error, 1)
@@ -244,6 +299,37 @@ func buildAttendanceUsecase(db *postgres.DB, rdb *goredis.Client) *ucatt.Usecase
 		repopg.NewBalanceRepository(db),
 		repopg.NewEmployeeLookup(db),
 		reporedis.NewPresenceStore(rdb),
+		hrUC,
+	)
+}
+
+// buildChatUsecase lắp ráp module chat cho worker.
+//
+// Worker chỉ dùng nó cho job đồng bộ nhóm tự động, nên notifier và storage là
+// nil: job này không gửi tin nhắn và không đụng tới tệp.
+func buildChatUsecase(
+	db *postgres.DB,
+	rdb *goredis.Client,
+	mqClient *rabbitmq.Client,
+) *ucchat.Usecase {
+	companyRepo := repopg.NewCompanyRepository(db)
+	deptRepo := repopg.NewDepartmentRepository(db)
+	posRepo := repopg.NewPositionRepository(db)
+	empRepo := repopg.NewEmployeeRepository(db)
+	userRepo := repopg.NewUserRepository(db)
+	roleRepo := repopg.NewRoleRepository(db)
+
+	hrUC := uchr.NewUsecase(companyRepo, deptRepo, posRepo, empRepo, userRepo, roleRepo, nil)
+
+	return ucchat.NewUsecase(
+		repopg.NewChatConversationRepository(db),
+		repopg.NewChatMessageRepository(db),
+		repopg.NewChatLookup(db),
+		repopg.NewChatSourceRepository(db),
+		reporedis.NewPresenceStore(rdb),
+		repomq.NewPusher(mqClient),
+		nil,
+		nil,
 		hrUC,
 	)
 }

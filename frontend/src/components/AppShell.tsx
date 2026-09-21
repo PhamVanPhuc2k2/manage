@@ -5,10 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { WorkStatusWidget } from "@/features/attendance/WorkStatusWidget";
+import { ChatBubble } from "@/features/chat/ChatBubble";
+import { useChatRealtime } from "@/features/chat/queries";
+import { NotificationBell } from "@/features/notifications/NotificationBell";
+import { useNotificationRealtime } from "@/features/notifications/queries";
 import { useAuth, usePermission } from "@/lib/auth/useAuth";
 import { useWebSocketConnection } from "@/lib/ws/useWebSocket";
 
 const NAV = [
+  { href: "/chat", label: "Tin nhắn", permission: "chat:read" },
   { href: "/projects", label: "Dự án", permission: "project:read" },
   { href: "/tasks", label: "Công việc", permission: "task:read" },
   { href: "/attendance", label: "Chấm công", permission: "attendance:read" },
@@ -37,6 +42,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Mở WebSocket một lần cho cả ứng dụng. Đây cũng là nguồn dữ liệu chấm
   // công: client gửi nhịp tim qua chính kết nối này.
   useWebSocketConnection();
+
+  // Nối thông báo và chat vào cache truy vấn. Gọi ở ĐÂY, một lần cho cả ứng
+  // dụng: đăng ký ở từng trang sẽ khiến bản tin đến lúc đang ở trang khác bị
+  // bỏ rơi, và chuông sẽ chỉ đúng khi người dùng đang mở đúng trang đó.
+  useNotificationRealtime();
+  useChatRealtime();
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -87,6 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-4">
             {can("attendance:read") && <WorkStatusWidget />}
+            <NotificationBell />
             <Link href="/profile" className="text-sm hover:underline">
               {user.email}
             </Link>
@@ -101,6 +113,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="min-w-0 flex-1 p-6">{children}</main>
       </div>
+
+      {can("chat:read") && <ChatBubble />}
     </div>
   );
 }

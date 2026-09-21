@@ -159,6 +159,17 @@ const (
 	PermSalaryManage = "salary:manage"
 
 	PermAuditRead = "audit:read"
+
+	// Phase 5. Chat chỉ có hai quyền thô: được dùng chat, và được mở hội
+	// thoại mới. Việc "được đọc hội thoại NÀO" do bảng conversation_members
+	// quyết định và kiểm tra ở tầng usecase — quyền thô không trả lời được
+	// câu đó, và cũng không nên cố.
+	//
+	// Thông báo cố ý KHÔNG có quyền nào: mỗi người chỉ đọc được thông báo
+	// của chính mình, và usecase khoá cứng theo actor. Thêm một quyền ở đây
+	// chỉ tạo ra ảo giác rằng có thể cấp cho người khác.
+	PermChatRead   = "chat:read"
+	PermChatCreate = "chat:create"
 )
 
 // Actor là danh tính của người đang thực hiện request.

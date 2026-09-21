@@ -32,7 +32,18 @@ type Hub struct {
 
 	presence  domainrealtime.PresenceStore
 	broadcast domainrealtime.Broadcaster
+
+	// chat có thể nil (test, hoặc bản chạy chưa bật chat). Khi nil, các bản
+	// tin chat gửi lên bị từ chối tử tế thay vì làm panic cả tiến trình.
+	chat ChatService
 }
+
+// SetChat cắm module chat vào hub.
+//
+// Tách khỏi NewHub vì thứ tự khởi tạo: usecase chat cần một Pusher, mà Pusher
+// lại bọc chính Hub này. Truyền qua hàm dựng sẽ tạo ra vòng tròn không gỡ
+// được ở composition root.
+func (h *Hub) SetChat(c ChatService) { h.chat = c }
 
 func NewHub(
 	log zerolog.Logger,

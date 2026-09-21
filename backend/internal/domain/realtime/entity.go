@@ -54,6 +54,16 @@ const (
 	// lỗi nào được báo.
 	TypeNotification = "notification"
 	TypeTaskUpdated  = "task.updated"
+
+	// TypeNotificationBadge chỉ mang con số chưa đọc.
+	//
+	// Tách khỏi TypeNotification vì hai việc khác nhau: một thông báo mới
+	// làm số tăng, nhưng đọc ở tab khác cũng làm số đổi mà KHÔNG có thông
+	// báo nào mới. Gộp lại thì tab kia sẽ hiện một thẻ thông báo ma.
+	TypeNotificationBadge = "notification.badge"
+
+	// TypeChatBadge là tổng số tin nhắn chưa đọc trên mọi hội thoại.
+	TypeChatBadge = "chat.badge"
 )
 
 // HeartbeatPayload là nội dung bản tin nhịp tim.

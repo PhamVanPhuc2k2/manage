@@ -587,39 +587,92 @@ Lệnh chạy:
 - [x] Giới hạn kích thước bản tin, đóng kết nối khi vượt ngưỡng
 
 ### Thông báo
-- [ ] Migration: `notifications`
-- [ ] Danh mục loại thông báo: giao task, mention, duyệt đơn, đến hạn, tin nhắn mới
-- [ ] Usecase thông báo: ghi DB + đẩy WebSocket nếu online
-- [ ] Đánh dấu đã đọc / đọc tất cả
-- [ ] Trang danh sách thông báo, có phân trang vô hạn
-- [ ] Chuông thông báo hiển thị số chưa đọc, cập nhật realtime
-- [ ] Cấu hình nhận thông báo theo loại (bật/tắt từng loại)
-- [ ] Gửi email cho thông báo quan trọng khi người dùng offline quá 15 phút
+
+> **Trạng thái: đã xong.** Nghiệm thu bằng `scripts/smoke-chat.sh` (66 mục,
+> chung với phần chat). Chuỗi đầy đủ đã chứng minh trên stack thật:
+> api → RabbitMQ → worker → bảng `notifications` → RabbitMQ fan-out →
+> hub của instance đang giữ người nhận → WebSocket.
+>
+> Hai điểm đáng ghi lại:
+>
+> - **Thông báo cố ý KHÔNG có quyền nào.** Mỗi người chỉ đọc được của chính
+>   mình, usecase khoá cứng theo actor và điều kiện `employee_id` nằm ngay
+>   trong câu `UPDATE` đánh dấu đã đọc. Thêm một mã quyền ở đây chỉ tạo ảo
+>   giác rằng có thể cấp nó cho người khác.
+> - **Bản tin realtime và dữ liệu REST dùng CHUNG một kiểu Go có json tag.**
+>   Lần đầu viết, usecase đẩy thẳng entity domain (không tag) nên client nhận
+>   được `{"ID":...}` thay vì `{"id":...}` và im lặng bỏ qua. Lỗi này không
+>   làm hỏng bất cứ phép thử REST nào — chỉ lộ ra khi nối một client
+>   WebSocket thật và đọc bản tin.
+
+- [x] Migration: `notifications`
+- [x] Danh mục loại thông báo: giao task, mention, duyệt đơn, đến hạn, tin nhắn mới
+- [x] Usecase thông báo: ghi DB + đẩy WebSocket nếu online
+- [x] Đánh dấu đã đọc / đọc tất cả
+- [x] Trang danh sách thông báo, có phân trang vô hạn
+- [x] Chuông thông báo hiển thị số chưa đọc, cập nhật realtime
+- [x] Cấu hình nhận thông báo theo loại (bật/tắt từng loại)
+- [x] Gửi email cho thông báo quan trọng khi người dùng offline quá 15 phút
 
 ### Chat
-- [ ] Migration: `conversations`, `conversation_members`, `messages`, `message_attachments`
-- [ ] Tạo hội thoại 1-1 — tự động tái sử dụng nếu đã tồn tại giữa 2 người
-- [ ] Tạo nhóm chat: đặt tên, thêm thành viên, phân quyền quản trị nhóm
-- [ ] Tạo nhóm tự động theo phòng ban hoặc theo dự án
-- [ ] Gửi tin nhắn qua WebSocket, kèm `client_message_id` để chống trùng
-- [ ] Lưu tin nhắn bền vững vào PostgreSQL trước khi phát đi
-- [ ] Tải lịch sử tin nhắn theo cursor (cuộn ngược lên)
-- [ ] Trạng thái đã đọc: cập nhật `last_read_message_id`, hiển thị số chưa đọc
-- [ ] Chỉ báo "đang nhập..." (throttle, không lưu DB)
-- [ ] Trạng thái online/offline/lần cuối hoạt động (dùng chung dữ liệu presence của Phase 3)
-- [ ] Trả lời tin nhắn (reply), sửa và thu hồi tin nhắn (soft delete)
-- [ ] Gửi tệp và ảnh (Cloudflare R2), hiển thị xem trước ảnh
-- [ ] Tìm kiếm tin nhắn trong hội thoại (PostgreSQL full-text search)
-- [ ] Ghim hội thoại, tắt thông báo hội thoại
+
+> **Trạng thái: đã xong.** Nghiệm thu bằng `scripts/smoke-chat.sh` (66 mục).
+> Đã kiểm chứng trên hai instance api thật: client nối vào instance 2 nhận
+> được cả tin nhắn lẫn chỉ báo "đang nhập" phát từ instance 1.
+>
+> Những chỗ đáng ghi lại:
+>
+> - **`direct_key` là hai id đã SẮP XẾP rồi ghép.** Không sắp xếp thì (A,B)
+>   và (B,A) ra hai khoá, hai người cùng bấm "nhắn tin" một lúc tạo ra hai
+>   hội thoại song song, và mỗi người chỉ thấy một nửa lịch sử.
+> - **Gửi tin đi qua WebSocket là NGOẠI LỆ có cân nhắc** với nguyên tắc
+>   "nghiệp vụ đi qua REST" của hạ tầng WebSocket. Chỉ ba thao tác được đi
+>   lối này — gửi tin, đang nhập, đã đọc — vì chúng nhạy cảm với độ trễ và
+>   xảy ra liên tục. Quyền vẫn kiểm tra y như REST: Actor dựng một lần lúc
+>   bắt tay và `chat:read` được kiểm ở mọi bản tin, nếu không WebSocket
+>   thành cửa sau đi vòng qua toàn bộ phân quyền.
+> - **Nhóm phòng ban / dự án đồng bộ bằng job định kỳ**, không móc vào từng
+>   thao tác thêm-bớt thành viên. Móc vào từng thao tác nghĩa là mỗi module
+>   phải nhớ gọi chat, và chỉ cần một đường quên gọi là nhóm lệch vĩnh viễn
+>   mà không ai biết. Job tự sửa mọi sai lệch, dù chúng đến từ đâu.
+>   Nguồn rỗng thì BỎ QUA: một phòng ban tạm thời không còn ai gần như luôn
+>   là dữ liệu đang dở, và đồng bộ theo nó sẽ xoá sạch thành viên khỏi nhóm.
+> - **Không phải thành viên thì trả 404, không phải 403.** 403 xác nhận hội
+>   thoại đó có tồn tại, và với chat thì chính sự tồn tại của một cuộc trò
+>   chuyện đã là thông tin không nên rò ra.
+> - **Thu hồi tin nhắn xoá luôn `content`**, không chỉ đặt `deleted_at`.
+>   Xoá mềm là để giữ dấu vết cho quản trị, không phải để nội dung vẫn nằm
+>   nguyên trong database và rò ra qua một đường đọc nào đó quên kiểm tra cờ.
+
+- [x] Migration: `conversations`, `conversation_members`, `messages`, `message_attachments`
+- [x] Tạo hội thoại 1-1 — tự động tái sử dụng nếu đã tồn tại giữa 2 người
+- [x] Tạo nhóm chat: đặt tên, thêm thành viên, phân quyền quản trị nhóm
+- [x] Tạo nhóm tự động theo phòng ban hoặc theo dự án
+- [x] Gửi tin nhắn qua WebSocket, kèm `client_message_id` để chống trùng
+- [x] Lưu tin nhắn bền vững vào PostgreSQL trước khi phát đi
+- [x] Tải lịch sử tin nhắn theo cursor (cuộn ngược lên)
+- [x] Trạng thái đã đọc: cập nhật `last_read_message_id`, hiển thị số chưa đọc
+- [x] Chỉ báo "đang nhập..." (throttle, không lưu DB)
+- [x] Trạng thái online/offline/lần cuối hoạt động (dùng chung dữ liệu presence của Phase 3)
+- [x] Trả lời tin nhắn (reply), sửa và thu hồi tin nhắn (soft delete)
+- [x] Gửi tệp và ảnh (Cloudflare R2), hiển thị xem trước ảnh
+- [x] Tìm kiếm tin nhắn trong hội thoại (PostgreSQL full-text search)
+- [x] Ghim hội thoại, tắt thông báo hội thoại
+
+> **Chưa nghiệm thu được trên môi trường dev:** phần tải tệp và ảnh. Mã đã
+> xong ở cả hai đầu (ký URL PUT/GET, tải thẳng lên R2 không qua api, xem
+> trước ảnh), nhưng `.env` hiện chưa có khoá Cloudflare R2 — api khởi động
+> với cảnh báo "chưa cấu hình Cloudflare R2". Cấu hình khoá xong là dùng
+> được ngay, dùng chung đúng lớp lưu trữ với ảnh đại diện và tệp công việc.
 
 ### Frontend chat
-- [ ] Layout chat: danh sách hội thoại + khung tin nhắn
-- [ ] `ws-client` tự kết nối lại, backoff tăng dần, xếp hàng tin nhắn khi mất mạng
-- [ ] Hiển thị tin nhắn lạc quan (gửi → hiện ngay → xác nhận hoặc báo lỗi)
-- [ ] Cuộn vô hạn ngược lên để tải lịch sử
-- [ ] Bong bóng chat nổi, mở nhanh từ mọi trang
-- [ ] Giao diện quản lý nhóm: thêm/xoá thành viên, đổi tên, rời nhóm
-- [ ] Đồng bộ trạng thái đọc giữa nhiều tab (BroadcastChannel)
+- [x] Layout chat: danh sách hội thoại + khung tin nhắn
+- [x] `ws-client` tự kết nối lại, backoff tăng dần, xếp hàng tin nhắn khi mất mạng
+- [x] Hiển thị tin nhắn lạc quan (gửi → hiện ngay → xác nhận hoặc báo lỗi)
+- [x] Cuộn vô hạn ngược lên để tải lịch sử
+- [x] Bong bóng chat nổi, mở nhanh từ mọi trang
+- [x] Giao diện quản lý nhóm: thêm/xoá thành viên, đổi tên, rời nhóm
+- [x] Đồng bộ trạng thái đọc giữa nhiều tab (BroadcastChannel)
 
 ---
 

@@ -24,6 +24,7 @@ import (
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/handler"
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/router"
 	deliveryws "github.com/PhamVanPhuc2k2/manage/internal/delivery/ws"
+	domainchat "github.com/PhamVanPhuc2k2/manage/internal/domain/chat"
 	domainhr "github.com/PhamVanPhuc2k2/manage/internal/domain/hr"
 	domainproject "github.com/PhamVanPhuc2k2/manage/internal/domain/project"
 	repopg "github.com/PhamVanPhuc2k2/manage/internal/repository/postgres"
@@ -32,7 +33,9 @@ import (
 	reposto "github.com/PhamVanPhuc2k2/manage/internal/repository/storage"
 	ucatt "github.com/PhamVanPhuc2k2/manage/internal/usecase/attendance"
 	ucauth "github.com/PhamVanPhuc2k2/manage/internal/usecase/auth"
+	ucchat "github.com/PhamVanPhuc2k2/manage/internal/usecase/chat"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
+	ucnotif "github.com/PhamVanPhuc2k2/manage/internal/usecase/notification"
 	ucpay "github.com/PhamVanPhuc2k2/manage/internal/usecase/payroll"
 	ucproject "github.com/PhamVanPhuc2k2/manage/internal/usecase/project"
 	ucsystem "github.com/PhamVanPhuc2k2/manage/internal/usecase/system"
@@ -180,6 +183,10 @@ func run() error {
 	// biết dữ liệu nhân viên nằm ở đâu.
 	employeeLookup := repopg.NewEmployeeLookup(db)
 
+	// Cổng hẹp cho module chat và module thông báo. Kiểu riêng chứ không
+	// dùng lại employeeLookup: hai bên hỏi những câu khác nhau.
+	chatLookup := repopg.NewChatLookup(db)
+
 	sessionStore := reporedis.NewSessionStore(rdb)
 	refreshStore := reporedis.NewRefreshStore(rdb)
 	throttle := reporedis.NewLoginThrottle(rdb)
@@ -287,6 +294,47 @@ func run() error {
 
 	log.Info().Str("instance_id", instanceID).Msg("hub WebSocket đã sẵn sàng")
 
+	// --- Thông báo và chat ---
+	//
+	// Cả hai đẩy realtime qua wsPusher (bọc Hub), không qua RabbitMQ trực
+	// tiếp: người nhận nối vào chính instance này được gửi thẳng, người nối
+	// vào instance khác đi tiếp qua fanout — Hub.Publish lo cả hai.
+	wsPusher := deliveryws.NewPusher(hub)
+
+	notifUC := ucnotif.NewUsecase(
+		repopg.NewNotificationRepository(db),
+		wsPusher,
+		presenceStore,
+		chatLookup,
+		mailer,
+	)
+
+	// Module chat dùng lại lớp lưu trữ R2 qua interface của riêng nó, đúng
+	// như module hr và module dự án.
+	var chatStorage domainchat.Storage
+	if r2 != nil {
+		chatStorage = reposto.NewRepository(r2)
+	}
+
+	chatUC := ucchat.NewUsecase(
+		repopg.NewChatConversationRepository(db),
+		repopg.NewChatMessageRepository(db),
+		chatLookup,
+		repopg.NewChatSourceRepository(db),
+		presenceStore,
+		wsPusher,
+		// notifUC đáp ứng chat.Notifier nhờ method NotifyNewMessage. Nối ở
+		// đây thay vì cho usecase/chat import usecase/notification — hai tầng
+		// nghiệp vụ import chéo nhau là đường nhanh nhất tới phụ thuộc vòng.
+		notifUC,
+		chatStorage,
+		hrUC,
+	)
+
+	// Cắm chat vào hub SAU khi dựng: usecase chat cần một Pusher, mà Pusher
+	// lại bọc chính hub này. Truyền qua hàm dựng sẽ tạo vòng tròn không gỡ được.
+	hub.SetChat(chatUC)
+
 	// --- Handler ---
 	// Cookie Secure chỉ bật khi chạy HTTPS. Bật ở môi trường dev HTTP sẽ
 	// khiến trình duyệt vứt cookie đi và refresh không bao giờ hoạt động.
@@ -315,6 +363,8 @@ func run() error {
 			Task:       handler.NewTaskHandler(projectUC),
 			Attendance: handler.NewAttendanceHandler(attendanceUC),
 			Payroll:    handler.NewPayrollHandler(payrollUC),
+			Notif:      handler.NewNotificationHandler(notifUC),
+			Chat:       handler.NewChatHandler(chatUC),
 			WS: deliveryws.NewHandler(
 				hub, jwtMgr, sessionStore, cfg.CORSAllowedOrigins),
 		}),
