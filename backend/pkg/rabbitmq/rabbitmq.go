@@ -8,8 +8,19 @@
 //	                                   ▼
 //	                             manage.jobs.dlx ─▶ manage.jobs.dead
 //
+//	manage.realtime (exchange fanout)
+//	  ├─▶ queue riêng của api instance 1 (exclusive, auto-delete)
+//	  ├─▶ queue riêng của api instance 2
+//	  └─▶ ...
+//
 // Dead-letter queue rất quan trọng: không có nó, một message lỗi sẽ bị
 // requeue vô hạn và ăn hết CPU của worker.
+//
+// Exchange realtime KHÔNG có dead-letter, và điều đó là cố ý: bản tin
+// realtime chỉ có giá trị NGAY LÚC ĐÓ. Một thông báo "có người vừa giao việc
+// cho bạn" được phát lại sau mười phút chỉ gây bối rối. Queue của mỗi
+// instance vì vậy cũng không bền (auto-delete) — instance chết thì mọi bản
+// tin đang chờ nó cũng hết ý nghĩa.
 package rabbitmq
 
 import (
@@ -28,6 +39,15 @@ const (
 	ExchangeJobsDLX = "manage.jobs.dlx"
 	QueueJobs       = "manage.jobs.queue"
 	QueueJobsDead   = "manage.jobs.dead"
+
+	// ExchangeRealtime fan-out bản tin WebSocket tới MỌI instance api.
+	//
+	// Cần thiết ngay từ instance đầu tiên, không phải chỉ khi scale: giữ
+	// trạng thái kết nối trong bộ nhớ một tiến trình là kiểu thiết kế chạy
+	// được với một replica rồi hỏng lặng lẽ ngay khi có replica thứ hai —
+	// người dùng A nối vào instance 1 sẽ không bao giờ nhận được tin nhắn
+	// gửi từ instance 2, mà không có lỗi nào xuất hiện ở đâu cả.
+	ExchangeRealtime = "manage.realtime"
 )
 
 var ErrNotConnected = errors.New("rabbitmq không có kết nối")
@@ -122,6 +142,9 @@ func (c *Client) declareTopology() error {
 	}
 	if err := ch.ExchangeDeclare(ExchangeJobsDLX, "fanout", true, false, false, false, nil); err != nil {
 		return fmt.Errorf("khai báo exchange %s: %w", ExchangeJobsDLX, err)
+	}
+	if err := ch.ExchangeDeclare(ExchangeRealtime, "fanout", true, false, false, false, nil); err != nil {
+		return fmt.Errorf("khai báo exchange %s: %w", ExchangeRealtime, err)
 	}
 
 	// Queue chính, có gắn dead-letter exchange.

@@ -23,6 +23,7 @@ import (
 
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/handler"
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/router"
+	deliveryws "github.com/PhamVanPhuc2k2/manage/internal/delivery/ws"
 	domainhr "github.com/PhamVanPhuc2k2/manage/internal/domain/hr"
 	domainproject "github.com/PhamVanPhuc2k2/manage/internal/domain/project"
 	repopg "github.com/PhamVanPhuc2k2/manage/internal/repository/postgres"
@@ -150,6 +151,9 @@ func run() error {
 	taskTimelogRepo := repopg.NewTaskTimelogRepository(db)
 	projectReportRepo := repopg.NewProjectReportRepository(db)
 
+	presenceStore := reporedis.NewPresenceStore(rdb)
+	realtimeBus := repomq.NewRealtimeBus(mqClient)
+
 	// Cổng hẹp để module dự án tra cứu nhân viên. Module dự án chỉ biết
 	// interface domainproject.EmployeeLookup — nó không được và không cần
 	// biết dữ liệu nhân viên nằm ở đâu.
@@ -221,6 +225,31 @@ func run() error {
 		}
 	})
 
+	// --- Hạ tầng WebSocket ---
+	//
+	// instanceID phân biệt các replica api với nhau. Dùng hostname vì trong
+	// Docker mỗi container có hostname riêng và ổn định suốt vòng đời của
+	// nó; rơi về một uuid ngẫu nhiên khi không đọc được.
+	instanceID, err := os.Hostname()
+	if err != nil || instanceID == "" {
+		instanceID = uuid.NewString()
+	}
+
+	hub := deliveryws.NewHub(log, instanceID, presenceStore, realtimeBus)
+
+	// Mỗi instance tự nhận bản tin từ exchange fanout rồi giao cho những
+	// client đang nối vào chính nó. Chạy nền, tự dừng khi ctx bị huỷ.
+	go func() {
+		if err := realtimeBus.Subscribe(ctx, hub.Deliver); err != nil {
+			// Không làm chết tiến trình: mất fan-out nghĩa là realtime chỉ
+			// còn hoạt động trong phạm vi instance này, còn toàn bộ REST
+			// vẫn phục vụ bình thường.
+			log.Error().Err(err).Msg("dừng nhận bản tin realtime")
+		}
+	}()
+
+	log.Info().Str("instance_id", instanceID).Msg("hub WebSocket đã sẵn sàng")
+
 	// --- Handler ---
 	// Cookie Secure chỉ bật khi chạy HTTPS. Bật ở môi trường dev HTTP sẽ
 	// khiến trình duyệt vứt cookie đi và refresh không bao giờ hoạt động.
@@ -247,6 +276,8 @@ func run() error {
 			Role:       handler.NewRoleHandler(hrUC),
 			Project:    handler.NewProjectHandler(projectUC),
 			Task:       handler.NewTaskHandler(projectUC),
+			WS: deliveryws.NewHandler(
+				hub, jwtMgr, sessionStore, cfg.CORSAllowedOrigins),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -268,6 +299,14 @@ func run() error {
 
 	case <-ctx.Done():
 		log.Info().Msg("nhận tín hiệu dừng, đang tắt êm")
+
+		// Đóng WebSocket TRƯỚC khi đóng HTTP server.
+		//
+		// srv.Shutdown chờ mọi kết nối đang mở kết thúc, mà kết nối WebSocket
+		// thì không tự kết thúc — nó sống tới khi một bên đóng. Không đóng
+		// trước thì Shutdown treo đúng hết ShutdownTimeout rồi mới cắt ngang,
+		// và client không nhận được frame Close nên không biết đường nối lại.
+		hub.CloseAll()
 
 		// Dùng context MỚI, không dùng ctx đã bị huỷ — nếu không thì
 		// Shutdown trả về ngay lập tức và request đang dở bị cắt ngang.

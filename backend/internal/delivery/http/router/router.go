@@ -44,6 +44,9 @@ type Deps struct {
 	Role       *handler.RoleHandler
 	Project    *handler.ProjectHandler
 	Task       *handler.TaskHandler
+
+	// WS có thể nil trong test. Khi nil, route /ws đơn giản không tồn tại.
+	WS http.Handler
 }
 
 func New(d Deps) http.Handler {
@@ -74,6 +77,20 @@ func New(d Deps) http.Handler {
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.OK(w, map[string]string{"status": "ok", "version": d.Version})
 	})
+
+	// --- WebSocket ---
+	//
+	// Nằm NGOÀI /api/v1 và ngoài nhóm requireAuth, có chủ ý:
+	//
+	//   - Đường dẫn riêng để nginx nhận diện và cấu hình nâng cấp giao thức
+	//     cùng timeout dài; trộn vào /api sẽ kéo theo cả giới hạn tốc độ và
+	//     timeout 60 giây của REST.
+	//   - Không qua RequireAuth vì trình duyệt KHÔNG cho đặt header
+	//     Authorization khi mở WebSocket. Handler tự xác minh token trên
+	//     query string và tự kiểm tra phiên còn sống — xem ws/handler.go.
+	if d.WS != nil {
+		r.Handle("/ws", d.WS)
+	}
 
 	// /ready kiểm tra dependency. Dùng để biết có nên GỬI TRAFFIC vào không.
 	//
