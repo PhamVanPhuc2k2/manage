@@ -3,11 +3,13 @@ package hr
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
 	domainhr "github.com/PhamVanPhuc2k2/manage/internal/domain/hr"
 	"github.com/PhamVanPhuc2k2/manage/pkg/apperror"
+	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
 )
 
 const (
@@ -86,6 +88,30 @@ func (u *Usecase) companyID(ctx context.Context) (uuid.UUID, error) {
 // method (CompanyLookup) và composition root nối hrUC vào đó.
 func (u *Usecase) CurrentCompanyID(ctx context.Context) (uuid.UUID, error) {
 	return u.companyID(ctx)
+}
+
+// CurrentTimezone trả về múi giờ công ty dưới dạng *time.Location.
+//
+// Module chấm công quy đổi mọi thời điểm tuyệt đối thành "ngày làm việc",
+// và dùng giờ máy chủ thay cho giờ công ty sẽ đẩy một phần ca làm sang sai
+// ngày. Rơi về UTC khi chuỗi múi giờ không đọc được, kèm cảnh báo — im lặng
+// dùng giờ máy chủ là cách để sai số trốn thoát.
+func (u *Usecase) CurrentTimezone(ctx context.Context) (*time.Location, error) {
+	c, err := u.companies.GetFirst(ctx)
+	if err != nil {
+		return time.UTC, nil
+	}
+	loc, err := time.LoadLocation(c.Timezone)
+	if err != nil {
+		// Gán ra biến trước: zerolog.Logger có method pointer receiver nên
+		// không gọi trực tiếp trên giá trị trả về từ hàm được.
+		log := logger.FromContext(ctx)
+		log.Warn().
+			Str("timezone", c.Timezone).
+			Msg("múi giờ công ty không hợp lệ, tạm dùng UTC")
+		return time.UTC, nil
+	}
+	return loc, nil
 }
 
 // normalizePage chặn trên page_size.

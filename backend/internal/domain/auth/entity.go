@@ -126,6 +126,21 @@ const (
 	PermTaskCreate = "task:create"
 	PermTaskUpdate = "task:update"
 	PermTaskDelete = "task:delete"
+
+	// Phase 3. Tách attendance:read (công của mình) khỏi
+	// attendance:read_all (công của người khác) là điểm then chốt: dữ liệu
+	// chấm công là dữ liệu cá nhân, và "ai cũng xem được của nhau" là thứ
+	// không thu hồi lại được sau khi đã lỡ mở.
+	PermAttendanceRead    = "attendance:read"
+	PermAttendanceReadAll = "attendance:read_all"
+	PermAttendanceManage  = "attendance:manage"
+
+	PermLeaveRead    = "leave:read"
+	PermLeaveCreate  = "leave:create"
+	PermLeaveApprove = "leave:approve"
+	PermLeaveManage  = "leave:manage"
+
+	PermScheduleManage = "schedule:manage"
 )
 
 // Actor là danh tính của người đang thực hiện request.

@@ -44,6 +44,7 @@ type Deps struct {
 	Role       *handler.RoleHandler
 	Project    *handler.ProjectHandler
 	Task       *handler.TaskHandler
+	Attendance *handler.AttendanceHandler
 
 	// WS có thể nil trong test. Khi nil, route /ws đơn giản không tồn tại.
 	WS http.Handler
@@ -328,6 +329,90 @@ func New(d Deps) http.Handler {
 					Post("/{taskID}/timelogs", d.Task.LogTime)
 				r.With(appmw.RequirePermission(domainauth.PermTaskUpdate)).
 					Delete("/timelogs/{timelogID}", d.Task.DeleteTimelog)
+			})
+
+			// --- Chấm công ---
+			//
+			// Lưu ý về mô hình quyền: attendance:read chỉ cho xem công CỦA
+			// CHÍNH MÌNH. Xem của người khác cần thêm attendance:read_all, và
+			// tầng usecase vẫn giới hạn tiếp trong phạm vi phòng ban — dữ
+			// liệu chấm công là dữ liệu cá nhân nhạy cảm.
+			r.Route("/attendance", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceRead)).
+					Get("/today", d.Attendance.Today)
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceRead)).
+					Get("/days", d.Attendance.ListDays)
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceRead)).
+					Get("/day", d.Attendance.GetDay)
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceRead)).
+					Get("/summary", d.Attendance.MonthSummary)
+
+				// Ai đang online. Cần attendance:read_all vì đây là thông tin
+				// về người khác.
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceReadAll)).
+					Get("/team", d.Attendance.TeamPresence)
+
+				// Check-in thủ công cho trường hợp ngoại lệ (mất mạng, họp
+				// ngoài). Dùng quyền đọc vì người ta chỉ ghi cho chính mình.
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceRead)).
+					Post("/check-in", d.Attendance.CheckIn)
+
+				// --- Yêu cầu điều chỉnh công ---
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceRead)).
+					Get("/adjustments", d.Attendance.ListAdjustments)
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceRead)).
+					Post("/adjustments", d.Attendance.CreateAdjustment)
+				// Duyệt thì cần quyền quản lý công thật sự.
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceManage)).
+					Put("/adjustments/{id}/decision", d.Attendance.DecideAdjustment)
+
+				// --- Khoá kỳ công ---
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceManage)).
+					Post("/lock", d.Attendance.LockPeriod)
+			})
+
+			// --- Nghỉ phép ---
+			r.Route("/leaves", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermLeaveRead)).
+					Get("/", d.Attendance.ListLeaves)
+				r.With(appmw.RequirePermission(domainauth.PermLeaveCreate)).
+					Post("/", d.Attendance.CreateLeave)
+				r.With(appmw.RequirePermission(domainauth.PermLeaveApprove)).
+					Put("/{id}/decision", d.Attendance.DecideLeave)
+				// Huỷ đơn của chính mình chỉ cần quyền tạo đơn — usecase chặn
+				// việc huỷ đơn người khác.
+				r.With(appmw.RequirePermission(domainauth.PermLeaveCreate)).
+					Delete("/{id}", d.Attendance.CancelLeave)
+
+				// --- Quỹ ngày phép ---
+				r.With(appmw.RequirePermission(domainauth.PermLeaveRead)).
+					Get("/balance", d.Attendance.MyBalance)
+				r.With(appmw.RequirePermission(domainauth.PermLeaveApprove)).
+					Get("/balances", d.Attendance.ListBalances)
+				r.With(appmw.RequirePermission(domainauth.PermLeaveManage)).
+					Put("/balances", d.Attendance.SetBalance)
+			})
+
+			// --- Khung giờ làm việc ---
+			r.Route("/work-schedules", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceRead)).
+					Get("/", d.Attendance.ListSchedules)
+				r.With(appmw.RequirePermission(domainauth.PermScheduleManage)).
+					Post("/", d.Attendance.CreateSchedule)
+				r.With(appmw.RequirePermission(domainauth.PermScheduleManage)).
+					Put("/{id}", d.Attendance.UpdateSchedule)
+				r.With(appmw.RequirePermission(domainauth.PermScheduleManage)).
+					Delete("/{id}", d.Attendance.DeleteSchedule)
+			})
+
+			// --- Ngày lễ ---
+			r.Route("/holidays", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermLeaveRead)).
+					Get("/", d.Attendance.ListHolidays)
+				r.With(appmw.RequirePermission(domainauth.PermLeaveManage)).
+					Post("/", d.Attendance.CreateHoliday)
+				r.With(appmw.RequirePermission(domainauth.PermLeaveManage)).
+					Delete("/{id}", d.Attendance.DeleteHoliday)
 			})
 
 			// --- Báo cáo khối lượng việc theo nhân viên ---

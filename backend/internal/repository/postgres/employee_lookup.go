@@ -85,3 +85,39 @@ func (l *EmployeeLookup) DepartmentOf(ctx context.Context, id uuid.UUID) (*uuid.
 	}
 	return deptID, nil
 }
+
+// ListActiveIDs trả về id mọi nhân viên còn làm việc.
+//
+// Job tổng hợp công cuối ngày cần nó để đánh dấu người VẮNG. Người vắng
+// không có phiên làm việc nào, nên không thể suy ra từ bảng phiên — phải
+// đối chiếu với danh sách đầy đủ.
+func (l *EmployeeLookup) ListActiveIDs(
+	ctx context.Context,
+	departmentIDs []uuid.UUID,
+) ([]uuid.UUID, error) {
+	ids := departmentIDs
+	if ids == nil {
+		ids = []uuid.UUID{}
+	}
+
+	const q = `
+		SELECT id FROM employees
+		WHERE deleted_at IS NULL AND status <> 'resigned'
+		  AND (cardinality($1::uuid[]) = 0 OR department_id = ANY($1))`
+
+	rows, err := l.db.Query(ctx, q, ids)
+	if err != nil {
+		return nil, fmt.Errorf("liệt kê nhân viên đang làm việc: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}

@@ -1,6 +1,6 @@
 # Hệ thống Quản lý Công ty — Danh sách nhiệm vụ
 
-> Tài liệu lộ trình triển khai. Cập nhật lần cuối: 2026-09-21
+> Tài liệu lộ trình triển khai. Cập nhật lần cuối: 2026-09-21 (Phase 3 xong)
 > Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong
 >
 > Hướng dẫn chi tiết: [PHASE-0-SETUP.md](./PHASE-0-SETUP.md) · [PHASE-1-SETUP.md](./PHASE-1-SETUP.md)
@@ -450,40 +450,59 @@ Lệnh chạy:
 
 **Mục tiêu:** Tự động ghi nhận thời gian làm việc dựa trên presence realtime, không cần bấm nút.
 
+> **Trạng thái: đã xong.** Kiểm chứng bằng `scripts/smoke-attendance.sh`
+> (48 mục, đạt toàn bộ, chạy lại được). Chuỗi hoàn chỉnh đã chứng minh trên
+> stack thật: heartbeat WebSocket → presence Redis → job quét mỗi phút →
+> `attendance_sessions`, với cơ chế nối phiện hoạt động đúng.
+>
+> Ba điểm đáng ghi nhớ:
+>
+> - **Ghi presence vào Redis, không ghi thẳng database.** Heartbeat đến 30
+>   giây một lần từ mọi người online; với 200 nhân viên là 400 lượt ghi mỗi
+>   phút để thu được đúng lượng thông tin mà một lần quét gom lại được.
+> - **Job tổng hợp chạy cho MỌI nhân viên, không chỉ người có phiện.** Người
+>   vắng không có phiện nào, nên duyệt bảng phiện thì họ không xuất hiện —
+>   và "không có dòng" rất khác "có dòng ghi vắng" khi tính lương.
+> - **Mọi phép đổi ngày đi qua múi giờ CÔNG TY.** Dùng giờ máy chủ sẽ đẩy
+>   một phần ca làm sang sai ngày, và kế toán sẽ không công nhận con số.
+>
+> Còn lại có chủ ý: xuất báo cáo ra Excel — cần hạ tầng báo tiến độ của
+> Phase 5, cùng lý do với việc nhập nhân viên từ Excel ở Phase 1.
+
 > **Nguyên tắc thiết kế:** Kết nối WebSocket vốn đã có sẵn cho chat và thông báo được tận dụng làm nguồn dữ liệu chấm công. Khi nhân viên mở ứng dụng, client gửi heartbeat định kỳ; server ghi nhận phiên online và cộng dồn thời gian trong khung giờ làm việc.
 >
 > **Giới hạn cần ý thức:** mở tab không đồng nghĩa với đang làm việc. Vì vậy hệ thống phân biệt rõ *thời gian online* và *thời gian hoạt động* (có tương tác), đồng thời vẫn cho phép check-in thủ công và để quản lý duyệt/điều chỉnh. Không dùng dữ liệu này làm căn cứ kỷ luật tự động.
 
 ### Cơ chế presence
-- [ ] Client gửi heartbeat mỗi 30 giây qua WebSocket (kèm cờ `is_active`)
-- [ ] Phát hiện idle phía client: không có chuột/bàn phím > 5 phút → `is_active = false`
-- [ ] Bắt sự kiện `visibilitychange` — chuyển tab / thu nhỏ cửa sổ → đánh dấu không hoạt động
-- [ ] Server lưu presence vào Redis: `presence:{user_id}` với TTL 90 giây
-- [ ] Job nền quét Redis mỗi phút, ghi các khoảng online vào `attendance_sessions`
-- [ ] Gộp các phiên rời rạc cách nhau dưới 5 phút thành một phiên liền mạch
-- [ ] Job cuối ngày tổng hợp `attendance_sessions` → `attendance_days`
-- [ ] Xử lý đúng múi giờ công ty, không dùng giờ máy chủ trực tiếp
+- [x] Client gửi heartbeat mỗi 30 giây qua WebSocket (kèm cờ `is_active`)
+- [x] Phát hiện idle phía client: không có chuột/bàn phím > 5 phút → `is_active = false`
+- [x] Bắt sự kiện `visibilitychange` — chuyển tab / thu nhỏ cửa sổ → đánh dấu không hoạt động
+- [x] Server lưu presence vào Redis: `presence:{user_id}` với TTL 90 giây
+- [x] Job nền quét Redis mỗi phút, ghi các khoảng online vào `attendance_sessions`
+- [x] Gộp các phiên rời rạc cách nhau dưới 5 phút thành một phiên liền mạch
+- [x] Job cuối ngày tổng hợp `attendance_sessions` → `attendance_days`
+- [x] Xử lý đúng múi giờ công ty, không dùng giờ máy chủ trực tiếp
 
 ### Nghiệp vụ chấm công
-- [ ] Migration: `work_schedules`, `attendance_sessions`, `attendance_days`, `leave_requests`
-- [ ] Cấu hình khung giờ làm việc theo công ty / phòng ban / cá nhân
-- [ ] Tính các chỉ số theo ngày: giờ online, giờ hoạt động, đi muộn, về sớm, thiếu giờ
-- [ ] Check-in / check-out thủ công cho trường hợp ngoại lệ (mất mạng, họp ngoài)
-- [ ] Nhân viên gửi yêu cầu điều chỉnh công, quản lý duyệt
-- [ ] Luồng đơn nghỉ phép: tạo → quản lý duyệt/từ chối → trừ quỹ phép
-- [ ] Quản lý quỹ ngày phép năm, phép tồn
-- [ ] Đánh dấu ngày lễ, ngày nghỉ theo lịch công ty
-- [ ] API báo cáo chấm công: theo nhân viên, theo phòng ban, theo tháng
+- [x] Migration: `work_schedules`, `attendance_sessions`, `attendance_days`, `leave_requests`
+- [x] Cấu hình khung giờ làm việc theo công ty / phòng ban / cá nhân
+- [x] Tính các chỉ số theo ngày: giờ online, giờ hoạt động, đi muộn, về sớm, thiếu giờ
+- [x] Check-in / check-out thủ công cho trường hợp ngoại lệ (mất mạng, họp ngoài)
+- [x] Nhân viên gửi yêu cầu điều chỉnh công, quản lý duyệt
+- [x] Luồng đơn nghỉ phép: tạo → quản lý duyệt/từ chối → trừ quỹ phép
+- [x] Quản lý quỹ ngày phép năm, phép tồn
+- [x] Đánh dấu ngày lễ, ngày nghỉ theo lịch công ty
+- [x] API báo cáo chấm công: theo nhân viên, theo phòng ban, theo tháng
 - [ ] Xuất báo cáo chấm công ra Excel (xử lý nền)
 
 ### Frontend
-- [ ] Widget trạng thái làm việc trên topbar: đang online, tổng giờ hôm nay
-- [ ] Trang chấm công cá nhân: dòng thời gian trong ngày, lịch tháng
-- [ ] Trang chấm công phòng ban (dành cho quản lý): ai đang online, ai nghỉ
-- [ ] Form gửi yêu cầu điều chỉnh công
-- [ ] Trang đơn nghỉ phép: tạo đơn, theo dõi trạng thái, số phép còn lại
-- [ ] Hàng đợi duyệt đơn cho quản lý
-- [ ] Thông báo rõ cho nhân viên rằng thời gian online đang được ghi nhận (minh bạch dữ liệu)
+- [x] Widget trạng thái làm việc trên topbar: đang online, tổng giờ hôm nay
+- [x] Trang chấm công cá nhân: dòng thời gian trong ngày, lịch tháng
+- [x] Trang chấm công phòng ban (dành cho quản lý): ai đang online, ai nghỉ
+- [x] Form gửi yêu cầu điều chỉnh công
+- [x] Trang đơn nghỉ phép: tạo đơn, theo dõi trạng thái, số phép còn lại
+- [x] Hàng đợi duyệt đơn cho quản lý
+- [x] Thông báo rõ cho nhân viên rằng thời gian online đang được ghi nhận (minh bạch dữ liệu)
 
 ---
 
@@ -520,15 +539,26 @@ Lệnh chạy:
 **Mục tiêu:** Chat 1-1 và chat nhóm hoạt động ổn định, thông báo đẩy tức thì, hoạt động đúng khi chạy nhiều instance backend.
 
 ### Hạ tầng WebSocket
-- [ ] Hub WebSocket: quản lý client, đăng ký/huỷ đăng ký, broadcast
-- [ ] Xác thực khi bắt tay WebSocket (token qua query hoặc subprotocol, không qua cookie)
-- [ ] Một người dùng có thể mở nhiều thiết bị — hub phải hỗ trợ nhiều kết nối / 1 user
-- [ ] Cơ chế ping/pong, tự đóng kết nối chết
-- [ ] Định dạng bản tin chuẩn: `{ type, payload, ts, trace_id }`
-- [ ] Fan-out qua RabbitMQ: mỗi instance backend là một consumer, exchange kiểu fanout
-- [ ] Redis lưu bản đồ `user_id → instance_id` để định tuyến tin nhắn
-- [ ] Giới hạn tốc độ gửi tin nhắn mỗi kết nối (chống spam)
-- [ ] Giới hạn kích thước bản tin, đóng kết nối khi vượt ngưỡng
+
+> **Trạng thái: đã xong**, làm trước để Phase 3 dùng được presence. Kiểm
+> chứng fan-out bằng hai instance api thật: client nối vào instance 2 nhận
+> được bản tin phát từ instance 1.
+>
+> Bản đồ `user_id → instance_id` nằm trong chính bản ghi presence trên
+> Redis (trường `instance_id` của mỗi kết nối). Việc GIAO bản tin thì dùng
+> fan-out cho mọi instance rồi lọc tại chỗ, thay vì định tuyến theo bản đồ:
+> định tuyến cần bản đồ luôn đúng, và một instance bị `kill -9` sẽ để lại
+> bản đồ cũ trỏ tới nơi không còn ai — bản tin biến mất trong im lặng.
+
+- [x] Hub WebSocket: quản lý client, đăng ký/huỷ đăng ký, broadcast
+- [x] Xác thực khi bắt tay WebSocket (token qua query hoặc subprotocol, không qua cookie)
+- [x] Một người dùng có thể mở nhiều thiết bị — hub phải hỗ trợ nhiều kết nối / 1 user
+- [x] Cơ chế ping/pong, tự đóng kết nối chết
+- [x] Định dạng bản tin chuẩn: `{ type, payload, ts, trace_id }`
+- [x] Fan-out qua RabbitMQ: mỗi instance backend là một consumer, exchange kiểu fanout
+- [x] Redis lưu bản đồ `user_id → instance_id` để định tuyến tin nhắn
+- [x] Giới hạn tốc độ gửi tin nhắn mỗi kết nối (chống spam)
+- [x] Giới hạn kích thước bản tin, đóng kết nối khi vượt ngưỡng
 
 ### Thông báo
 - [ ] Migration: `notifications`

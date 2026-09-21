@@ -4,11 +4,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { WorkStatusWidget } from "@/features/attendance/WorkStatusWidget";
 import { useAuth, usePermission } from "@/lib/auth/useAuth";
+import { useWebSocketConnection } from "@/lib/ws/useWebSocket";
 
 const NAV = [
   { href: "/projects", label: "Dự án", permission: "project:read" },
   { href: "/tasks", label: "Công việc", permission: "task:read" },
+  { href: "/attendance", label: "Chấm công", permission: "attendance:read" },
+  { href: "/attendance/team", label: "Công phòng ban", permission: "attendance:read_all" },
+  { href: "/leaves", label: "Nghỉ phép", permission: "leave:read" },
   { href: "/employees", label: "Nhân viên", permission: "employee:read" },
   { href: "/departments", label: "Phòng ban", permission: "department:read" },
   { href: "/positions", label: "Chức vụ", permission: "position:read" },
@@ -25,6 +30,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { can } = usePermission();
   const router = useRouter();
   const pathname = usePathname();
+
+  // Mở WebSocket một lần cho cả ứng dụng. Đây cũng là nguồn dữ liệu chấm
+  // công: client gửi nhịp tim qua chính kết nối này.
+  useWebSocketConnection();
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -74,6 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {user.roles.join(", ")}
           </div>
           <div className="flex items-center gap-4">
+            {can("attendance:read") && <WorkStatusWidget />}
             <Link href="/profile" className="text-sm hover:underline">
               {user.email}
             </Link>

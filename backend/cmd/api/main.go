@@ -30,6 +30,7 @@ import (
 	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
 	reporedis "github.com/PhamVanPhuc2k2/manage/internal/repository/redis"
 	reposto "github.com/PhamVanPhuc2k2/manage/internal/repository/storage"
+	ucatt "github.com/PhamVanPhuc2k2/manage/internal/usecase/attendance"
 	ucauth "github.com/PhamVanPhuc2k2/manage/internal/usecase/auth"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
 	ucproject "github.com/PhamVanPhuc2k2/manage/internal/usecase/project"
@@ -152,6 +153,14 @@ func run() error {
 	projectReportRepo := repopg.NewProjectReportRepository(db)
 
 	presenceStore := reporedis.NewPresenceStore(rdb)
+
+	scheduleRepo := repopg.NewScheduleRepository(db)
+	holidayRepo := repopg.NewHolidayRepository(db)
+	attSessionRepo := repopg.NewAttendanceSessionRepository(db)
+	attDayRepo := repopg.NewAttendanceDayRepository(db)
+	adjustmentRepo := repopg.NewAdjustmentRepository(db)
+	leaveRepo := repopg.NewLeaveRepository(db)
+	balanceRepo := repopg.NewBalanceRepository(db)
 	realtimeBus := repomq.NewRealtimeBus(mqClient)
 
 	// Cổng hẹp để module dự án tra cứu nhân viên. Module dự án chỉ biết
@@ -209,6 +218,14 @@ func run() error {
 		hrUC,
 		projectStorage,
 		repomq.NewProjectEventPublisher(mqClient),
+	)
+
+	// Module chấm công đọc presence từ Redis — chính bảng mà hub WebSocket
+	// ghi vào mỗi khi nhận heartbeat. Đây là chỗ Phase 3 nối vào Phase 5.
+	attendanceUC := ucatt.NewUsecase(
+		scheduleRepo, holidayRepo, attSessionRepo, attDayRepo,
+		adjustmentRepo, leaveRepo, balanceRepo,
+		employeeLookup, presenceStore, hrUC,
 	)
 
 	// Nối hr với auth: vô hiệu hoá nhân viên phải cắt luôn phiên đăng nhập
@@ -276,6 +293,7 @@ func run() error {
 			Role:       handler.NewRoleHandler(hrUC),
 			Project:    handler.NewProjectHandler(projectUC),
 			Task:       handler.NewTaskHandler(projectUC),
+			Attendance: handler.NewAttendanceHandler(attendanceUC),
 			WS: deliveryws.NewHandler(
 				hub, jwtMgr, sessionStore, cfg.CORSAllowedOrigins),
 		}),
