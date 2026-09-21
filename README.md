@@ -90,6 +90,7 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 | 4 | Lương, phiếu lương | |
 | 5 | WebSocket: thông báo và chat | |
 | 6 | Hoàn thiện, bảo mật, giám sát, vận hành | |
+| 7 | Gọi video 1-1 và nhóm, trình chiếu màn hình (WebRTC + SFU) | |
 
 ## Lưu ý
 

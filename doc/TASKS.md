@@ -1,6 +1,6 @@
 # Hệ thống Quản lý Công ty — Danh sách nhiệm vụ
 
-> Tài liệu lộ trình triển khai. Cập nhật lần cuối: 2026-09-15
+> Tài liệu lộ trình triển khai. Cập nhật lần cuối: 2026-09-21
 > Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong
 >
 > Hướng dẫn chi tiết: [PHASE-0-SETUP.md](./PHASE-0-SETUP.md) · [PHASE-1-SETUP.md](./PHASE-1-SETUP.md)
@@ -9,7 +9,7 @@
 
 ## 1. Tổng quan
 
-Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ:
+Hệ thống quản trị nội bộ doanh nghiệp, gồm 7 nhóm nghiệp vụ:
 
 | Nhóm | Nội dung chính |
 |---|---|
@@ -18,6 +18,7 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 | Chấm công | Đo thời gian làm việc qua presence realtime, đơn nghỉ phép |
 | Lương | Bảng lương, phụ cấp, khấu trừ, phiếu lương |
 | Realtime | Thông báo đẩy, chat 1-1 và chat nhóm |
+| Họp trực tuyến | Gọi video 1-1 và gọi nhóm, trình chiếu màn hình |
 | Quản trị | Phân quyền RBAC, nhật ký hệ thống, cấu hình công ty |
 
 ### Quyết định kiến trúc đã chốt
@@ -34,6 +35,7 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 | Chấm công | Presence-based: đo thời gian online thực tế qua WebSocket heartbeat |
 | Lưu trữ tệp | **Cloudflare R2** (tương thích S3). Client tải THẲNG lên bằng presigned URL, không đi qua backend |
 | Triển khai | Docker toàn bộ — dev và production đều chạy bằng container, deploy qua Docker Compose |
+| Gọi video & trình chiếu | **WebRTC** truyền media, **SFU (LiveKit)** cho gọi nhóm, **TURN** bắt buộc kèm fallback TCP/443. WebSocket chỉ làm signaling — TCP không tải được media realtime |
 | Lộ trình | Chia phase, mỗi phase chạy được độc lập |
 
 ---
@@ -62,6 +64,12 @@ Hệ thống quản trị nội bộ doanh nghiệp, gồm 6 nhóm nghiệp vụ
 - Cloudflare R2 (tương thích S3) cho tệp đính kèm và ảnh đại diện
 - GitHub Actions cho CI/CD, build và đẩy image lên GitHub Container Registry (GHCR)
 - Prometheus + Grafana + Loki (container) cho giám sát và log
+
+**Realtime media (Phase 7)**
+- WebRTC (SRTP trên UDP) — truyền hình/tiếng, có sẵn trong trình duyệt, không phải cài gì
+- LiveKit (container, viết bằng Go) — SFU cho gọi nhóm, kèm sẵn TURN server
+- coturn — chỉ dựng riêng nếu sau này tách TURN khỏi LiveKit
+- `livekit-client` + `@livekit/components-react` cho frontend
 
 ---
 
@@ -603,14 +611,143 @@ Lệnh chạy:
 
 ---
 
+## PHASE 7 — Gọi video & Trình chiếu màn hình
+
+**Mục tiêu:** Gọi video 1-1 và gọi nhóm ngay trong hội thoại chat, kèm trình chiếu màn hình. Chạy được cả trên mạng công ty chặn UDP.
+
+> **Đọc trước khi code:** WebSocket **không** truyền được media. Nó chạy trên TCP, mà TCP đảm bảo thứ tự — mất một gói là cả luồng phía sau phải chờ gửi lại, video đứng hình vài giây thay vì lướt qua một frame xấu. Media thời gian thực cần UDP và chấp nhận mất gói: đó là **WebRTC**.
+>
+> Hub WebSocket của Phase 5 vẫn dùng, nhưng đổi vai: nó là kênh **signaling** — nơi hai bên trao đổi SDP và ICE candidate để bắt tay. Bắt tay xong, media đi thẳng qua WebRTC, **không qua nginx, không qua hub**.
+>
+> Phụ thuộc: Phase 5 (hub WebSocket) và phần TLS của Phase 6 — xem mục Hạ tầng để biết vì sao TLS thành bắt buộc.
+
+### Quyết định chốt trước khi code
+
+| Vấn đề | Lựa chọn | Lý do |
+|---|---|---|
+| Truyền media | WebRTC (SRTP trên UDP) | Cách duy nhất khả thi cho realtime trên trình duyệt |
+| Signaling | Hub WebSocket có sẵn của Phase 5 | Không dựng thêm hạ tầng; đã có xác thực và định tuyến theo user |
+| Gọi nhóm | **SFU**, không dùng mesh | Mesh N người = mỗi máy gửi N-1 luồng. Từ 5 người trở lên, đường upload của nhân viên không tải nổi |
+| Gọi 1-1 | P2P trực tiếp, SFU làm dự phòng | Không tốn băng thông server khi đục được NAT |
+| Phần mềm SFU | **LiveKit** (self-host bằng container) | Viết bằng Go cùng stack backend; kèm sẵn TURN; hỗ trợ UDP mux một cổng; có SDK JS/React |
+| TURN | Bắt buộc, kèm fallback TCP/443 | Firewall công ty chặn UDP tuỳ tiện — thiếu TURN thì một phần nhân viên không gọi được |
+| Ghép hình phía server (MCU) | **Không làm** | Phải transcode, tốn CPU khủng khiếp. Chỉ cân nhắc nếu sau này cần ghi hình ghép hoặc đẩy RTMP |
+
+### Signaling — mở rộng hub WebSocket của Phase 5
+- [ ] Bổ sung nhóm bản tin `call.*` vào định dạng chuẩn `{ type, payload, ts, trace_id }`
+- [ ] `call.invite` / `call.accept` / `call.reject` / `call.cancel` / `call.end`
+- [ ] `call.sdp` và `call.ice` — chuyển tiếp SDP offer/answer và ICE candidate giữa hai đầu
+- [ ] Định tuyến bản tin gọi qua bản đồ `user_id → instance_id` trên Redis (dùng lại cơ chế Phase 5)
+- [ ] Đổ chuông trên **mọi thiết bị** của người nhận; ai bắt máy trước thì các thiết bị còn lại nhận `call.cancelled`
+- [ ] Tự huỷ cuộc gọi nếu không ai bắt máy sau 45 giây
+- [ ] Kiểm tra quyền khi mời: chỉ thành viên hội thoại mới gọi được vào hội thoại đó
+- [ ] Người gọi rớt mạng giữa chừng: hub phát `call.end` khi kết nối WS đóng, không để cuộc gọi treo
+- [ ] Chốt hành vi khi người nhận đang bận cuộc khác: từ chối ngay hay cho chờ máy — quyết định **trước** khi code
+
+### Migration & lưu trữ
+- [ ] Migration: `calls` — hội thoại, kiểu (1-1 / nhóm), người khởi tạo, thời điểm bắt đầu, kết thúc, lý do kết thúc
+- [ ] Migration: `call_participants` — ai vào, vào lúc nào, rời lúc nào, có bật mic/camera/chia sẻ màn hình không
+- [ ] Sinh tin nhắn hệ thống trong hội thoại khi cuộc gọi kết thúc ("Cuộc gọi video · 12 phút") — dùng lại bảng `messages`
+- [ ] Thống kê vận hành: số cuộc gọi, thời lượng trung bình, **tỉ lệ phải relay qua TURN** (chỉ số quyết định chi phí băng thông)
+
+### TURN / NAT traversal — làm SỚM, đừng để cuối phase
+- [ ] Dựng TURN server (dùng bản tích hợp trong LiveKit, hoặc coturn riêng nếu muốn tách)
+- [ ] Xác thực TURN bằng credential tạm thời (HMAC theo thời gian). **Không dùng user/pass tĩnh** — lộ ra là bị dùng chùa băng thông
+- [ ] `GET /api/v1/calls/ice-servers` — cấp credential TURN ngắn hạn (TTL khoảng 10 phút) cho người đã đăng nhập
+- [ ] Bật listener TURN trên **TCP cổng 443** làm đường cuối cho mạng chặn UDP
+- [ ] Kiểm chứng trên **mạng 4G**, **mạng công ty** và **máy sau VPN** — ba môi trường này hỏng theo ba kiểu khác nhau
+- [ ] Đo và ghi log tỉ lệ kết nối phải đi qua TURN
+
+### SFU — gọi nhóm
+- [ ] Dựng LiveKit bằng container, đặt khoá API riêng, không để khoá mặc định
+- [ ] Backend cấp **access token** vào phòng: nhúng `room`, `identity`, quyền publish/subscribe, TTL ngắn
+- [ ] `POST /api/v1/calls/{id}/token` — kiểm tra người gọi là thành viên hội thoại rồi mới phát token. **Không để client tự chọn phòng**
+- [ ] Đặt tên phòng theo `call_id`, không theo `conversation_id` (một hội thoại có nhiều cuộc gọi theo thời gian)
+- [ ] Bật **simulcast**: mỗi người gửi 3 mức 180p/360p/720p, server chọn mức phù hợp cho từng người nhận
+- [ ] Chỉ hiện người đang nói ở độ nét cao, phần còn lại hạ xuống 180p
+- [ ] Giới hạn số người mỗi phòng (đề xuất khởi điểm: 16) và số phòng chạy song song
+- [ ] Phát hiện người đang nói (active speaker) để làm nổi khung trên giao diện
+- [ ] Webhook từ SFU về backend: người vào/rời phòng, phòng đóng → cập nhật `call_participants`
+- [ ] Dọn phòng rác: tự đóng phòng không còn ai sau 30 giây
+
+### Gọi 1-1
+- [ ] Đi P2P trực tiếp khi đục được NAT, tự chuyển qua TURN/SFU khi thất bại
+- [ ] Khởi tạo `RTCPeerConnection` với danh sách ICE lấy từ `/calls/ice-servers`
+- [ ] Xử lý **renegotiation** khi bật/tắt camera hoặc thêm luồng màn hình giữa cuộc gọi
+- [ ] Xử lý **ICE restart** khi đổi mạng (WiFi sang 4G) thay vì để rớt cuộc gọi
+- [ ] Gọi thoại (chỉ audio) dùng chung luồng này, khác ở chỗ không xin quyền camera
+
+### Trình chiếu màn hình
+- [ ] `getDisplayMedia()` — thêm track màn hình vào cuộc gọi **đang chạy**, không mở cuộc gọi mới
+- [ ] Đặt `contentHint`: `text` cho màn hình tĩnh (ưu tiên nét chữ), `motion` khi chiếu video. Khác biệt rõ rệt, đừng bỏ qua
+- [ ] Giới hạn bitrate riêng cho luồng màn hình: 1080p chữ tĩnh khoảng 0.5 Mbps nhưng chiếu video có thể vọt lên 3 Mbps
+- [ ] Mỗi lúc chỉ một người chiếu; người sau muốn chiếu phải được nhường hoặc thay thế
+- [ ] Bắt sự kiện `track.onended` để đồng bộ khi người dùng bấm "Dừng chia sẻ" của **trình duyệt** thay vì nút trong app
+- [ ] Ghi nhận trong `call_participants` ai đã chiếu màn hình (phục vụ audit)
+- [ ] Nói rõ trên giao diện: chia sẻ **tab trình duyệt** mới kèm được âm thanh, chia sẻ **toàn màn hình** thì không — giới hạn của trình duyệt, đừng để người dùng tưởng lỗi
+
+### Ghi hình (tuỳ chọn — chỉ làm khi có nhu cầu thật)
+- [ ] Ghi hình bằng LiveKit Egress, xuất thẳng lên Cloudflare R2
+- [ ] **Xin đồng ý trước khi ghi**: hiện cảnh báo cho mọi người trong phòng, lưu lại sự đồng ý
+- [ ] Phân quyền xem bản ghi ở tầng usecase (không chỉ ẩn nút trên giao diện), ghi audit log mỗi lượt xem
+- [ ] Chính sách lưu trữ và tự xoá sau N ngày — video ăn dung lượng rất nhanh
+
+### Frontend
+- [ ] Nút gọi trong khung chat: gọi thoại / gọi video, cho cả hội thoại 1-1 và nhóm
+- [ ] Giao diện đổ chuông: chấp nhận / từ chối, có âm thanh, hiện cả khi đang ở trang khác
+- [ ] Màn hình cuộc gọi: lưới video tự đổi bố cục theo số người, ghim người đang nói
+- [ ] Thanh điều khiển: tắt/bật mic, camera, chia sẻ màn hình, rời cuộc gọi
+- [ ] Màn hình kiểm tra thiết bị trước khi vào: chọn mic/camera/loa, xem trước hình, đo mức âm thanh
+- [ ] Xử lý khi người dùng **từ chối quyền** camera/mic: hướng dẫn bật lại, không để màn hình trắng
+- [ ] Hiện chất lượng kết nối (tốt / yếu / mất kết nối) dựa trên thống kê WebRTC
+- [ ] Cửa sổ nổi (picture-in-picture) khi rời khỏi trang cuộc gọi
+- [ ] Chặn mở cuộc gọi ở nhiều tab cùng lúc (dùng BroadcastChannel như Phase 5)
+- [ ] Báo rõ khi trình duyệt không hỗ trợ (Safari cũ, trình duyệt nhúng trong app Facebook/Zalo)
+
+### Hạ tầng & Docker — phần dễ sai nhất
+- [ ] **HTTPS trở thành bắt buộc, không còn là tuỳ chọn.** `getUserMedia` và `getDisplayMedia` chỉ chạy trong secure context. `localhost` được miễn, nhưng test qua IP LAN là hỏng ngay → **kéo phần TLS của Phase 6 lên làm trước phase này**
+- [ ] Media **không** đi qua nginx. Nginx chỉ còn proxy signaling (`/ws`) và REST — không cấu hình proxy cho cổng media
+- [ ] Dùng **UDP mux một cổng** của LiveKit (ví dụ `7881/udp`). **Không** map dải cổng UDP rộng trong Docker: `docker-proxy` sinh một tiến trình cho mỗi cổng, khởi động cực chậm hoặc treo luôn
+- [ ] Không dùng `network_mode: host` cho SFU — mất cách ly mạng, và **không chạy được trên Docker Desktop Windows**, tức là hỏng luôn môi trường dev
+- [ ] Bật `use_external_ip` cho SFU khi chạy sau NAT (VPS, cloud)
+- [ ] Mở UDP ở firewall / security group; nhiều nhà cung cấp chặn UDP mặc định
+- [ ] Đặt `deploy.resources.limits` riêng cho SFU — nó ăn CPU và băng thông khác hẳn `api`
+- [ ] Thêm SFU và TURN vào stack giám sát Phase 6: băng thông vào/ra, số phòng, số người, tỉ lệ relay
+
+### Ước lượng băng thông — tính trước khi mở cho toàn công ty
+
+Băng thông **gửi đi của server tăng theo bình phương** số người trong phòng:
+
+| Số người | Server nhận | Server gửi (không tối ưu) | Server gửi (có simulcast) |
+|---|---|---|---|
+| 4 | 6 Mbps | 18 Mbps | khoảng 6 Mbps |
+| 10 | 15 Mbps | **135 Mbps** | khoảng 35 Mbps |
+| 16 | 24 Mbps | **360 Mbps** | khoảng 70 Mbps |
+
+*Giả định 720p tương đương 1.5 Mbps mỗi luồng. Cột simulcast giả định chỉ 1–2 người hiện ở độ nét cao, còn lại 180p.*
+
+Kết luận thực dụng: **simulcast không phải là tối ưu hoá, nó là điều kiện để chạy được.** Làm ngay từ đầu, đừng để dành.
+
+### Nghiệm thu Phase 7
+- [ ] Gọi 1-1 giữa hai máy khác mạng (một WiFi, một 4G) — thông, hình và tiếng ổn định
+- [ ] Gọi nhóm 6 người qua SFU — không ai vỡ hình, CPU máy client không quá tải
+- [ ] Trình chiếu màn hình giữa lúc đang gọi — chữ trên màn hình đọc được rõ
+- [ ] Gọi được từ **mạng công ty chặn UDP** — chứng minh fallback TURN qua TCP/443 hoạt động
+- [ ] Đổi WiFi sang 4G giữa cuộc gọi — ICE restart chạy, cuộc gọi không rớt
+- [ ] `docker compose up -d --scale api=3` — signaling vẫn đúng khi hai người nối vào hai instance khác nhau
+
+---
+
 ## 6. Thứ tự ưu tiên và phụ thuộc
 
 ```
 Phase 0  ──>  Phase 1  ──┬──>  Phase 2 (Dự án/Task)
                          │
-                         ├──>  Phase 5 (Realtime)  ──>  Phase 3 (Chấm công)
-                         │                                    │
-                         └────────────────────────────────────┴──>  Phase 4 (Lương)
+                         ├──>  Phase 5 (Realtime)  ──┬──>  Phase 3 (Chấm công)  ──┐
+                         │                           │                            │
+                         │                           └──>  Phase 7 (Gọi video)    │
+                         │                                                        │
+                         └────────────────────────────────────────────────────────┴──>  Phase 4 (Lương)
 ```
 
 Toàn bộ các phase đều chạy trong Docker ngay từ Phase 0 — không có giai đoạn nào code chạy trực tiếp trên máy rồi mới "đóng gói vào container sau". Việc đóng gói muộn là nguồn gốc của phần lớn lỗi "chạy trên máy tôi thì được".
@@ -621,6 +758,8 @@ Toàn bộ các phase đều chạy trong Docker ngay từ Phase 0 — không c�
 - Hoặc: tạm dùng check-in thủ công ở Phase 3, chuyển sang presence tự động khi Phase 5 xong.
 
 Phase 4 (lương) cần dữ liệu công từ Phase 3 để tính lương theo giờ; nếu chỉ tính lương cố định thì có thể làm độc lập.
+
+**Phase 7 (gọi video) có hai phụ thuộc, một trong số đó dễ bị bỏ sót:** hub WebSocket của Phase 5 làm kênh signaling, và **phần TLS vốn nằm ở Phase 6**. `getUserMedia` và `getDisplayMedia` chỉ chạy trong secure context, nên nếu làm Phase 7 trước Phase 6 thì phải kéo riêng phần bật HTTPS lên trước — không thì ngay khi test qua IP LAN là hỏng.
 
 ---
 
@@ -641,6 +780,10 @@ Phase 4 (lương) cần dữ liệu công từ Phase 3 để tính lương theo 
 | Mất dữ liệu do xoá nhầm volume (`docker compose down -v`) | Không bao giờ dùng cờ `-v` ở production; backup tự động hằng ngày và có diễn tập khôi phục. |
 | Image production phình to, deploy chậm | Multi-stage build, `.dockerignore` đầy đủ, kiểm tra kích thước image trong CI và đặt ngưỡng cảnh báo. |
 | Monolith dần thành mớ hỗn độn, module gọi chéo lung tung | Module chỉ gọi nhau qua tầng usecase. Thêm `go-arch-lint` vào CI để chặn import sai tầng ngay từ Phase 0. |
+| Gọi video không kết nối được ở mạng công ty chặn UDP | Bắt buộc có TURN kèm listener TCP/443. Kiểm chứng trên mạng công ty thật ngay từ bước đầu của Phase 7, không để cuối phase mới phát hiện. |
+| Băng thông SFU phình theo bình phương số người trong phòng | Bật simulcast ngay từ đầu (điều kiện để chạy được, không phải tối ưu hoá), giới hạn số người mỗi phòng, chỉ hiện người đang nói ở độ nét cao. |
+| Map dải cổng UDP rộng trong Docker làm container khởi động treo | Dùng UDP mux một cổng của LiveKit. Không dùng `network_mode: host` vì hỏng môi trường dev trên Docker Desktop Windows. |
+| Ghi hình cuộc gọi vi phạm quyền riêng tư nhân viên | Xin đồng ý trước khi ghi và hiện cảnh báo cho cả phòng; phân quyền xem ở tầng usecase; audit log mỗi lượt xem; tự xoá theo chính sách lưu trữ. |
 | Một module lỗi làm sập cả `api` | Middleware `Recoverer` bắt panic ở tầng HTTP; worker có dead-letter queue cho message lỗi. |
 | Job nặng (tính lương, xuất Excel) làm nghẽn request HTTP | Đẩy sang `worker` qua RabbitMQ, `api` trả về ngay và báo kết quả qua thông báo. |
 
