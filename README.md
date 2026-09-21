@@ -2,7 +2,7 @@
 
 Hệ thống quản trị nội bộ doanh nghiệp: nhân sự, phòng ban, dự án, giao việc, chấm công, lương, cùng thông báo và chat thời gian thực.
 
-**Trạng thái:** Phase 0, 1, 2 và 3 đã xong và chạy được (kèm hạ tầng WebSocket của Phase 5). Đang chuẩn bị Phase 4.
+**Trạng thái:** Phase 0 → 4 đã xong và chạy được (kèm hạ tầng WebSocket của Phase 5). Đang chuẩn bị phần chat của Phase 5.
 
 ## Kiến trúc
 
@@ -87,8 +87,8 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 | 1 | Xác thực JWT, phân quyền RBAC, nhân viên, phòng ban, chức vụ | Xong |
 | 2 | Dự án, giao việc, bảng Kanban, timeline, báo cáo | Xong |
 | 3 | Chấm công theo presence realtime, nghỉ phép | Xong |
-| 4 | Lương, phiếu lương | Kế tiếp |
-| 5 | WebSocket: thông báo và chat | Hạ tầng WS xong, chat chưa |
+| 4 | Lương, phiếu lương, báo cáo chi phí nhân sự | Xong |
+| 5 | WebSocket: thông báo và chat | Hạ tầng WS xong · chat kế tiếp |
 | 6 | Hoàn thiện, bảo mật, giám sát, vận hành | |
 | 7 | Gọi video 1-1 và nhóm, trình chiếu màn hình (WebRTC + SFU) | |
 

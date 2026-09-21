@@ -141,6 +141,24 @@ const (
 	PermLeaveManage  = "leave:manage"
 
 	PermScheduleManage = "schedule:manage"
+
+	// Phase 4. Lương là dữ liệu nhạy cảm nhất trong hệ thống, nên mô hình
+	// quyền ở đây chặt hơn mọi module khác — kể cả trưởng phòng cũng KHÔNG
+	// xem được lương nhân viên phòng mình.
+	//
+	// PermPayrollManage (chạy tính lương) tách khỏi PermPayrollApprove
+	// (khoá kỳ, xác nhận đã trả) là có chủ ý: người chạy tính lương không
+	// được tự chốt kỳ của chính mình làm. Nguyên tắc bốn mắt chỉ có tác
+	// dụng khi hai quyền nằm ở hai người.
+	PermPayrollReadOwn = "payroll:read_own"
+	PermPayrollReadAll = "payroll:read_all"
+	PermPayrollManage  = "payroll:manage"
+	PermPayrollApprove = "payroll:approve"
+
+	PermSalaryRead   = "salary:read"
+	PermSalaryManage = "salary:manage"
+
+	PermAuditRead = "audit:read"
 )
 
 // Actor là danh tính của người đang thực hiện request.

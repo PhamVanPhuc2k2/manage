@@ -33,6 +33,7 @@ import (
 	ucatt "github.com/PhamVanPhuc2k2/manage/internal/usecase/attendance"
 	ucauth "github.com/PhamVanPhuc2k2/manage/internal/usecase/auth"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
+	ucpay "github.com/PhamVanPhuc2k2/manage/internal/usecase/payroll"
 	ucproject "github.com/PhamVanPhuc2k2/manage/internal/usecase/project"
 	ucsystem "github.com/PhamVanPhuc2k2/manage/internal/usecase/system"
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
@@ -161,6 +162,17 @@ func run() error {
 	adjustmentRepo := repopg.NewAdjustmentRepository(db)
 	leaveRepo := repopg.NewLeaveRepository(db)
 	balanceRepo := repopg.NewBalanceRepository(db)
+
+	payrollSettingsRepo := repopg.NewPayrollSettingsRepository(db)
+	salaryStructureRepo := repopg.NewSalaryStructureRepository(db)
+	payrollPeriodRepo := repopg.NewPayrollPeriodRepository(db)
+	payslipRepo := repopg.NewPayslipRepository(db)
+	auditRepo := repopg.NewAuditRepository(db)
+
+	// Cổng hẹp để module lương đọc ngày công. Đọc thẳng bảng
+	// attendance_days chứ không gọi qua usecase/attendance — hai tầng
+	// nghiệp vụ import chéo nhau là đường nhanh nhất tới phụ thuộc vòng.
+	attendanceLookup := repopg.NewAttendanceLookup(db)
 	realtimeBus := repomq.NewRealtimeBus(mqClient)
 
 	// Cổng hẹp để module dự án tra cứu nhân viên. Module dự án chỉ biết
@@ -226,6 +238,14 @@ func run() error {
 		scheduleRepo, holidayRepo, attSessionRepo, attDayRepo,
 		adjustmentRepo, leaveRepo, balanceRepo,
 		employeeLookup, presenceStore, hrUC,
+	)
+
+	payrollUC := ucpay.NewUsecase(
+		payrollSettingsRepo, salaryStructureRepo, payrollPeriodRepo,
+		payslipRepo, auditRepo,
+		attendanceLookup, employeeLookup, hrUC,
+		repomq.NewPayrollJobs(mqClient),
+		mailer,
 	)
 
 	// Nối hr với auth: vô hiệu hoá nhân viên phải cắt luôn phiên đăng nhập
@@ -294,6 +314,7 @@ func run() error {
 			Project:    handler.NewProjectHandler(projectUC),
 			Task:       handler.NewTaskHandler(projectUC),
 			Attendance: handler.NewAttendanceHandler(attendanceUC),
+			Payroll:    handler.NewPayrollHandler(payrollUC),
 			WS: deliveryws.NewHandler(
 				hub, jwtMgr, sessionStore, cfg.CORSAllowedOrigins),
 		}),

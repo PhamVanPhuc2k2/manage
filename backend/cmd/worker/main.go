@@ -27,6 +27,7 @@ import (
 	reporedis "github.com/PhamVanPhuc2k2/manage/internal/repository/redis"
 	ucatt "github.com/PhamVanPhuc2k2/manage/internal/usecase/attendance"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
+	ucpay "github.com/PhamVanPhuc2k2/manage/internal/usecase/payroll"
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
 	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
@@ -91,6 +92,10 @@ func run() error {
 	mailSender := consumer.NewMailSender(
 		cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom, cfg.SMTPUser, cfg.SMTPPass)
 
+	// Máy tính lương chạy Ở ĐÂY, không ở api: kỳ lương của công ty vài trăm
+	// người mất vài chục giây, quá lâu cho một request HTTP.
+	payrollConsumer := consumer.NewPayrollConsumer(buildPayrollUsecase(db, mqClient))
+
 	// Đăng ký handler cho từng loại job.
 	// Phase sau chỉ cần thêm dòng vào đây.
 	jobs := map[string]consumer.HandlerFunc{
@@ -99,6 +104,11 @@ func run() error {
 		repomq.JobSendSuspiciousActivity: mailSender.HandleSuspiciousActivity,
 		repomq.JobSendWelcome:            mailSender.HandleWelcome,
 		repomq.JobSendLoginOTP:           mailSender.HandleLoginOTP,
+		repomq.JobSendPayslip:            mailSender.HandlePayslip,
+
+		// Tính lương. Job này chịu được chạy lại: ReplaceForPeriod xoá sạch
+		// phiếu cũ rồi ghi bộ mới trong một giao dịch.
+		repomq.JobCalculatePayroll: payrollConsumer.HandleCalculate,
 
 		// Sự kiện module dự án. Phase 2 mới ghi log; Phase 5 sẽ sinh thông
 		// báo thật từ chính các message này. Đăng ký ngay để sự kiện không
@@ -235,5 +245,33 @@ func buildAttendanceUsecase(db *postgres.DB, rdb *goredis.Client) *ucatt.Usecase
 		repopg.NewEmployeeLookup(db),
 		reporedis.NewPresenceStore(rdb),
 		hrUC,
+	)
+}
+
+// buildPayrollUsecase lắp ráp module lương cho worker.
+//
+// Truyền nil cho JobPublisher: worker KHÔNG đẩy việc cho chính mình. Nếu
+// truyền vào, một job tính lương lỗi có thể tự đẩy lại và tạo vòng lặp.
+func buildPayrollUsecase(db *postgres.DB, mqClient *rabbitmq.Client) *ucpay.Usecase {
+	companyRepo := repopg.NewCompanyRepository(db)
+	deptRepo := repopg.NewDepartmentRepository(db)
+	posRepo := repopg.NewPositionRepository(db)
+	empRepo := repopg.NewEmployeeRepository(db)
+	userRepo := repopg.NewUserRepository(db)
+	roleRepo := repopg.NewRoleRepository(db)
+
+	hrUC := uchr.NewUsecase(companyRepo, deptRepo, posRepo, empRepo, userRepo, roleRepo, nil)
+
+	return ucpay.NewUsecase(
+		repopg.NewPayrollSettingsRepository(db),
+		repopg.NewSalaryStructureRepository(db),
+		repopg.NewPayrollPeriodRepository(db),
+		repopg.NewPayslipRepository(db),
+		repopg.NewAuditRepository(db),
+		repopg.NewAttendanceLookup(db),
+		repopg.NewEmployeeLookup(db),
+		hrUC,
+		nil,
+		repomq.NewMailer(mqClient),
 	)
 }

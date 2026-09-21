@@ -45,6 +45,7 @@ type Deps struct {
 	Project    *handler.ProjectHandler
 	Task       *handler.TaskHandler
 	Attendance *handler.AttendanceHandler
+	Payroll    *handler.PayrollHandler
 
 	// WS có thể nil trong test. Khi nil, route /ws đơn giản không tồn tại.
 	WS http.Handler
@@ -413,6 +414,77 @@ func New(d Deps) http.Handler {
 					Post("/", d.Attendance.CreateHoliday)
 				r.With(appmw.RequirePermission(domainauth.PermLeaveManage)).
 					Delete("/{id}", d.Attendance.DeleteHoliday)
+			})
+
+			// --- Lương ---
+			//
+			// Lương là dữ liệu nhạy cảm nhất hệ thống. Ba điểm khác biệt so
+			// với các module trên:
+			//
+			//   - payroll:read_own chỉ cho xem phiếu CỦA CHÍNH MÌNH. Không
+			//     có ngoại lệ theo phòng ban như chấm công — trưởng phòng
+			//     KHÔNG xem được lương nhân viên phòng mình.
+			//   - payroll:manage (chạy tính lương) tách khỏi payroll:approve
+			//     (khoá kỳ, xác nhận đã trả): nguyên tắc bốn mắt.
+			//   - Mọi lượt XEM đều được ghi vào audit_logs, không chỉ lượt
+			//     sửa. Rò rỉ bảng lương thường là do đọc.
+			r.Route("/payroll", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadAll)).
+					Get("/periods", d.Payroll.ListPeriods)
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadAll)).
+					Get("/periods/{id}", d.Payroll.GetPeriod)
+				r.With(appmw.RequirePermission(domainauth.PermPayrollManage)).
+					Post("/periods", d.Payroll.CreatePeriod)
+				r.With(appmw.RequirePermission(domainauth.PermPayrollManage)).
+					Post("/periods/{id}/calculate", d.Payroll.Calculate)
+				// Đổi trạng thái kỳ cần quyền RIÊNG: người chạy tính lương
+				// không được tự chốt kỳ mình vừa chạy.
+				r.With(appmw.RequirePermission(domainauth.PermPayrollApprove)).
+					Put("/periods/{id}/status", d.Payroll.ChangeStatus)
+
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadAll)).
+					Get("/periods/{id}/cost-by-department", d.Payroll.CostByDepartment)
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadAll)).
+					Get("/cost-by-month", d.Payroll.CostByMonth)
+
+				// --- Phiếu lương ---
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadAll)).
+					Get("/payslips", d.Payroll.ListPayslips)
+				// Phiếu của chính mình: ai cũng xem được.
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadOwn)).
+					Get("/payslips/my", d.Payroll.MyPayslips)
+				// Usecase tự kiểm tra là phiếu của mình hay của người khác,
+				// nên route chỉ cần quyền tối thiểu.
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadOwn)).
+					Get("/payslips/{id}", d.Payroll.GetPayslip)
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadOwn)).
+					Get("/payslips/{id}/document", d.Payroll.Document)
+				r.With(appmw.RequirePermission(domainauth.PermPayrollManage)).
+					Put("/payslips/{id}", d.Payroll.UpdatePayslip)
+
+				// --- Tham số tính lương ---
+				r.With(appmw.RequirePermission(domainauth.PermSalaryRead)).
+					Get("/settings", d.Payroll.GetSettings)
+				r.With(appmw.RequirePermission(domainauth.PermSalaryManage)).
+					Put("/settings", d.Payroll.UpdateSettings)
+
+				// --- Nhật ký truy cập dữ liệu nhạy cảm ---
+				r.With(appmw.RequirePermission(domainauth.PermAuditRead)).
+					Get("/audit", d.Payroll.ListAudit)
+			})
+
+			// --- Cấu hình lương theo nhân viên ---
+			//
+			// Nằm dưới /employees vì đó là thứ nó mô tả. Xem cấu hình của
+			// CHÍNH MÌNH luôn được (usecase kiểm tra), nên route chỉ cần
+			// quyền đọc phiếu lương của mình.
+			r.Route("/employees/{employeeID}/salary", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadOwn)).
+					Get("/", d.Payroll.GetStructure)
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadOwn)).
+					Get("/history", d.Payroll.StructureHistory)
+				r.With(appmw.RequirePermission(domainauth.PermSalaryManage)).
+					Put("/", d.Payroll.SetStructure)
 			})
 
 			// --- Báo cáo khối lượng việc theo nhân viên ---

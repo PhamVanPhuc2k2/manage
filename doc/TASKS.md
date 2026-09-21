@@ -1,6 +1,6 @@
 # Hệ thống Quản lý Công ty — Danh sách nhiệm vụ
 
-> Tài liệu lộ trình triển khai. Cập nhật lần cuối: 2026-09-21 (Phase 3 xong)
+> Tài liệu lộ trình triển khai. Cập nhật lần cuối: 2026-09-21 (Phase 4 xong)
 > Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong
 >
 > Hướng dẫn chi tiết: [PHASE-0-SETUP.md](./PHASE-0-SETUP.md) · [PHASE-1-SETUP.md](./PHASE-1-SETUP.md)
@@ -510,27 +510,53 @@ Lệnh chạy:
 
 **Mục tiêu:** Tạo bảng lương theo kỳ, sinh phiếu lương, xuất file.
 
+> **Trạng thái: đã xong.** Kiểm chứng bằng `scripts/smoke-payroll.sh`
+> (51 mục, đạt toàn bộ, chạy lại được) và 11 nhóm unit test cho máy tính
+> lương — bộ test đầu tiên của dự án.
+>
+> Bốn điểm đáng ghi nhớ:
+>
+> - **Tiền lưu bằng BIGINT đơn vị đồng, không dùng số thực.** Lương Việt
+>   Nam không có đơn vị nhỏ hơn đồng, và số thực tích luỹ sai số — bảng
+>   lương lệch một đồng là bảng lương sai.
+> - **Máy tính lương là hàm THUẦN KHIẾT.** Không chạm database, không đọc
+>   đồng hồ. Đây là đoạn code kế toán sẽ chất vấn từng dòng, nên nó phải
+>   đọc được như một công thức và kiểm chứng được bằng số cụ thể.
+> - **Phiếu lương là ẢNH CHỤP, không phải khung nhìn tính lại.** Lương đã
+>   trả thì con số phải đứng yên vĩnh viễn, kể cả khi cấu hình lương, biểu
+>   thuế hay dữ liệu công thay đổi sau đó.
+> - **Ghi nhật ký MỌI lượt XEM, không chỉ lượt sửa.** Rò rỉ bảng lương
+>   thường là do đọc chứ không phải do ghi.
+>
+> **Phần còn lại cần bạn quyết:** sinh PDF Ở SERVER. Phiếu lương hiện là
+> một tài liệu HTML hoàn chỉnh có CSS in ấn — "In / Lưu thành PDF" của trình
+> duyệt cho ra PDF đúng như nhìn thấy, và cùng HTML đó dùng luôn làm nội dung
+> email. Sinh PDF ở server cần NHÚNG một font TTF hỗ trợ Latin Extended
+> Additional (ạ ả ấ ầ...); bộ font lõi của PDF chỉ có Latin-1 và mọi dấu
+> tiếng Việt sẽ thành ô vuông. Thêm một tệp font vào repo là quyết định về
+> giấy phép và dung lượng, nên nó phải là lựa chọn có ý thức của chủ dự án.
+
 ### Backend
-- [ ] Migration: `salary_structures`, `payroll_periods`, `payslips`, `payslip_items`
-- [ ] Cấu hình lương theo nhân viên, có hiệu lực theo khoảng thời gian (lịch sử tăng lương)
-- [ ] Định nghĩa thành phần lương: lương cơ bản, phụ cấp, thưởng, khấu trừ, BHXH, thuế TNCN
-- [ ] Bảng thuế TNCN luỹ tiến cấu hình được (không hard-code)
-- [ ] Tạo kỳ lương, lấy dữ liệu công từ `attendance_days`
-- [ ] Máy tính lương: chạy qua từng nhân viên, sinh `payslips` + `payslip_items`
-- [ ] Chạy tính lương trong worker RabbitMQ (kỳ lương lớn không được chặn HTTP request)
-- [ ] Vòng đời kỳ lương: `draft → locked → paid`; đã khoá thì không sửa được
-- [ ] Sinh phiếu lương PDF
-- [ ] Gửi phiếu lương qua email (hàng đợi worker)
-- [ ] Kiểm soát truy cập nghiêm ngặt: chỉ HR, kế toán, giám đốc và chính chủ xem được
-- [ ] Ghi `audit_logs` cho mọi thao tác xem/sửa dữ liệu lương
-- [ ] Mã hoá hoặc hạn chế hiển thị thông tin tài khoản ngân hàng
+- [x] Migration: `salary_structures`, `payroll_periods`, `payslips`, `payslip_items`
+- [x] Cấu hình lương theo nhân viên, có hiệu lực theo khoảng thời gian (lịch sử tăng lương)
+- [x] Định nghĩa thành phần lương: lương cơ bản, phụ cấp, thưởng, khấu trừ, BHXH, thuế TNCN
+- [x] Bảng thuế TNCN luỹ tiến cấu hình được (không hard-code)
+- [x] Tạo kỳ lương, lấy dữ liệu công từ `attendance_days`
+- [x] Máy tính lương: chạy qua từng nhân viên, sinh `payslips` + `payslip_items`
+- [x] Chạy tính lương trong worker RabbitMQ (kỳ lương lớn không được chặn HTTP request)
+- [x] Vòng đời kỳ lương: `draft → locked → paid`; đã khoá thì không sửa được
+- [ ] Sinh phiếu lương PDF ở server (xem ghi chú trạng thái)
+- [x] Gửi phiếu lương qua email (hàng đợi worker)
+- [x] Kiểm soát truy cập nghiêm ngặt: chỉ HR, kế toán, giám đốc và chính chủ xem được
+- [x] Ghi `audit_logs` cho mọi thao tác xem/sửa dữ liệu lương
+- [x] Mã hoá hoặc hạn chế hiển thị thông tin tài khoản ngân hàng
 
 ### Frontend
-- [ ] Trang cấu hình lương nhân viên (chỉ HR)
-- [ ] Trang danh sách kỳ lương, tạo kỳ mới
-- [ ] Bảng lương chi tiết theo kỳ, có thể sửa khi còn `draft`
-- [ ] Trang phiếu lương cá nhân, tải PDF
-- [ ] Biểu đồ chi phí nhân sự theo phòng ban / theo tháng
+- [x] Trang cấu hình lương nhân viên (chỉ HR)
+- [x] Trang danh sách kỳ lương, tạo kỳ mới
+- [x] Bảng lương chi tiết theo kỳ, có thể sửa khi còn `draft`
+- [x] Trang phiếu lương cá nhân, tải PDF
+- [x] Biểu đồ chi phí nhân sự theo phòng ban / theo tháng
 
 ---
 

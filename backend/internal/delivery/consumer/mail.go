@@ -194,3 +194,63 @@ Hệ thống Quản lý Công ty`, name, email, pass)
 	log.Info().Str("to", email).Msg("đã gửi mail chào mừng")
 	return nil
 }
+
+// sendHTML gửi mail có nội dung HTML.
+//
+// Tách khỏi send() thay vì thêm tham số: mọi mail hiện có đều là văn bản
+// thuần, và đổi chữ ký của send() sẽ buộc phải sửa cả bốn chỗ gọi để thêm
+// một tham số mà chúng không dùng tới.
+func (s *MailSender) sendHTML(to, subject, htmlBody string) error {
+	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+
+	msg := strings.Join([]string{
+		"From: " + s.from,
+		"To: " + to,
+		"Subject: " + subject,
+		"MIME-Version: 1.0",
+		"Content-Type: text/html; charset=UTF-8",
+		"",
+		htmlBody,
+	}, "\r\n")
+
+	var auth smtp.Auth
+	if s.user != "" {
+		auth = smtp.PlainAuth("", s.user, s.pass, s.host)
+	}
+	return smtp.SendMail(addr, auth, s.from, []string{to}, []byte(msg))
+}
+
+// HandlePayslip gửi phiếu lương qua email.
+//
+// Nội dung phiếu lương nằm TRONG payload của message, nên tuyệt đối không
+// log payload này — ở đây chỉ log địa chỉ nhận và độ dài nội dung.
+func (s *MailSender) HandlePayslip(ctx context.Context, job domainsystem.Job) error {
+	log := logger.FromContext(ctx)
+
+	email, _ := job.Payload["email"].(string)
+	name, _ := job.Payload["name"].(string)
+	subject, _ := job.Payload["subject"].(string)
+	body, _ := job.Payload["html"].(string)
+
+	if email == "" || body == "" {
+		// Thiếu dữ liệu là lỗi của bên gửi, không phải lỗi tạm thời.
+		// Trả nil để message không quay lại queue vô hạn.
+		log.Warn().Msg("bỏ qua job gửi phiếu lương: thiếu email hoặc nội dung")
+		return nil
+	}
+	if subject == "" {
+		subject = "Phiếu lương"
+	}
+
+	if err := s.sendHTML(email, subject, body); err != nil {
+		return fmt.Errorf("gửi phiếu lương: %w", err)
+	}
+
+	log.Info().
+		Str("to", email).
+		Str("name", name).
+		Int("size", len(body)).
+		Msg("đã gửi phiếu lương")
+
+	return nil
+}
