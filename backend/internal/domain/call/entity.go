@@ -122,6 +122,45 @@ const (
 )
 
 // =========================================================================
+// TÊN SỰ KIỆN REALTIME
+// =========================================================================
+
+// Vòng đời một cuộc gọi, nhìn từ phía bản tin:
+//
+//	người gọi          hub              người nhận
+//	   │  POST /calls   │                    │
+//	   │─────────────►│   call.incoming    │
+//	   │                │─────────────────►│  (MỌI thiết bị)
+//	   │  call.ringing  │                    │
+//	   │◄──────────────│                    │
+//	   │                │   POST /accept     │
+//	   │  call.accepted │◄─────────────────│
+//	   │◄──────────────│   call.cancelled   │
+//	   │                │─────────────────►│  (thiết bị CÒN LẠI)
+//
+// call.cancelled gửi tới các thiết bị khác của chính người nhận là phần hay
+// bị quên nhất: không có nó thì điện thoại vẫn đổ chuông sau khi người ta
+// đã bắt máy trên máy tính.
+const (
+	// EventIncoming: có cuộc gọi tới, đổ chuông.
+	EventIncoming = "call.incoming"
+	// EventRinging: báo cho người gọi rằng đầu kia đang đổ chuông.
+	EventRinging = "call.ringing"
+	// EventAccepted: có người bắt máy.
+	EventAccepted = "call.accepted"
+	// EventRejected: người nhận từ chối, hoặc hệ thống từ chối thay vì họ
+	// đang bận cuộc khác.
+	EventRejected = "call.rejected"
+	// EventCancelled: lời mời không còn hiệu lực — người gọi cúp trước, hết
+	// giờ, hoặc chính người nhận đã bắt máy ở thiết bị khác.
+	EventCancelled = "call.cancelled"
+	// EventEnded: cuộc gọi đã kết thúc.
+	EventEnded = "call.ended"
+	// EventParticipant: có người vào hoặc rời phòng giữa cuộc gọi.
+	EventParticipant = "call.participant"
+)
+
+// =========================================================================
 // ENTITY
 // =========================================================================
 

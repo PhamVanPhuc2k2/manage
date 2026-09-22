@@ -79,44 +79,16 @@ const (
 	TypeChatBadge = "chat.badge"
 )
 
-// =========================================================================
-// BẢN TIN GỌI ĐIỆN
-// =========================================================================
+// Các loại bản tin GỌI ĐIỆN chiều server → client KHÔNG khai ở đây.
+//
+// Chúng nằm trong internal/domain/call, theo đúng tiền lệ của chat: package
+// realtime giữ các loại DÙNG CHUNG (welcome, pong, error, presence) còn tên
+// sự kiện nghiệp vụ thuộc về module sinh ra chúng. Nhờ vậy package này
+// không phải đổi mỗi lần một module thêm một loại thông báo mới.
+//
+// Riêng call.sdp và call.ice ở trên là chiều ngược lại (client → server) nên
+// hub phải nhận diện được chúng — giống heartbeat và ping.
 
-// Vòng đời một cuộc gọi, nhìn từ phía bản tin:
-//
-//	người gọi          hub              người nhận
-//	   │  POST /calls   │                    │
-//	   │─────────────►│   call.incoming    │
-//	   │                │─────────────────►│  (MỌI thiết bị)
-//	   │  call.ringing  │                    │
-//	   │◄──────────────│                    │
-//	   │                │   POST /accept     │
-//	   │  call.accepted │◄─────────────────│
-//	   │◄──────────────│   call.cancelled   │
-//	   │                │─────────────────►│  (thiết bị CÒN LẠI)
-//
-// call.cancelled gửi tới các thiết bị khác của chính người nhận là phần hay
-// bị quên nhất: không có nó thì điện thoại vẫn đổ chuông sau khi người ta
-// đã bắt máy trên máy tính.
-const (
-	// TypeCallIncoming: có cuộc gọi tới, đổ chuông.
-	TypeCallIncoming = "call.incoming"
-	// TypeCallRinging: báo cho người gọi rằng đầu kia đang đổ chuông.
-	TypeCallRinging = "call.ringing"
-	// TypeCallAccepted: có người bắt máy.
-	TypeCallAccepted = "call.accepted"
-	// TypeCallRejected: người nhận từ chối, hoặc hệ thống từ chối thay vì họ
-	// đang bận cuộc khác.
-	TypeCallRejected = "call.rejected"
-	// TypeCallCancelled: lời mời không còn hiệu lực — người gọi cúp trước,
-	// hết giờ, hoặc chính người nhận đã bắt máy ở thiết bị khác.
-	TypeCallCancelled = "call.cancelled"
-	// TypeCallEnded: cuộc gọi đã kết thúc.
-	TypeCallEnded = "call.ended"
-	// TypeCallParticipant: có người vào hoặc rời phòng giữa cuộc gọi.
-	TypeCallParticipant = "call.participant"
-)
 
 // HeartbeatPayload là nội dung bản tin nhịp tim.
 //
