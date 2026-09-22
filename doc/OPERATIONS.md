@@ -138,7 +138,30 @@ IMAGE_TAG=<git-sha> bash scripts/deploy.sh
 IMAGE_TAG=<git-sha-cũ> bash scripts/rollback.sh
 
 # --- Scale ---
-docker compose up -d --scale api=3 --scale worker=4
+#
+# Trên máy dev phải thêm docker-compose.scale.yml: override công bố cổng cố
+# định 8080:8080, mà một cổng chỉ gắn được cho một container — không có tệp
+# đó thì bản thứ hai chết với "Bind for 0.0.0.0:8080 failed: port is already
+# allocated". Bỏ cổng đi thì gọi api qua nginx ở http://localhost:8088.
+docker compose -f docker-compose.yml -f docker-compose.override.yml \
+  -f docker-compose.scale.yml up -d --scale api=3 --scale worker=2
+
+# Trên máy chủ thật không có override nên không cần tệp scale:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  up -d --scale api=3 --scale worker=4
+
+# BẮT BUỘC sau MỌI lần scale: nạp lại nginx.
+#
+# nginx phân giải tên `api` đúng một lần lúc nạp cấu hình và giữ danh sách IP
+# đó mãi. Không nạp lại thì các bản vừa thêm không nhận được request nào, mà
+# cũng chẳng có lỗi nào báo ra — chỉ là tiền mua máy không đến đâu.
+docker compose exec nginx nginx -s reload
+
+# Kiểm chứng lưu lượng chia đều thật (request_id mang tên máy của container):
+for i in $(seq 1 30); do
+  curl -s http://localhost:8088/api/v1/ping \
+    | grep -o '"request_id":"[^"]*"' | cut -d'"' -f4 | cut -d/ -f1
+done | sort | uniq -c
 
 # --- Migration ---
 docker compose run --rm migrate                                    # tiến

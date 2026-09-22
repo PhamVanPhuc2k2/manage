@@ -1,0 +1,40 @@
+# Cho phép chạy nhiều bản api/worker trên máy dev.
+#
+# VÌ SAO CẦN TỆP RIÊNG
+#
+# docker-compose.override.yml công bố cổng cố định `8080:8080` để gọi thẳng
+# api lúc phát triển — các bộ smoke và curl tay đều dựa vào đó. Nhưng một
+# cổng máy chủ chỉ gắn được cho MỘT container, nên `--scale api=3` chết ngay
+# ở container thứ hai:
+#
+#     Bind for 0.0.0.0:8080 failed: port is already allocated
+#
+# Tệp này gỡ phần công bố cổng đi. Khi đó api chỉ còn gọi được QUA NGINX ở
+# http://localhost:8088 — và đó chính là đường mà production đi, nên thử
+# nghiệm ở đây phản ánh đúng thực tế hơn.
+#
+# CÁCH DÙNG
+#
+#     docker compose -f docker-compose.yml -f docker-compose.override.yml \
+#       -f docker-compose.scale.yml up -d --scale api=3 --scale worker=2
+#
+# Phải liệt kê cả override: có cờ -f tường minh thì Docker không tự nạp nó.
+#
+# LƯU Ý
+#
+# Giữ nguyên `container_name` là không được — Docker không đặt được cùng một
+# tên cho ba container. Vì vậy cả dự án này không dùng container_name ở đâu
+# cả; tên do Compose tự sinh (manage-api-1, manage-api-2, ...).
+
+services:
+  api:
+    # PHẢI dùng !reset, không phải `ports: []`.
+    #
+    # Với ports, expose, dns, dns_search, external_links và tmpfs, Compose
+    # NỐI hai danh sách lại chứ không thay thế. Một danh sách rỗng vì vậy
+    # không xoá được gì cả — cổng của override vẫn ở nguyên và container thứ
+    # hai vẫn chết vì đụng cổng. Chỉ thẻ !reset mới gỡ hẳn khoá đó đi.
+    ports: !reset []
+
+  worker:
+    ports: !reset []

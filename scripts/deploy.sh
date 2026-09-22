@@ -103,6 +103,24 @@ log "Khởi động lại frontend..."
 $COMPOSE up -d --no-deps frontend
 ok "frontend đã khởi động lại"
 
+# Nạp lại nginx SAU khi đã thay xong toàn bộ api và frontend.
+#
+# BẮT BUỘC, không phải cho chắc. nginx bản mã nguồn mở phân giải tên trong
+# khối `upstream` ĐÚNG MỘT LẦN lúc nạp cấu hình, rồi giữ nguyên danh sách IP
+# đó mãi. Vòng thay container ở trên cấp IP mới cho mỗi api, nên sau khi
+# chạy xong nginx vẫn đang trỏ tới những địa chỉ không còn ai ở đó — toàn bộ
+# lưu lượng thành 502 cho tới lần nạp lại định kỳ sáu tiếng sau.
+#
+# Đây không phải suy đoán: đo trên stack thật, sau khi scale lên ba bản thì
+# cả ba mươi request liên tiếp vẫn vào đúng một container, và chỉ chia đều
+# 10/10/10 sau khi nạp lại nginx.
+#
+# `nginx -s reload` giữ các worker cũ sống cho tới khi kết nối hiện có đóng
+# hết, nên WebSocket đang mở được rút dần chứ không bị cắt ngang.
+log "Nạp lại nginx để nhận địa chỉ mới của api..."
+$COMPOSE exec -T nginx nginx -s reload || die "không nạp lại được nginx"
+ok "nginx đã nạp lại"
+
 # ------------------------------------------------------------ nghiệm thu
 log "Kiểm tra sau triển khai..."
 
