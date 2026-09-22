@@ -689,21 +689,26 @@ Lệnh chạy:
 >
 > | Gói | Coverage | | Gói | Coverage |
 > |---|---|---|---|---|
-> | `delivery/http/router` | 95% | | `usecase/notification` | 77% |
-> | `domain/project` | 90% | | `usecase/chat` | 69% |
-> | `domain/notification` | 86% | | `usecase/auth` | 51% |
-> | `domain/auth` | 82% | | `usecase/project` | 36% |
-> | `domain/hr` | 77% | | `usecase/payroll` | 25% |
-> | `domain/chat` | 73% | | `usecase/attendance` | 21% |
-> | `domain/attendance` | 67% | | `usecase/hr` | 12% |
-> | `domain/payroll` | 18% | | `usecase/system` | 0% |
+> | `usecase/system` | 100% | | `delivery/http/router` | 95% |
+> | `usecase/payroll` | 91% | | `domain/project` | 90% |
+> | `usecase/attendance` | 87% | | `domain/notification` | 86% |
+> | `usecase/hr` | 82% | | `domain/auth` | 82% |
+> | `usecase/project` | 81% | | `domain/hr` | 77% |
+> | `usecase/notification` | 77% | | `domain/chat` | 73% |
+> | `usecase/chat` | 75% | | `domain/attendance` | 67% |
+> | `usecase/auth` | 74% | | `domain/payroll` | 18% |
 >
-> Mục tiêu ≥ 70% cho **cả** tầng usecase chưa đạt. Phần còn thiếu nhiều nhất
-> là những nhánh đọc/lọc danh sách của attendance, payroll và hr — chúng cần
-> bản giả lập trả dữ liệu phong phú hơn, và giá trị mỗi phép thử ở đó thấp hơn
-> hẳn so với những gì đã phủ (thuật toán, kiểm soát truy cập, luật nghiệp vụ).
+> **Cả tám gói usecase đều ≥ 70%.** `domain/payroll` thấp vì phần lớn tệp
+> entity là khai báo kiểu và hằng số; phép tính thật nằm ở `usecase/payroll`
+> và được phủ tới 91%.
+>
+> Các bộ kiểm thử không đuổi theo con số coverage mà nhắm vào **những luật
+> mà sai thì không có triệu chứng gì**: phạm vi dữ liệu, cắt phiên khi đổi
+> quyền, trừ và hoàn quỹ phép, biểu thuế bị hở, thứ tự đóng khoảng hiệu lực
+> lương. Mỗi luật đều có thêm một phép thử **phía ngược lại**, vì một bộ chỉ
+> kiểm phía "từ chối" sẽ vẫn đạt với một hàm từ chối tất cả.
 
-- [ ] Unit test cho toàn bộ tầng `usecase` (mục tiêu ≥ 70% coverage) — *một phần*
+- [x] Unit test cho toàn bộ tầng `usecase` (mục tiêu ≥ 70% coverage)
 - [ ] Integration test cho repository bằng testcontainers (PostgreSQL thật)
 - [ ] Test API end-to-end cho các luồng chính — *đang phủ bằng 6 bộ smoke (287 mục) trên stack Docker thật, chưa phải test tự động trong CI*
 - [ ] Test tải cho WebSocket (mục tiêu: 500 kết nối đồng thời) — *công cụ đã có (`backend/cmd/wsload`), chưa chạy được vì Docker đang tắt*

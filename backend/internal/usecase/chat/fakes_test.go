@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -118,10 +119,28 @@ func (f *fakeConvs) BySource(
 	return nil, domainchat.ErrNotFound
 }
 
+// ListFor trả về mọi hội thoại mà người xem là thành viên, kèm góc nhìn của
+// chính họ — giống ByID.
+//
+// Lọc theo thành viên chứ không trả tất: danh sách hội thoại là nơi lộ dữ
+// liệu dễ nhất, và một bản giả lập trả tất sẽ khiến phép thử đạt kể cả khi
+// usecase quên truyền id người xem xuống.
 func (f *fakeConvs) ListFor(
-	context.Context, uuid.UUID, string,
+	_ context.Context, viewerID uuid.UUID, search string,
 ) ([]*domainchat.Conversation, error) {
-	return nil, nil
+	var out []*domainchat.Conversation
+	for id, c := range f.convs {
+		if f.members[id][viewerID] == nil {
+			continue
+		}
+		if search != "" && !strings.Contains(
+			strings.ToLower(c.DisplayName), strings.ToLower(search)) {
+			continue
+		}
+		view := *c
+		out = append(out, &view)
+	}
+	return out, nil
 }
 
 func (f *fakeConvs) Members(
