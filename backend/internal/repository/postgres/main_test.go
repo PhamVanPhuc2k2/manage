@@ -66,22 +66,17 @@ func TestMain(m *testing.M) {
 	container, err := tcpostgres.Run(ctx,
 		// Cùng phiên bản với docker-compose.yml. Kiểm thử trên một phiên bản
 		// khác với production là tự tạo ra một lớp khác biệt vô hình.
-		"postgres:17-alpine",
+		"postgres:16-alpine",
 		tcpostgres.WithDatabase("manage_test"),
 		tcpostgres.WithUsername("manage"),
 		tcpostgres.WithPassword("manage"),
-		// Chạy CHÍNH tệp khởi tạo của dự án, không chép lại nội dung vào đây.
+		// CỐ Ý KHÔNG nạp docker/postgres/init/01-extensions.sql.
 		//
-		// Migration giả định sẵn các extension này (uuid-ossp, pg_trgm,
-		// unaccent) nhưng KHÔNG tự tạo chúng — chúng đến từ thư mục init của
-		// image postgres, và thư mục đó chỉ chạy khi volume còn rỗng.
-		//
-		// Chép lại mấy dòng CREATE EXTENSION vào đây thì bộ kiểm thử sẽ vẫn
-		// đạt sau khi ai đó thêm một extension mới vào tệp thật mà quên sửa
-		// ở đây — tức là im lặng đúng lúc cần báo.
-		tcpostgres.WithInitScripts(
-			filepath.Join("..", "..", "..", "..",
-				"docker", "postgres", "init", "01-extensions.sql")),
+		// Container này dựng một database trống rỗi chỉ chạy migration, giống
+		// hệt mọi môi trường mới khác: dịch vụ postgres của GitHub Actions,
+		// một database mới trên cùng máy chủ, hay một lần khôi phục vào chỗ
+		// khác. Nếu migration không tự tạo đủ extension thì bộ này phải hỏng
+		// ngay — đó là điểm của nó.
 		testcontainers.WithWaitStrategy(
 			// Chờ ĐÚNG HAI LẦN dòng "ready to accept connections".
 			//

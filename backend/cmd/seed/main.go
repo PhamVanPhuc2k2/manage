@@ -97,6 +97,21 @@ func run() error {
 		fmt.Printf("  · Công ty đã có: %s\n", company.Name)
 	}
 
+	// --- Dữ liệu mặc định của công ty ---
+	//
+	// Khung giờ làm việc, tham số tính lương và biểu thuế. Migration 000006 và
+	// 000008 có đổ những thứ này, nhưng bằng `SELECT ... FROM companies` — trên
+	// một cài đặt mới thì lúc đó chưa có công ty nào, nên không dòng nào được
+	// tạo và việc tính lương thất bại ở cuối tháng đầu tiên.
+	//
+	// Gọi hàm SQL thay vì viết lại các giá trị mặc định ở đây: hai nguồn sự
+	// thật cho biểu thuế là cách để chúng lệch nhau mà không ai biết. Hàm chạy
+	// được nhiều lần, mỗi phần chỉ tạo khi chưa có.
+	if _, err := db.Exec(ctx, `SELECT seed_company_defaults($1)`, company.ID); err != nil {
+		return fmt.Errorf("tạo dữ liệu mặc định cho công ty: %w", err)
+	}
+	fmt.Println("  ✓ Đã bảo đảm khung giờ làm việc, tham số lương và biểu thuế")
+
 	// --- Phòng ban ---
 	dept := &domainhr.Department{
 		CompanyID: company.ID,

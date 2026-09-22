@@ -727,7 +727,15 @@ Lệnh chạy:
 > thật trả về chính nút đó kèm tổ tiên, còn bản giả lập ở tầng usecase trả
 > tổ tiên chặt. Luật nghiệp vụ không đổi theo, nhưng bản giả lập đã được
 > sửa cho khớp — đó chính là loại lệch mà integration test sinh ra để bắt.
-- [ ] Test API end-to-end cho các luồng chính — *đang phủ bằng 6 bộ smoke (287 mục) trên stack Docker thật, chưa phải test tự động trong CI*
+- [x] Test API end-to-end cho các luồng chính, tự động trong CI
+> `scripts/ci-e2e.sh` dựng stack sạch, seed, rồi chạy cả 6 bộ smoke — **286
+> phép kiểm, đạt toàn bộ từ một cài đặt hoàn toàn mới**. Job `e2e` trong
+> ci.yml chỉ gọi script đó.
+>
+> Gói vào script chứ không viết thành các bước YAML: bước YAML chỉ chạy
+> được trên runner, nên mỗi lần sửa là một lần đẩy commit rồi chờ xem CI đỏ
+> hay xanh. Script thì chạy được ngay ở máy — và chính nhờ vậy nó đã tìm
+> ra ba lỗi trước khi chạm tới CI.
 - [x] Test tải cho WebSocket (mục tiêu: 500 kết nối đồng thời)
 > Đo trên stack thật bằng `backend/cmd/wsload`: **500/500 kết nối thành
 > công, 0 thất bại, 0 rớt giữa chừng**, giữ 60 giây. Bắt tay p50 2,7 ms —

@@ -302,8 +302,16 @@ echo "── Phân trang & tìm kiếm ──"
 check "page_size=999999 bị cắt về 100" '"page_size":100' \
   "$(json "$BASE/employees?page_size=999999" -H "$AUTH" | grep -o '"page_size":[0-9]*')"
 
-FOUND=$(json "$BASE/employees?search=nguyen%20van%20anh" -H "$AUTH" | grep -c 'full_name')
-check "Tìm không dấu 'nguyen van anh' có kết quả" "yes" \
+# Tìm theo tên của CHÍNH tài khoản quản trị ("Quản trị viên"), gõ không dấu.
+#
+# Trước đây phép thử này tìm "nguyen van anh" — một cái tên không có bộ smoke
+# nào tạo ra. Nó đạt trên máy có sẵn dữ liệu demo và hỏng trên mọi cài đặt
+# sạch, tức là nó đo môi trường chứ không đo sản phẩm.
+#
+# Tài khoản quản trị thì luôn có, và tên nó có ả, ị, ê — đủ để chứng minh
+# unaccent đang làm việc.
+FOUND=$(json "$BASE/employees?search=quan%20tri%20vien" -H "$AUTH" | grep -c 'full_name')
+check "Tìm không dấu 'quan tri vien' có kết quả" "yes" \
   "$([ "$FOUND" -gt 0 ] && echo yes || echo no)"
 
 # ------------------------------------------------------------ cây phòng ban
