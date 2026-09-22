@@ -2,7 +2,7 @@
 
 Hệ thống quản trị nội bộ doanh nghiệp: nhân sự, phòng ban, dự án, giao việc, chấm công, lương, cùng thông báo và chat thời gian thực.
 
-**Trạng thái:** Phase 0 → 5 đã xong và chạy được. Tiếp theo là Phase 6 (hoàn thiện & vận hành).
+**Trạng thái:** Phase 0 → 5 đã xong và chạy được. Phase 6 (hoàn thiện & vận hành) đang làm — xem [doc/TASKS.md](doc/TASKS.md#phase-6--hoàn-thiện--vận-hành).
 
 ## Kiến trúc
 
@@ -77,6 +77,10 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 |---|---|
 | [doc/TASKS.md](doc/TASKS.md) | Lộ trình đầy đủ 7 phase, mô hình dữ liệu, bảng rủi ro |
 | [doc/PHASE-0-SETUP.md](doc/PHASE-0-SETUP.md) | Hướng dẫn chi tiết Phase 0 kèm mã nguồn và các lỗi đã gặp thật |
+| [doc/RUNBOOK.md](doc/RUNBOOK.md) | Xử lý sự cố. Mỗi mục bắt đầu bằng lệnh cần chạy |
+| [doc/OPERATIONS.md](doc/OPERATIONS.md) | Service, biến môi trường, lệnh, TLS, sao lưu và khôi phục |
+| [doc/WEBSOCKET.md](doc/WEBSOCKET.md) | Giao thức WebSocket: toàn bộ bản tin hai chiều |
+| [doc/ERD.md](doc/ERD.md) | Sơ đồ 37 bảng, kèm lý do của các quyết định schema |
 | [doc/PHASE-1-SETUP.md](doc/PHASE-1-SETUP.md) | Thiết kế xác thực và phân quyền: chiến lược token, chống đánh cắp, phạm vi dữ liệu |
 
 ## Lộ trình
@@ -88,8 +92,8 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 | 2 | Dự án, giao việc, bảng Kanban, timeline, báo cáo | Xong |
 | 3 | Chấm công theo presence realtime, nghỉ phép | Xong |
 | 4 | Lương, phiếu lương, báo cáo chi phí nhân sự | Xong |
-| 5 | WebSocket: thông báo và chat | Hạ tầng WS xong · chat kế tiếp |
-| 6 | Hoàn thiện, bảo mật, giám sát, vận hành | |
+| 5 | WebSocket: thông báo và chat | Xong |
+| 6 | Hoàn thiện, bảo mật, giám sát, vận hành | Đang làm |
 | 7 | Gọi video 1-1 và nhóm, trình chiếu màn hình (WebRTC + SFU) | |
 
 ## Lưu ý
@@ -116,7 +120,7 @@ refresh token, phát hiện token bị đánh cắp, đăng xuất có hiệu l�
 mã xác minh đăng nhập, chống dò mật khẩu và chống dò email.
 
 > Đăng nhập cần mã OTP gửi qua email. Ở môi trường dev, mở
-> **http://localhost:8025** (MailHog) để lấy mã. Hai script kiểm chứng cũng
+> **http://localhost:8025** (MailHog) để lấy mã. Các script kiểm chứng cũng
 > đọc mã từ đó — tức là chúng đi đúng đường thư thật:
 > api → RabbitMQ → worker → SMTP.
 >

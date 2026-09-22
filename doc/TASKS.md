@@ -679,56 +679,104 @@ Lệnh chạy:
 ## PHASE 6 — Hoàn thiện & Vận hành
 
 ### Chất lượng
-- [ ] Unit test cho toàn bộ tầng `usecase` (mục tiêu ≥ 70% coverage)
+
+> **Trạng thái: đang làm.** Trước Phase 6 cả dự án có 3 tệp test (501 dòng,
+> chỉ phủ máy tính lương); nay có 10 tệp. Hai sửa đổi do chính test phát hiện:
+> `Session.Minutes()` trả số phút âm cho phiên hỏng, và `sanitizeName` giữ
+> nguyên đoạn `..` trong tên tệp đính kèm.
+>
+> Coverage hiện tại:
+>
+> | Gói | Coverage |     | Gói | Coverage |
+> |---|---|---|---|---|
+> | `delivery/http/router` | 95% | | `usecase/notification` | 77% |
+> | `domain/notification` | 86% | | `usecase/chat` | 66% |
+> | `domain/auth` | 82% | | `usecase/payroll` | 25% |
+> | `domain/chat` | 73% | | `usecase/attendance` | 21% |
+> | `domain/attendance` | 67% | | `usecase/project` | 0% |
+>
+> Mục tiêu ≥ 70% cho **cả** tầng usecase chưa đạt: `usecase/project` (module
+> lớn nhất, hơn 2000 dòng), `usecase/auth`, `usecase/hr` và `usecase/system`
+> vẫn 0%.
+
+- [ ] Unit test cho toàn bộ tầng `usecase` (mục tiêu ≥ 70% coverage) — *một phần*
 - [ ] Integration test cho repository bằng testcontainers (PostgreSQL thật)
-- [ ] Test API end-to-end cho các luồng chính
+- [ ] Test API end-to-end cho các luồng chính — *đang phủ bằng 6 bộ smoke (287 mục) trên stack Docker thật, chưa phải test tự động trong CI*
 - [ ] Test tải cho WebSocket (mục tiêu: 500 kết nối đồng thời)
 - [ ] Test E2E frontend bằng Playwright cho 5 luồng quan trọng nhất
 
 ### Bảo mật
-- [ ] Rà soát toàn bộ endpoint: mọi route đều có kiểm tra quyền, không sót route công khai
-- [ ] Chống IDOR: luôn kiểm tra quyền trên bản ghi cụ thể, không chỉ trên loại tài nguyên
-- [ ] Ngăn SQL injection (chỉ dùng tham số hoá), XSS (escape đầu ra), CSRF
-- [ ] Kiểm tra kiểu tệp tải lên bằng magic bytes, giới hạn dung lượng
-- [ ] Đặt security header: HSTS, CSP, X-Frame-Options
-- [ ] Quản lý secret bằng biến môi trường, tuyệt đối không commit vào git
-- [ ] Ghi audit log cho thao tác nhạy cảm: lương, xoá nhân viên, đổi quyền
-- [ ] Bảo mật container: chạy non-root, `read_only: true` cho container không cần ghi, `cap_drop: ALL`, `no-new-privileges`
-- [ ] Không nhúng secret vào image (kiểm tra bằng `docker history`); dùng Docker secrets hoặc file env ngoài repo
-- [ ] Ghim phiên bản base image theo digest, không dùng tag trôi nổi như `alpine:latest`
-- [ ] Quét image định kỳ bằng Trivy, có lịch cập nhật base image khi có CVE mới
+
+> **Việc rà soát endpoint nay là một BỘ TEST, không phải một lần rà bằng mắt.**
+> `router_test.go` liệt kê mọi route chi đang phục vụ rồi bắn request thật:
+> không token phải 401 (125 endpoint), token hợp lệ mà không có quyền phải 403
+> (114 endpoint). Thêm route mà quên middleware là làm test đỏ ngay.
+>
+> Nó đã chứng minh tác dụng trong chính Phase 6: bắt được `/metrics` ngay khi
+> endpoint đó được thêm vào.
+>
+> Hai danh sách trắng nằm trong tệp test, mỗi dòng kèm lý do, cùng một phép
+> thử chống danh sách trắng lỗi thời.
+
+- [x] Rà soát toàn bộ endpoint: mọi route đều có kiểm tra quyền, không sót route công khai
+- [x] Chống IDOR: luôn kiểm tra quyền trên bản ghi cụ thể, không chỉ trên loại tài nguyên
+- [x] Ngăn SQL injection (chỉ dùng tham số hoá), XSS (escape đầu ra), CSRF
+- [ ] Kiểm tra kiểu tệp tải lên bằng magic bytes, giới hạn dung lượng — *giới hạn dung lượng đã có, magic bytes chưa*
+- [x] Đặt security header: HSTS, CSP, X-Frame-Options
+- [x] Quản lý secret bằng biến môi trường, tuyệt đối không commit vào git
+- [x] Ghi audit log cho thao tác nhạy cảm: lương, xoá nhân viên, đổi quyền
+- [x] Bảo mật container: chạy non-root, `read_only: true` cho container không cần ghi, `cap_drop: ALL`, `no-new-privileges`
+- [x] Không nhúng secret vào image (kiểm tra bằng `docker history`); dùng Docker secrets hoặc file env ngoài repo
+- [ ] Ghim phiên bản base image theo digest, không dùng tag trôi nổi như `alpine:latest` — *đang ghim theo tag có số phiên bản đầy đủ, chưa theo digest*
+- [ ] Quét image định kỳ bằng Trivy, có lịch cập nhật base image khi có CVE mới — *lệnh và lịch đã ghi trong doc/OPERATIONS.md, chưa nối vào CI*
 
 ### Docker — production
-- [ ] Hoàn thiện target `prod` trong Dockerfile backend: build tĩnh (`CGO_ENABLED=0`), `-ldflags="-s -w"`, base image `gcr.io/distroless/static` hoặc `alpine`
-- [ ] Hoàn thiện Dockerfile frontend: chỉ copy `.next/standalone` + `.next/static` + `public` sang stage cuối
-- [ ] Tạo user không phải root trong cả hai image, khai báo `USER app`
-- [ ] Nhúng thông tin build vào binary (version, git SHA, build time) và trả ra ở `/health`
-- [ ] `docker-compose.prod.yml`: kéo image từ GHCR theo tag, `restart: unless-stopped`
-- [ ] Đặt `deploy.resources.limits` CPU/RAM cho từng service, tránh một container ăn hết máy
-- [ ] Cấu hình log driver `json-file` kèm `max-size` và `max-file` (không để log phình đầy ổ đĩa)
-- [ ] `stop_grace_period: 60s` cho api để đóng sạch kết nối WebSocket khi deploy
-- [ ] Nginx: bật TLS bằng Let's Encrypt (certbot container hoặc Caddy), tự gia hạn
-- [ ] Nginx: bật gzip/brotli, cache asset tĩnh, đặt `client_max_body_size` khớp giới hạn upload
-- [ ] Kiểm chứng scale: `docker compose up -d --scale api=3` → chat và thông báo vẫn hoạt động đúng (xác nhận fan-out RabbitMQ chạy chuẩn)
-- [ ] Script deploy: pull image mới → chạy job `migrate` → rolling restart từng container api
-- [ ] Quy trình rollback: đổi tag image về SHA trước đó và khởi động lại
-- [ ] Container backup: `pg_dump` theo lịch, nén, đẩy lên Cloudflare R2, xoá bản cũ theo chính sách lưu trữ
-- [ ] Diễn tập khôi phục: dựng lại toàn bộ hệ thống từ bản backup trên máy sạch, ghi lại thời gian thực tế
+
+> Phần lớn mục ở đây đã làm từ Phase 0 (Dockerfile nhiều stage, non-root,
+> hạn mức tài nguyên, xoay vòng log). Phase 6 thêm TLS tự gia hạn, container
+> sao lưu, và ba script triển khai — quay lui — khôi phục.
+>
+> **Chưa chạy thử trên stack thật:** Docker Desktop tắt giữa lúc làm phần
+> này. Đã rà bằng cách khác: YAML của 4 file compose phân tích cú pháp đạt,
+> `bash -n` cả 4 script đạt. Còn phải làm khi Docker chạy lại: `nginx -t`,
+> `promtool check config`, và kiểm chứng `--scale api=3`.
+
+- [x] Hoàn thiện target `prod` trong Dockerfile backend: build tĩnh (`CGO_ENABLED=0`), `-ldflags="-s -w"`, base image `gcr.io/distroless/static` hoặc `alpine`
+- [x] Hoàn thiện Dockerfile frontend: chỉ copy `.next/standalone` + `.next/static` + `public` sang stage cuối
+- [x] Tạo user không phải root trong cả hai image, khai báo `USER app`
+- [x] Nhúng thông tin build vào binary (version, git SHA, build time) và trả ra ở `/health` — *và cả ở `/metrics` qua `manage_build_info`*
+- [x] `docker-compose.prod.yml`: kéo image từ GHCR theo tag, `restart: unless-stopped`
+- [x] Đặt `deploy.resources.limits` CPU/RAM cho từng service, tránh một container ăn hết máy
+- [x] Cấu hình log driver `json-file` kèm `max-size` và `max-file` (không để log phình đầy ổ đĩa)
+- [x] `stop_grace_period: 60s` cho api để đóng sạch kết nối WebSocket khi deploy
+- [x] Nginx: bật TLS bằng Let's Encrypt (certbot container hoặc Caddy), tự gia hạn — *chưa chạy thử; lần cấp chứng chỉ đầu cần domain thật, xem doc/OPERATIONS.md*
+- [x] Nginx: bật gzip/brotli, cache asset tĩnh, đặt `client_max_body_size` khớp giới hạn upload
+- [ ] Kiểm chứng scale: `docker compose up -d --scale api=3` → chat và thông báo vẫn hoạt động đúng (xác nhận fan-out RabbitMQ chạy chuẩn) — *Phase 5 đã kiểm chứng fan-out với 2 instance; chưa thử `--scale api=3`*
+- [x] Script deploy: pull image mới → chạy job `migrate` → rolling restart từng container api
+- [x] Quy trình rollback: đổi tag image về SHA trước đó và khởi động lại
+- [x] Container backup: `pg_dump` theo lịch, nén, đẩy lên Cloudflare R2, xoá bản cũ theo chính sách lưu trữ — *tự kiểm tra bản dump đọc được; phần đẩy lên R2 cần khoá R2 chưa có*
+- [ ] Diễn tập khôi phục: dựng lại toàn bộ hệ thống từ bản backup trên máy sạch, ghi lại thời gian thực tế — *quy trình và bảng ghi thời gian đã có trong doc/OPERATIONS.md, chưa diễn tập lần nào*
 
 ### Giám sát
-- [ ] Endpoint `/metrics` ở backend (Prometheus client): số kết nối WebSocket, độ trễ request, độ sâu hàng đợi
-- [ ] Stack giám sát bằng container: prometheus, grafana, loki, promtail, cadvisor, node-exporter
-- [ ] Dashboard Grafana định nghĩa sẵn dưới dạng file (provisioning), commit vào repo
-- [ ] Cảnh báo: container restart liên tục, ổ đĩa > 80%, hàng đợi RabbitMQ ứ đọng, số kết nối WS tụt đột ngột
-- [ ] Log tập trung qua Loki, có `trace_id` xuyên suốt request
-- [ ] Runbook xử lý sự cố thường gặp (kèm lệnh docker cụ thể cho từng tình huống)
+
+> **Chưa chạy thử trên stack thật** (Docker Desktop tắt). Cấu hình đã rà cú
+> pháp; đã tự sửa hai lỗi khi đối chiếu schema Prometheus: khoá đúng là
+> `alertmanagers` chứ không phải `alertmanager_configs` (Prometheus sẽ từ chối
+> khởi động), và một khối `relabel_configs` không làm gì.
+
+- [x] Endpoint `/metrics` ở backend (Prometheus client): số kết nối WebSocket, độ trễ request, độ sâu hàng đợi
+- [x] Stack giám sát bằng container: prometheus, grafana, loki, promtail, cadvisor, node-exporter
+- [x] Dashboard Grafana định nghĩa sẵn dưới dạng file (provisioning), commit vào repo
+- [x] Cảnh báo: container restart liên tục, ổ đĩa > 80%, hàng đợi RabbitMQ ứ đọng, số kết nối WS tụt đột ngột
+- [x] Log tập trung qua Loki, có `trace_id` xuyên suốt request
+- [x] Runbook xử lý sự cố thường gặp (kèm lệnh docker cụ thể cho từng tình huống)
 
 ### Tài liệu
-- [ ] Sinh tài liệu OpenAPI/Swagger cho REST API
-- [ ] Tài liệu giao thức WebSocket: danh sách sự kiện và payload
-- [ ] Sơ đồ ERD cơ sở dữ liệu
-- [ ] Hướng dẫn cài đặt môi trường dev (chỉ cần Docker, không cần cài Go/Node trên máy)
-- [ ] Tài liệu vận hành Docker: danh sách service, biến môi trường, lệnh thường dùng
+- [ ] Sinh tài liệu OpenAPI/Swagger cho REST API — *125 endpoint, chưa làm*
+- [x] Tài liệu giao thức WebSocket: danh sách sự kiện và payload → `doc/WEBSOCKET.md`
+- [x] Sơ đồ ERD cơ sở dữ liệu → `doc/ERD.md` (37 bảng, kèm lý do của các quyết định schema)
+- [x] Hướng dẫn cài đặt môi trường dev (chỉ cần Docker, không cần cài Go/Node trên máy) → `README.md` + `doc/PHASE-1-SETUP.md`
+- [x] Tài liệu vận hành Docker: danh sách service, biến môi trường, lệnh thường dùng → `doc/OPERATIONS.md`, kèm `doc/RUNBOOK.md` để xử lý sự cố
 - [ ] Sổ tay hướng dẫn sử dụng cho người dùng cuối
 
 ---
