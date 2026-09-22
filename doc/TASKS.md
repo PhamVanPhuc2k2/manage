@@ -913,8 +913,35 @@ Lệnh chạy:
 | TURN | Bắt buộc, kèm fallback TCP/443 | Firewall công ty chặn UDP tuỳ tiện — thiếu TURN thì một phần nhân viên không gọi được |
 | Ghép hình phía server (MCU) | **Không làm** | Phải transcode, tốn CPU khủng khiếp. Chỉ cân nhắc nếu sau này cần ghi hình ghép hoặc đẩy RTMP |
 
+### Trạng thái hiện tại
+
+> **Đã xong phần lõi backend, chưa nối dây và chưa có giao diện.**
+>
+> | Tầng | Trạng thái |
+> |---|---|
+> | Migration `calls`, `call_participants`, quyền | xong |
+> | Domain `internal/domain/call` | xong |
+> | Usecase `internal/usecase/call` | xong — **40 unit test, 81.2% coverage** |
+> | Repository PostgreSQL | xong — **14 integration test trên database thật** |
+> | Adapter LiveKit (SFU + TURN) | **chưa làm** |
+> | Container LiveKit trong compose | **chưa làm** |
+> | Endpoint HTTP và route | **chưa làm** |
+> | Nối vào hub WebSocket | **chưa làm** |
+> | Job dọn cuộc gọi quá hạn ở worker | **chưa làm** |
+> | Giao diện | **chưa làm** |
+>
+> Những mục bên dưới đã có đủ luật nghiệp vụ nhưng **chưa gọi tới được**
+> vì thiếu route và chưa nối hub. Chúng vẫn để trống để không nói quá sự thật.
+
+### Quyết định đã chốt
+
+| Vấn đề | Chốt | Lý do |
+|---|---|---|
+| Người nhận đang bận cuộc khác | **Từ chối ngay, báo "đang bận"** | Người gọi biết ngay thay vì chờ 45 giây; người đang họp không bị làm phiền; ít trạng thái phải quản lý nhất |
+| Ghi hình cuộc gọi | **Chưa làm** | Đặc tả ghi là tuỳ chọn; nó kéo theo container Egress, khoá R2, chính sách lưu trữ, màn hình xin đồng ý và audit log — một khối riêng |
+
 ### Signaling — mở rộng hub WebSocket của Phase 5
-- [ ] Bổ sung nhóm bản tin `call.*` vào định dạng chuẩn `{ type, payload, ts, trace_id }`
+- [x] Bổ sung nhóm bản tin `call.*` vào định dạng chuẩn `{ type, payload, ts, trace_id }`
 - [ ] `call.invite` / `call.accept` / `call.reject` / `call.cancel` / `call.end`
 - [ ] `call.sdp` và `call.ice` — chuyển tiếp SDP offer/answer và ICE candidate giữa hai đầu
 - [ ] Định tuyến bản tin gọi qua bản đồ `user_id → instance_id` trên Redis (dùng lại cơ chế Phase 5)
@@ -922,12 +949,16 @@ Lệnh chạy:
 - [ ] Tự huỷ cuộc gọi nếu không ai bắt máy sau 45 giây
 - [ ] Kiểm tra quyền khi mời: chỉ thành viên hội thoại mới gọi được vào hội thoại đó
 - [ ] Người gọi rớt mạng giữa chừng: hub phát `call.end` khi kết nối WS đóng, không để cuộc gọi treo
-- [ ] Chốt hành vi khi người nhận đang bận cuộc khác: từ chối ngay hay cho chờ máy — quyết định **trước** khi code
+- [x] Chốt hành vi khi người nhận đang bận cuộc khác — **từ chối ngay**, xem bảng quyết định ở trên
 
 ### Migration & lưu trữ
-- [ ] Migration: `calls` — hội thoại, kiểu (1-1 / nhóm), người khởi tạo, thời điểm bắt đầu, kết thúc, lý do kết thúc
-- [ ] Migration: `call_participants` — ai vào, vào lúc nào, rời lúc nào, có bật mic/camera/chia sẻ màn hình không
-- [ ] Sinh tin nhắn hệ thống trong hội thoại khi cuộc gọi kết thúc ("Cuộc gọi video · 12 phút") — dùng lại bảng `messages`
+- [x] Migration: `calls` — hội thoại, kiểu, người khởi tạo, mốc bắt đầu/kết thúc, lý do
+> Kèm chỉ mục một phần `uq_calls_active_per_conversation`: mỗi hội thoại chỉ
+> được có MỘT cuộc gọi đang diễn ra. Không có nó thì hai người cùng bấm gọi
+> trong một giây sẽ tạo hai phòng, mỗi người vào một phòng, và cả hai ngồi
+> nhìn màn hình trống.
+- [x] Migration: `call_participants` — ai vào, vào lúc nào, rời lúc nào, có bật mic/camera/chia sẻ màn hình không
+- [x] Sinh tin nhắn hệ thống khi cuộc gọi kết thúc ("Cuộc gọi video · 12 phút") — dùng lại bảng `messages`
 - [ ] Thống kê vận hành: số cuộc gọi, thời lượng trung bình, **tỉ lệ phải relay qua TURN** (chỉ số quyết định chi phí băng thông)
 
 ### TURN / NAT traversal — làm SỚM, đừng để cuối phase
