@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -172,25 +173,73 @@ func (f *fakeDepartments) ExistsCode(
 	return f.codes[code], nil
 }
 
-// hrHarness gom usecase và bản giả lập phòng ban.
+// hrHarness gom usecase và toàn bộ bản giả lập của module nhân sự.
 type hrHarness struct {
 	uc          *Usecase
 	departments *fakeDepartments
+	positions   *fakePositions
+	employees   *fakeEmployees
+	users       *fakeUsers
+	roles       *fakeRoles
 	company     *domainhr.Company
+
+	// killedSessions ghi lại các user bị cắt phiên. Việc cắt phiên là một
+	// tác dụng phụ đi qua callback, không để lại dấu vết trong giá trị trả
+	// về — không ghi lại ở đây thì không có cách nào kiểm chứng nó đã xảy
+	// ra, mà đó lại là phần bảo mật quan trọng nhất của vô hiệu hoá.
+	killedSessions []uuid.UUID
 }
 
 func newHRHarness() *hrHarness {
 	company := &domainhr.Company{ID: uuid.New(), Name: "Công ty kiểm thử"}
 	depts := newFakeDepartments()
+	positions := newFakePositions()
+	employees := newFakeEmployees()
+	users := newFakeUsers()
+	roles := newFakeRoles("admin", "hr", "employee")
 
-	return &hrHarness{
+	h := &hrHarness{
 		uc: NewUsecase(
 			&fakeCompanies{company: company},
-			depts,
-			nil, nil, nil, nil, nil,
+			depts, positions, employees, users, roles, nil,
 		),
 		departments: depts,
+		positions:   positions,
+		employees:   employees,
+		users:       users,
+		roles:       roles,
 		company:     company,
+	}
+	h.uc.SetOnEmployeeDeactivated(func(_ context.Context, userID uuid.UUID) {
+		h.killedSessions = append(h.killedSessions, userID)
+	})
+	return h
+}
+
+// employee dựng một hồ sơ nhân viên hợp lệ tối thiểu.
+func (h *hrHarness) employee(code string, deptID *uuid.UUID) *domainhr.Employee {
+	return h.employees.add(&domainhr.Employee{
+		CompanyID:    h.company.ID,
+		EmployeeCode: code,
+		FullName:     code,
+		Email:        code + "@abc.vn",
+		DepartmentID: deptID,
+		WorkMode:     domainhr.WorkModeOnsite,
+		Status:       domainhr.StatusOfficial,
+		JoinedAt:     time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	})
+}
+
+// validEmployeeInput là bộ dữ liệu đầu vào hợp lệ, để mỗi phép thử chỉ phải
+// làm hỏng đúng một trường và thấy rõ trường nào gây ra lỗi.
+func validEmployeeInput() EmployeeInput {
+	return EmployeeInput{
+		EmployeeCode: "NV999",
+		FullName:     "Nguyễn Văn A",
+		Email:        "nv999@abc.vn",
+		WorkMode:     domainhr.WorkModeOnsite,
+		Status:       domainhr.StatusOfficial,
+		JoinedAt:     time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 }
 
