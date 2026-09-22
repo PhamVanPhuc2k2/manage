@@ -799,7 +799,12 @@ Lệnh chạy:
 - [x] Script deploy: pull image mới → chạy job `migrate` → rolling restart từng container api
 - [x] Quy trình rollback: đổi tag image về SHA trước đó và khởi động lại
 - [x] Container backup: `pg_dump` theo lịch, nén, đẩy lên Cloudflare R2, xoá bản cũ theo chính sách lưu trữ — *tự kiểm tra bản dump đọc được; phần đẩy lên R2 cần khoá R2 chưa có*
-- [ ] Diễn tập khôi phục: dựng lại toàn bộ hệ thống từ bản backup trên máy sạch, ghi lại thời gian thực tế — *quy trình và bảng ghi thời gian đã có trong doc/OPERATIONS.md, chưa diễn tập lần nào*
+- [x] Diễn tập khôi phục, ghi lại thời gian thực tế — *đã diễn tập trên máy dev; lần trên MÁY SẠCH vẫn cần làm để có RTO thật*
+> **Lần diễn tập đầu tiên phát hiện đường sao lưu — khôi phục chưa bao giờ
+> chạy được**: ba lỗi trong kịch bản, không lỗi nào lộ ra nếu chỉ đọc mã.
+> Chi tiết và phân rã thời gian: doc/OPERATIONS.md, mục "Diễn tập khôi phục".
+> Sau khi sửa: sao lưu 1 giây, khôi phục **37 giây**, đối chiếu 39/39 bảng
+> khớp số dòng với bản gốc.
 
 ### Giám sát
 

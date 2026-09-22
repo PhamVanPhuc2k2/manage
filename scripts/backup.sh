@@ -46,7 +46,20 @@ SIZE="$(du -h "$LOCAL_DIR/$NAME" | cut -f1)"
 # pg_dump có thể thoát với mã 0 mà vẫn cho file hỏng nếu kết nối đứt giữa
 # chừng. Một bản backup hỏng còn tệ hơn không có backup: nó tạo cảm giác an
 # toàn sai, và ta chỉ biết vào đúng lúc cần khôi phục.
-docker compose exec -T postgres pg_restore --list /dev/stdin \
+# KHÔNG truyền `/dev/stdin` làm tên tệp cho pg_restore.
+#
+# Đưa một TÊN TỆP vào thì pg_restore mở nó như tệp thường và cần nhảy đểc
+# (seek) để đọc mục lục của định dạng custom — mà `/dev/stdin` ở đây là một
+# ống, không nhảy đểc được. Nó báo "did not find magic string in file
+# header", nghe y hệt như tệp hỏng.
+#
+# Không truyền tên tệp thì pg_restore đọc thẳng stdin theo luồng, không cần
+# nhảy đểc, và chạy đúng.
+#
+# Đây không phải chuyện riêng của Windows: pg_restore chạy trong container
+# Linux ở mọi nền tảng, và đã kiểm chứng bằng cách chạy cả hai cách ngay
+# trong container.
+docker compose exec -T postgres pg_restore --list \
   < "$LOCAL_DIR/$NAME" > /dev/null 2>&1 \
   || die "bản backup không đọc được — KHÔNG dùng được để khôi phục"
 

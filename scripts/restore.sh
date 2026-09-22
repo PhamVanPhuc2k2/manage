@@ -63,7 +63,20 @@ fi
 # Thứ tự này quan trọng: phát hiện file hỏng sau khi đã xoá database hiện tại
 # nghĩa là mất cả hai.
 log "Kiểm tra bản backup..."
-docker compose exec -T postgres pg_restore --list /dev/stdin \
+# KHÔNG truyền `/dev/stdin` làm tên tệp cho pg_restore.
+#
+# Đưa một TÊN TỆP vào thì pg_restore mở nó như tệp thường và cần nhảy đểc
+# (seek) để đọc mục lục của định dạng custom — mà `/dev/stdin` ở đây là một
+# ống, không nhảy đểc được. Nó báo "did not find magic string in file
+# header", nghe y hệt như tệp hỏng.
+#
+# Không truyền tên tệp thì pg_restore đọc thẳng stdin theo luồng, không cần
+# nhảy đểc, và chạy đúng.
+#
+# Đây không phải chuyện riêng của Windows: pg_restore chạy trong container
+# Linux ở mọi nền tảng, và đã kiểm chứng bằng cách chạy cả hai cách ngay
+# trong container.
+docker compose exec -T postgres pg_restore --list \
   < "$PATH_LOCAL" > /dev/null 2>&1 \
   || die "bản backup không đọc được — KHÔNG khôi phục"
 ok "bản backup đọc được"
@@ -92,23 +105,61 @@ read -r answer
 log "Dừng api và worker..."
 docker compose stop api worker >/dev/null
 
+# Chép bản dump VÀO container trước khi phục hồi.
+#
+# BẮT BUỘC, không phải cho gọn. `pg_restore -j` từ chuỗi chuẩn vào với
+# thông báo "parallel restore from standard input is not supported": phục hồi
+# song song cần nhảy đểc trong tệp để nhiều tiến trình đọc các phần khác
+# nhau cùng lúc, mà một ống thì không nhảy đểc được.
+#
+# Bỏ -j đi thì đỡ phải chép, nhưng đánh đổi sai chỗ: phục hồi song song
+# chính là một trong những lý do chọn định dạng custom khi sao lưu, và
+# phút giây lúc đang khôi phục sự cố là thứ đắt nhất trong cả quy trình.
+#
+# MSYS_NO_PATHCONV=1: trên Git Bash (Windows), đường dẫn kiểu Unix trong
+# tham số bị viết lại thành đường dẫn Windows trước khi tới container, nên
+# `/var/tmp/...` thành `C:/Program Files/Git/var/tmp/...` và pg_restore báo
+# không tìm thấy tệp.
+REMOTE_DUMP=/var/tmp/manage-restore.dump
+PG_CID="$(docker compose ps -q postgres)"
+[ -n "$PG_CID" ] || die "không tìm thấy container postgres"
+
+log "Chép bản dump vào container..."
+MSYS_NO_PATHCONV=1 docker cp "$PATH_LOCAL" "$PG_CID:$REMOTE_DUMP" \
+  || die "không chép được bản dump vào container"
+
+# Dù script thoát giữa chừng cũng không để lại bản sao dữ liệu trong
+# container. Backup chứa toàn bộ hồ sơ nhân sự và bảng lương.
+cleanup_dump() {
+  MSYS_NO_PATHCONV=1 docker exec "$PG_CID" rm -f "$REMOTE_DUMP" >/dev/null 2>&1 || true
+}
+trap cleanup_dump EXIT
+
 log "Khôi phục..."
 # --clean --if-exists: xoá đối tượng cũ trước khi tạo lại, không báo lỗi nếu
 # chưa có. Thiếu nó thì mọi CREATE TABLE đều lỗi "đã tồn tại".
-#
-# -j 4: phục hồi song song. Chỉ làm được với định dạng custom (-Fc) — đây là
-# một trong những lý do chọn định dạng đó khi sao lưu.
-docker compose exec -T postgres pg_restore \
+MSYS_NO_PATHCONV=1 docker compose exec -T postgres pg_restore \
   -U "${POSTGRES_USER:-manage}" \
   -d "${POSTGRES_DB:-manage}" \
   --clean --if-exists --no-owner --no-acl -j 4 \
-  < "$PATH_LOCAL" || printf '\033[33m!\033[0m pg_restore báo một số cảnh báo (thường vô hại với --clean)\n'
+  "$REMOTE_DUMP" || printf '\033[33m!\033[0m pg_restore báo một số cảnh báo (thường vô hại với --clean)\n'
 
 log "Chạy migration (bản backup có thể cũ hơn schema hiện tại)..."
 docker compose run --rm migrate || die "migration thất bại sau khôi phục"
 
 log "Khởi động lại api và worker..."
 docker compose up -d api worker >/dev/null
+
+# Nạp lại nginx: api vừa được dựng lại nên có địa chỉ mới, mà nginx chỉ
+# phân giải tên `api` một lần lúc nạp cấu hình. Cùng lý do với bước tương
+# tự cuối scripts/deploy.sh — xem ghi chú upstream trong
+# docker/nginx/conf.d/app.conf.
+#
+# Không chặn nếu hỏng: có triển khai không dùng nginx trong cùng compose,
+# và dữ liệu đã khôi phục xong rồi — báo hỏng lúc này chỉ khiến người
+# đang xử lý sự cố tưởng việc khôi phục thất bại.
+docker compose exec -T nginx nginx -s reload >/dev/null 2>&1   && ok "đã nạp lại nginx"   || printf '[33m![0m không nạp lại được nginx — nếu dùng nginx, hãy tự chạy `nginx -s reload`
+'
 
 log "Kiểm tra..."
 for i in $(seq 1 30); do

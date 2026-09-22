@@ -308,7 +308,44 @@ lâu chạy lại được", và nó chỉ có giá trị nếu đo bằng đồ
 
 | Ngày diễn tập | Người thực hiện | Dung lượng backup | Thời gian khôi phục | Ghi chú |
 |---|---|---|---|---|
-| _chưa diễn tập lần nào_ | | | | |
+| 2026-09-22 | máy dev | 152 KB (39 bảng) | **37 giây** | Lần đầu. Tìm ra 3 lỗi chặn đường — xem bên dưới |
+
+> **Lần diễn tập đầu tiên phát hiện đường sao lưu — khôi phục chưa bao giờ
+> chạy được.** Cả ba lỗi đều nằm trong kịch bản chứ không trong dữ liệu, và
+> không lỗi nào lộ ra nếu chỉ đọc mã:
+>
+> 1. `pg_restore --list /dev/stdin` — đưa MỘT TÊN TỆP vào thì pg_restore cần
+>    nhảy đểc để đọc mục lục, mà `/dev/stdin` là một ống. Nó báo "did not
+>    find magic string in file header", nghe y hệt tệp hỏng. `backup.sh` dừng
+>    ngay tại bước tự kiểm tra này, nên **chưa từng tạo ra một bản backup
+>    nào**; `restore.sh` dừng tại bước kiểm tra tương ứng.
+> 2. `pg_restore -j 4` từ chuỗi chuẩn vào — "parallel restore from standard
+>    input is not supported". Phục hồi song song cần nhảy đểc trong tệp.
+> 3. `/ready` không được nginx định tuyến nên rơi sang frontend và trả 404.
+>    Cả `deploy.sh` lẫn `restore.sh` đều kiểm đường này ở bước cuối, nên cả
+>    hai báo thất bại trong khi hệ thống hoàn toàn bình thường.
+>
+> Đây chính là lý do mục này mở đầu bằng câu "một bản backup chưa bao giờ
+> được khôi phục thử thì chưa phải bản backup".
+>
+> **Phân rã 37 giây** (152 KB, 39 bảng, trên máy dev có sẵn image):
+>
+> | Bước | Thời gian |
+> |---|---|
+> | Kiểm tra bản dump đọc được | ~1 giây |
+> | Dừng api và worker | ~3 giây |
+> | `pg_restore -j 4` | ~14 giây |
+> | Chạy migration | ~5 giây |
+> | Khởi động lại api, worker, nạp lại nginx | ~14 giây |
+>
+> Con số này **không phải RTO thật**. Nó đo trên máy đã có sẵn image và dữ
+> liệu nhỏ. RTO thật còn phải cộng thời gian dựng máy mới, kéo image, tải
+> backup từ R2, và phục hồi một database lớn hơn nhiều lần. Lần diễn tập
+> trên **máy sạch** theo đúng quy trình ở trên mới cho con số dùng được.
+>
+> Kiểm chứng dữ liệu: khôi phục vào một database riêng rồi đối chiếu số
+> dòng với bản gốc — **39/39 bảng khớp**, giống nhau ở employees, projects,
+> tasks, messages, conversations, payslips, attendance_days, leave_requests.
 
 ## Kiểm tra tải WebSocket
 
