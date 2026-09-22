@@ -159,9 +159,19 @@ type Session struct {
 	EmployeeName string // JOIN lúc đọc
 }
 
-// Minutes là độ dài phiên, làm tròn xuống.
+// Minutes là độ dài phiên, làm tròn xuống. Không bao giờ âm.
+//
+// Database đã có chk_attendance_sessions_range chặn phiên kết thúc trước khi
+// bắt đầu, nên trường hợp này không xảy ra với dữ liệu đã lưu. Chặn thêm ở
+// đây vì hàm này cũng được gọi trên phiên dựng trong bộ nhớ lúc gộp, và một
+// số phút âm cộng vào tổng của cả ngày sẽ làm bảng công sai một cách im lặng
+// — khác với lỗi ràng buộc, vốn báo ngay.
 func (s *Session) Minutes() int {
-	return int(s.EndedAt.Sub(s.StartedAt).Minutes())
+	n := int(s.EndedAt.Sub(s.StartedAt).Minutes())
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 // =========================================================================

@@ -602,9 +602,21 @@ func (u *Usecase) PresignUpload(
 }
 
 // sanitizeName bỏ ký tự có thể phá cấu trúc khoá object.
+//
+// Bỏ cả dấu gạch chéo lẫn đoạn "..": gạch chéo là thứ thật sự nguy hiểm (nó
+// tạo ra tiền tố thư mục ngoài ý muốn trên R2), còn ".." thì với khoá object
+// chỉ là ký tự thường — nhưng khoá này còn đi qua CDN và tên tệp lúc tải về,
+// nơi không phải công cụ nào cũng coi nó là vô nghĩa. Bỏ đi thì hết phải suy
+// đoán xem chỗ nào chuẩn hoá đường dẫn, chỗ nào không.
+//
+// Cắt độ dài theo BYTE là có ý: giới hạn của khoá object tính bằng byte, và
+// đây là tên tệp dùng làm hậu tố chứ không phải văn bản hiển thị. Đổi lại,
+// tên tiếng Việt dài có thể bị cắt giữa một ký tự — chấp nhận được, vì tên
+// thật của tệp vẫn lưu nguyên trong cột file_name.
 func sanitizeName(name string) string {
 	name = strings.ReplaceAll(name, "/", "_")
 	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "..", "_")
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "file"
