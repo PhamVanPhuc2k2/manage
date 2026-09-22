@@ -776,7 +776,12 @@ Lệnh chạy:
 - [x] Runbook xử lý sự cố thường gặp (kèm lệnh docker cụ thể cho từng tình huống)
 
 ### Tài liệu
-- [ ] Sinh tài liệu OpenAPI/Swagger cho REST API — *125 endpoint, chưa làm*
+- [x] Sinh tài liệu OpenAPI/Swagger cho REST API → `doc/openapi.yaml` (132 operation, 45 schema)
+
+> Đặc tả được **đối chiếu tự động** với router bằng ba phép thử trong
+> `openapi_test.go`: thiếu endpoint, thừa endpoint, và endpoint công khai phải
+> khai `security: []`. Tài liệu API rời khỏi thực tế là chuyện xảy ra âm thầm —
+> thêm một endpoint thì nhớ, nhưng cập nhật một file YAML 3800 dòng thì quên.
 - [x] Tài liệu giao thức WebSocket: danh sách sự kiện và payload → `doc/WEBSOCKET.md`
 - [x] Sơ đồ ERD cơ sở dữ liệu → `doc/ERD.md` (37 bảng, kèm lý do của các quyết định schema)
 - [x] Hướng dẫn cài đặt môi trường dev (chỉ cần Docker, không cần cài Go/Node trên máy) → `README.md` + `doc/PHASE-1-SETUP.md`

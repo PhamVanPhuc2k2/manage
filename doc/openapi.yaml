@@ -1,0 +1,3779 @@
+openapi: 3.1.0
+
+info:
+  title: Manage — API hệ thống quản lý công ty
+  version: "1.0.0"
+  description: |
+    REST API của hệ thống quản trị nội bộ: nhân sự, dự án, chấm công, lương,
+    thông báo và chat.
+
+    Giao thức WebSocket tách riêng, xem [doc/WEBSOCKET.md](WEBSOCKET.md).
+
+    ## Định dạng phản hồi
+
+    **Mọi** phản hồi đều có cùng một vỏ bọc. Một hình dạng duy nhất để client
+    chỉ cần một bộ xử lý lỗi, thay vì đoán xem endpoint này trả gì:
+
+    ```json
+    { "data": { }, "meta": { } }
+    { "error": { "code": "...", "message": "...", "request_id": "..." } }
+    ```
+
+    `request_id` cũng nằm ở header `X-Request-Id` của **mọi** phản hồi. Người
+    dùng báo lỗi kèm mã đó thì tra được đúng request trong log, xuyên cả sang
+    worker và bản tin WebSocket.
+
+    ## Xác thực
+
+    Access token sống 15 phút, gửi qua header `Authorization: Bearer <token>`.
+
+    Refresh token **không** nằm trong phản hồi JSON mà trong cookie `httpOnly`,
+    `Secure`, `SameSite=Strict`. JavaScript không đọc được nó — đó là điểm khác
+    biệt quan trọng: một lỗ hổng XSS lấy được access token (sống 15 phút) nhưng
+    không lấy được refresh token (sống 7 ngày).
+
+    Refresh token **dùng một lần**. Mỗi lần gọi `/auth/refresh` sinh ra token
+    mới và huỷ token cũ. Một token đã tiêu xuất hiện lần nữa nghĩa là có người
+    sao chép nó, và hệ thống huỷ **toàn bộ** phiên của người dùng đó.
+
+    ## Đăng nhập hai bước
+
+    `POST /auth/login` với mật khẩu đúng **không** trả về token nào. Nó trả về
+    một `challenge_id`, và mã sáu chữ số được gửi qua email. Chỉ
+    `POST /auth/verify-otp` mới cấp token.
+
+    Tắt được bằng `AUTH_OTP_ENABLED=false`, nhưng tắt nghĩa là ai có mật khẩu
+    là vào được.
+
+    ## Phân quyền
+
+    Hai tầng, và phân biệt này quan trọng khi đọc mã lỗi:
+
+    | Tầng | Trả lời câu | Lỗi |
+    |---|---|---|
+    | Quyền (middleware) | "được làm LOẠI việc này không" | `403` |
+    | Phạm vi (usecase) | "được đụng vào BẢN GHI này không" | `404` |
+
+    Tầng thứ hai trả **404 chứ không 403**: 403 xác nhận rằng bản ghi đó có tồn
+    tại, và với dự án, hội thoại hay hồ sơ nhân sự thì chính sự tồn tại đã là
+    thông tin không nên rò ra.
+
+    ## Phân trang
+
+    Hai kiểu, dùng cho hai loại dữ liệu khác nhau:
+
+    - **Theo trang** (`page` + `page_size`) cho danh sách ổn định: nhân viên,
+      dự án, công việc.
+    - **Theo cursor** (`before`) cho danh sách thay đổi liên tục từ đầu: thông
+      báo và tin nhắn. Offset sẽ khiến trang 2 lặp lại những dòng đã thấy ở
+      trang 1 mỗi khi có bản ghi mới chen vào.
+
+  contact:
+    name: Kho mã nguồn
+    url: https://github.com/PhamVanPhuc2k2/manage
+  license:
+    name: Nội bộ
+
+servers:
+  - url: http://localhost/api/v1
+    description: Môi trường phát triển
+  - url: https://{domain}/api/v1
+    description: Production
+    variables:
+      domain:
+        default: manage.example.com
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Xác thực
+    description: Đăng nhập hai bước, xoay vòng token, quản lý phiên
+  - name: Nhân viên
+    description: Hồ sơ nhân sự, tài khoản đăng nhập, vai trò, ảnh đại diện
+  - name: Phòng ban
+  - name: Chức vụ
+  - name: Vai trò
+  - name: Dự án
+  - name: Công việc
+    description: Công việc, bảng Kanban, bình luận, tệp đính kèm, ghi nhận giờ
+  - name: Chấm công
+    description: Bảng công theo presence realtime, điều chỉnh công
+  - name: Nghỉ phép
+  - name: Khung giờ làm việc
+  - name: Ngày lễ
+  - name: Lương
+    description: Kỳ lương, phiếu lương, cấu hình, báo cáo chi phí
+  - name: Thông báo
+  - name: Chat
+  - name: Báo cáo
+  - name: Hạ tầng
+    description: Endpoint vận hành, không trả dữ liệu nghiệp vụ
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Access token lấy từ `/auth/login` (khi tắt OTP) hoặc `/auth/verify-otp`.
+
+        Token mang sẵn danh sách quyền và phạm vi dữ liệu, nên server không
+        phải tra database ở mỗi request. Đổi lại, thu hồi quyền chỉ có hiệu lực
+        sau tối đa 15 phút — trừ khi phiên bị xoá, vì phiên được kiểm ở Redis
+        trong **mọi** request.
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: page_size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Search:
+      name: search
+      in: query
+      description: Tìm kiếm **không dấu** — gõ "nguyen van a" ra "Nguyễn Văn A".
+      schema: { type: string }
+    Before:
+      name: before
+      in: query
+      description: |
+        Cursor phân trang. Chỉ lấy bản ghi **cũ hơn** mốc này.
+
+        Dùng cursor chứ không offset vì danh sách thay đổi liên tục từ đầu.
+      schema: { type: string, format: date-time }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    From:
+      name: from
+      in: query
+      schema: { type: string, format: date }
+    To:
+      name: to
+      in: query
+      schema: { type: string, format: date }
+    Year:
+      name: year
+      in: query
+      schema: { type: integer, example: 2026 }
+    PathID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathEmployeeID:
+      name: employeeID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathTaskID:
+      name: taskID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathCommentID:
+      name: commentID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathAttachmentID:
+      name: attachmentID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathTimelogID:
+      name: timelogID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathMessageID:
+      name: messageID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Dữ liệu gửi lên không hợp lệ
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unauthorized:
+      description: Thiếu token, token hỏng, hoặc phiên đã kết thúc
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Forbidden:
+      description: |
+        Không có **quyền** cho loại thao tác này.
+
+        Khác với 404: 403 nghĩa là bản ghi tồn tại và bạn được biết điều đó,
+        chỉ là không được thao tác.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: |
+        Không tìm thấy, **hoặc** nằm ngoài phạm vi dữ liệu của bạn.
+
+        Hai trường hợp cố ý không phân biệt được: phân biệt chúng là để lộ sự
+        tồn tại của bản ghi cho người không được xem.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Conflict:
+      description: Xung đột với trạng thái hiện tại (trùng mã, kỳ đã khoá, ...)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    TooManyRequests:
+      description: Vượt giới hạn tốc độ
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NoContentOK:
+      description: Thành công
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  schemas:
+    # ------------------------------------------------------------ vỏ bọc
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                [
+                  INVALID_ARGUMENT,
+                  UNAUTHORIZED,
+                  FORBIDDEN,
+                  NOT_FOUND,
+                  CONFLICT,
+                  RATE_LIMITED,
+                  UNPROCESSABLE,
+                  INTERNAL,
+                ]
+            message:
+              type: string
+              description: |
+                Thông báo tiếng Việt, hiển thị được cho người dùng cuối.
+
+                Lỗi 500 **không** trả chi tiết nội bộ — đó là thông tin cho
+                kẻ tấn công.
+            details: {}
+            request_id: { type: string }
+
+    PageMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        page_size: { type: integer }
+        total_items: { type: integer }
+        total_pages: { type: integer }
+
+    # ------------------------------------------------------------ xác thực
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+
+    LoginResponse:
+      type: object
+      description: |
+        **Một trong hai** hình dạng, tuỳ `AUTH_OTP_ENABLED`:
+
+        - Bật OTP: chỉ có `challenge_id` và `expires_in`. Không token nào được
+          cấp ở bước này.
+        - Tắt OTP: có `access_token` và `expires_at`.
+      properties:
+        challenge_id:
+          type: string
+          description: Id thử thách bước hai. Gửi kèm khi gọi `/auth/verify-otp`.
+        expires_in: { type: integer, description: Số giây thử thách còn hiệu lực }
+        masked_email:
+          type: string
+          example: "ng***@abc.vn"
+          description: Email đã che, để người dùng biết mã gửi đi đâu.
+        access_token: { type: string }
+        expires_at: { type: string, format: date-time }
+
+    VerifyOTPRequest:
+      type: object
+      required: [challenge_id, code]
+      properties:
+        challenge_id: { type: string }
+        code: { type: string, pattern: "^[0-9]{6}$" }
+
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        expires_at: { type: string, format: date-time }
+        must_change_password:
+          type: boolean
+          description: |
+            True với tài khoản vừa được cấp mật khẩu tạm. Client phải chuyển
+            thẳng sang màn hình đổi mật khẩu.
+
+    CurrentUser:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        employee_id:
+          type: string
+          format: uuid
+          description: |
+            Id dùng cho **mọi** module nghiệp vụ. Người nhận bản tin WebSocket
+            cũng là id này, không phải `user_id`.
+        email: { type: string }
+        full_name: { type: string }
+        roles: { type: array, items: { type: string } }
+        permissions: { type: array, items: { type: string } }
+        scope: { type: string, enum: [all, department, self] }
+
+    Session:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        device_name: { type: string }
+        ip: { type: string }
+        user_agent: { type: string }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+
+    # ------------------------------------------------------------ nhân sự
+    Employee:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employee_code: { type: string }
+        full_name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        date_of_birth: { type: string, format: date }
+        department_id: { type: string, format: uuid }
+        department_name: { type: string }
+        position_id: { type: string, format: uuid }
+        position_name: { type: string }
+        manager_id: { type: string, format: uuid }
+        work_mode: { type: string, enum: [onsite, remote, hybrid] }
+        status: { type: string, enum: [probation, official, resigned] }
+        joined_at: { type: string, format: date }
+        avatar_url: { type: string, description: URL đã ký, có hạn }
+        has_account: { type: boolean }
+
+    EmployeeInput:
+      type: object
+      required: [employee_code, full_name, email]
+      properties:
+        employee_code: { type: string }
+        full_name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        date_of_birth: { type: string, format: date }
+        department_id: { type: string, format: uuid }
+        position_id: { type: string, format: uuid }
+        manager_id: { type: string, format: uuid }
+        work_mode: { type: string, enum: [onsite, remote, hybrid] }
+        status: { type: string, enum: [probation, official, resigned] }
+        joined_at: { type: string, format: date }
+
+    Department:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        parent_id: { type: string, format: uuid }
+        manager_id: { type: string, format: uuid }
+        employee_count: { type: integer }
+        children:
+          type: array
+          description: Chỉ có ở `/departments/tree`.
+          items: { $ref: "#/components/schemas/Department" }
+
+    DepartmentInput:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        parent_id:
+          type: string
+          format: uuid
+          description: |
+            Chuyển phòng ban vào bên trong phòng con của chính nó bị **từ
+            chối**: vòng lặp trong cây sẽ làm mọi truy vấn đệ quy chạy vô hạn.
+        manager_id: { type: string, format: uuid }
+
+    Position:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        level: { type: integer }
+
+    Role:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        scope: { type: string, enum: [all, department, self] }
+        is_system: { type: boolean }
+        permissions: { type: array, items: { type: string } }
+
+    # ------------------------------------------------------------ dự án
+    Project:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code:
+          type: string
+          description: |
+            Đi vào mã công việc hiển thị ("WEB-42") nên không được chứa khoảng
+            trắng hay dấu gạch ngang, tối đa 20 ký tự.
+        name: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [planning, active, on_hold, completed, cancelled]
+        owner_id: { type: string, format: uuid }
+        owner_name: { type: string }
+        department_id: { type: string, format: uuid }
+        start_date: { type: string, format: date }
+        due_date: { type: string, format: date }
+        task_count: { type: integer }
+        done_task_count: { type: integer }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        viewer_role:
+          type: string
+          enum: [owner, member, viewer, ""]
+          description: |
+            Vai trò của **người đang gọi** trong dự án này. Rỗng khi họ xem
+            được nhờ phạm vi toàn công ty mà không phải thành viên.
+
+    ProjectInput:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, maxLength: 20 }
+        name: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [planning, active, on_hold, completed, cancelled]
+        owner_id:
+          type: string
+          format: uuid
+          description: |
+            Bỏ trống thì **người tạo** làm chủ dự án. Gửi uuid toàn số 0 thì bị
+            từ chối — đó là dữ liệu hỏng, không phải "không gửi".
+        department_id: { type: string, format: uuid }
+        start_date: { type: string, format: date }
+        due_date: { type: string, format: date }
+
+    ProjectMember:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        employee_code: { type: string }
+        email: { type: string }
+        position_name: { type: string }
+        department_name: { type: string }
+        role: { type: string, enum: [owner, member, viewer] }
+        added_at: { type: string, format: date-time }
+
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: "WEB-42" }
+        seq: { type: integer }
+        project_id: { type: string, format: uuid }
+        project_code: { type: string }
+        parent_task_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+        priority: { type: string, enum: [low, medium, high, urgent] }
+        assignee_id: { type: string, format: uuid }
+        assignee_name: { type: string }
+        reporter_id: { type: string, format: uuid }
+        due_date: { type: string, format: date }
+        estimate_hours: { type: number }
+        spent_minutes: { type: integer }
+        sort_order:
+          type: number
+          description: |
+            Số thực. Chèn giữa hai công việc chỉ cần lấy trung bình hai giá
+            trị, không phải cập nhật lại mọi dòng phía sau.
+        overdue: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    TaskInput:
+      type: object
+      required: [project_id, title]
+      properties:
+        project_id: { type: string, format: uuid }
+        parent_task_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+        priority: { type: string, enum: [low, medium, high, urgent] }
+        assignee_id: { type: string, format: uuid }
+        due_date: { type: string, format: date }
+        estimate_hours: { type: number }
+
+    TaskMoveRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [todo, in_progress, review, done]
+          description: |
+            Chỉ tiến hoặc lùi **một** bước. `todo → done` bị từ chối: qua
+            `in_progress` mới có mốc bắt đầu, qua `review` mới có người kiểm,
+            và mọi báo cáo dựa trên hai mốc đó sẽ sai nếu cho nhảy cóc.
+        after_task_id:
+          type: string
+          format: uuid
+          description: Thả ngay **sau** công việc này. Bỏ trống là thả lên đầu cột.
+
+    Board:
+      type: object
+      description: Bảng Kanban. Không phân trang — cần thấy cả cột một lúc.
+      properties:
+        columns:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              label: { type: string }
+              tasks:
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+
+    Comment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        task_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        author_name: { type: string }
+        content:
+          type: string
+          description: |
+            `@mention` viết theo cú pháp `@[Tên](uuid)`. Chỉ id của **thành
+            viên dự án** được giữ lại — nhắc tên người ngoài sẽ gửi cho họ
+            đoạn trích nội dung của một dự án họ không được xem.
+        mentioned_ids:
+          type: array
+          items: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Attachment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        file_name: { type: string }
+        content_type:
+          type: string
+          description: |
+            Kiểu **phát hiện được từ nội dung**, không phải kiểu client khai.
+        size_bytes: { type: integer }
+        url: { type: string, description: URL đã ký, có hạn }
+        uploaded_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+
+    UploadTicket:
+      type: object
+      description: |
+        Tệp tải **thẳng** lên R2, không qua api: đẩy vài chục megabyte qua tiến
+        trình Go chỉ để chuyển tiếp là lãng phí băng thông và bộ nhớ của chính
+        máy chủ đang phục vụ mọi request khác.
+      properties:
+        upload_url: { type: string }
+        key: { type: string }
+        storage_key: { type: string }
+        expires_in: { type: integer }
+
+    Activity:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        actor_id: { type: string, format: uuid }
+        actor_name: { type: string }
+        action: { type: string }
+        field: { type: string }
+        old_value: { type: string }
+        new_value: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Timelog:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        minutes: { type: integer }
+        note: { type: string }
+        logged_at: { type: string, format: date }
+
+    # ------------------------------------------------------------ chấm công
+    AttendanceDay:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        department_name: { type: string }
+        work_date: { type: string, format: date }
+        online_minutes: { type: integer }
+        active_minutes:
+          type: integer
+          description: |
+            Số phút **có hoạt động thật**, khác `online_minutes`. Máy để đó qua
+            đêm vẫn online nhưng không ai làm việc.
+        first_seen_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        late_minutes: { type: integer }
+        early_leave_minutes: { type: integer }
+        shortfall_minutes: { type: integer }
+        status:
+          type: string
+          enum: [present, absent, leave, holiday, weekend]
+        is_locked: { type: boolean }
+
+    Adjustment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        work_date: { type: string, format: date }
+        requested_minutes: { type: integer }
+        reason: { type: string }
+        status: { type: string, enum: [pending, approved, rejected, cancelled] }
+        approver_name: { type: string }
+        decided_at: { type: string, format: date-time }
+
+    Leave:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        leave_type:
+          type: string
+          enum: [annual, sick, unpaid, maternity, other]
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        day_part: { type: string, enum: [full, morning, afternoon] }
+        days:
+          type: number
+          description: |
+            Số ngày **thực tế**, đã bỏ cuối tuần và ngày lễ. Nghỉ từ thứ sáu
+            tới thứ hai là 2 ngày, không phải 4.
+        reason: { type: string }
+        status: { type: string, enum: [pending, approved, rejected, cancelled] }
+        approver_name: { type: string }
+        decision_note: { type: string }
+        created_at: { type: string, format: date-time }
+
+    LeaveBalance:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        year: { type: integer }
+        total_days: { type: number }
+        used_days: { type: number }
+        remaining_days: { type: number }
+
+    WorkSchedule:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        department_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        scope:
+          type: string
+          enum: [company, department, employee]
+          description: |
+            Mức áp dụng. Cá nhân > phòng ban > công ty; cùng mức thì bản có
+            hiệu lực muộn nhất thắng.
+        work_start: { type: string, example: "08:00" }
+        work_end: { type: string, example: "17:30" }
+        workdays:
+          type: array
+          items: { type: integer, minimum: 1, maximum: 7 }
+          description: "ISODOW: 1 = thứ hai, 7 = chủ nhật."
+        break_minutes: { type: integer }
+        grace_minutes:
+          type: integer
+          description: Kẹt xe vài phút không tính là đi muộn.
+        effective_from: { type: string, format: date }
+        effective_to: { type: string, format: date }
+
+    Holiday:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        date: { type: string, format: date }
+        name: { type: string }
+        is_paid: { type: boolean }
+
+    # ------------------------------------------------------------ lương
+    PayrollPeriod:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        year: { type: integer }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        status: { type: string, enum: [draft, calculated, locked, paid] }
+        employee_count: { type: integer }
+        total_net: { type: integer, description: Đơn vị đồng }
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+
+    Payslip:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        period_id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        employee_code: { type: string }
+        base_salary: { type: integer }
+        workdays: { type: number }
+        actual_workdays: { type: number }
+        gross: { type: integer }
+        insurance_employee: { type: integer }
+        taxable_income: { type: integer }
+        personal_income_tax: { type: integer }
+        net: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              kind: { type: string, enum: [allowance, deduction, bonus] }
+              amount: { type: integer }
+
+    SalaryStructure:
+      type: object
+      description: |
+        Có **phiên bản** theo `effective_from`. Tính lại lương tháng 3 phải ra
+        đúng con số của tháng 3, dù lương đã tăng từ tháng 5.
+      properties:
+        id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        base_salary: { type: integer }
+        effective_from: { type: string, format: date }
+        bank_account: { type: string }
+        bank_name: { type: string }
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              kind: { type: string, enum: [allowance, deduction] }
+              amount: { type: integer }
+              taxable: { type: boolean }
+
+    PayrollSettings:
+      type: object
+      properties:
+        effective_from: { type: string, format: date }
+        personal_deduction: { type: integer, example: 11000000 }
+        dependent_deduction: { type: integer, example: 4400000 }
+        social_insurance_rate: { type: number, example: 0.08 }
+        health_insurance_rate: { type: number, example: 0.015 }
+        unemployment_insurance_rate: { type: number, example: 0.01 }
+        social_insurance_cap:
+          type: integer
+          description: 20 × lương cơ sở. **Khác** trần bảo hiểm thất nghiệp.
+        unemployment_insurance_cap:
+          type: integer
+          description: 20 × lương tối thiểu vùng.
+        tax_brackets:
+          type: array
+          items:
+            type: object
+            properties:
+              from_amount: { type: integer }
+              to_amount: { type: integer }
+              rate: { type: number }
+
+    CostRow:
+      type: object
+      properties:
+        label: { type: string }
+        employee_count: { type: integer }
+        total_gross: { type: integer }
+        total_net: { type: integer }
+
+    AuditEntry:
+      type: object
+      description: |
+        Ghi **cả lượt XEM**, không chỉ lượt sửa — rò rỉ bảng lương thường là do
+        đọc.
+      properties:
+        id: { type: string, format: uuid }
+        actor_id: { type: string, format: uuid }
+        actor_name: { type: string }
+        action: { type: string }
+        resource: { type: string }
+        resource_id: { type: string, format: uuid }
+        ip: { type: string }
+        created_at: { type: string, format: date-time }
+
+    # ------------------------------------------------------------ thông báo
+    Notification:
+      type: object
+      description: |
+        Hình dạng này **giống hệt** payload của bản tin WebSocket loại
+        `notification`. Client dựng một thẻ thông báo duy nhất cho cả hai đường.
+      properties:
+        id: { type: string, format: uuid }
+        type:
+          type: string
+          enum:
+            [
+              task_assigned,
+              task_status_changed,
+              task_mentioned,
+              task_due_soon,
+              leave_requested,
+              leave_decided,
+              adjustment_requested,
+              adjustment_decided,
+              payslip_ready,
+              new_message,
+              system,
+            ]
+        title: { type: string }
+        body: { type: string }
+        link:
+          type: string
+          description: Đường dẫn **tương đối**, để đổi tên miền không làm hỏng thông báo cũ.
+        actor_id: { type: string, format: uuid }
+        actor_name: { type: string }
+        resource: { type: string }
+        resource_id: { type: string, format: uuid }
+        read: { type: boolean }
+        read_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    NotificationPreference:
+      type: object
+      properties:
+        type: { type: string }
+        label: { type: string }
+        enabled: { type: boolean }
+        locked:
+          type: boolean
+          description: |
+            Loại **bắt buộc nhận**, không tắt được: quyết định đơn từ, phiếu
+            lương, thông báo hệ thống. Cho tắt sẽ tạo ra tình huống "tôi không
+            biết đơn bị từ chối" mà không ai giải quyết được.
+
+    # ------------------------------------------------------------ chat
+    Conversation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [direct, group, department, project] }
+        name:
+          type: string
+          description: |
+            Với hội thoại 1-1 đây là tên **người đối diện**, tính theo người
+            đang xem — nên nó khác nhau tuỳ ai gọi.
+        member_count: { type: integer }
+        unread_count: { type: integer }
+        is_pinned: { type: boolean }
+        is_muted: { type: boolean }
+        is_admin: { type: boolean }
+        managed:
+          type: boolean
+          description: |
+            Nhóm theo phòng ban hoặc dự án. Thành viên do job định kỳ đồng bộ,
+            **không sửa tay được** — sửa tay sẽ tạo ra hai nguồn sự thật.
+        peer_id: { type: string, format: uuid }
+        peer_status: { type: string, enum: [online, idle, offline] }
+        last_message_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    ChatMember:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        employee_code: { type: string }
+        is_admin: { type: boolean }
+        status: { type: string, enum: [online, idle, offline] }
+
+    Message:
+      type: object
+      description: |
+        Hình dạng này **giống hệt** payload của bản tin WebSocket loại
+        `chat.message`.
+      properties:
+        id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        sender_id: { type: string, format: uuid }
+        sender_name: { type: string }
+        kind: { type: string, enum: [text, file, image, system] }
+        content:
+          type: string
+          description: Rỗng với tin đã thu hồi, dù bản ghi vẫn còn.
+        reply_to_id: { type: string, format: uuid }
+        reply_to_sender: { type: string }
+        reply_to_content: { type: string }
+        client_message_id:
+          type: string
+          description: |
+            Mã do client sinh, chống trùng khi gửi lại sau khi mất mạng. Trả
+            ngược về để client khớp tin lạc quan với tin thật.
+        attachments:
+          type: array
+          items: { $ref: "#/components/schemas/Attachment" }
+        deleted: { type: boolean }
+        edited_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    SendMessageRequest:
+      type: object
+      properties:
+        content: { type: string, maxLength: 4000 }
+        kind:
+          type: string
+          enum: [text, file, image]
+          description: "`system` bị từ chối — loại đó chỉ server sinh."
+        reply_to_id: { type: string, format: uuid }
+        client_message_id: { type: string }
+        attachments:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            properties:
+              storage_key: { type: string }
+              file_name: { type: string }
+              content_type:
+                type: string
+                description: |
+                  Chỉ là **lời khai**. Server đọc lại nội dung thật từ R2 và
+                  dùng kiểu phát hiện được.
+              size_bytes: { type: integer }
+              width: { type: integer }
+              height: { type: integer }
+
+    # ------------------------------------------------------------ báo cáo
+    Workload:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        open_tasks: { type: integer }
+        overdue_tasks: { type: integer }
+        estimate_hours: { type: number }
+        spent_hours: { type: number }
+
+paths:
+  # =======================================================================
+  # HẠ TẦNG
+  # =======================================================================
+  /ping:
+    get:
+      tags: [Hạ tầng]
+      summary: Nghiệm thu đường đi tới PostgreSQL, Redis và RabbitMQ
+      description: |
+        Không cần đăng nhập. Không trả dữ liệu nghiệp vụ nào — nó chỉ chứng
+        minh ba chuỗi phụ thuộc đã thông, và dòng log của worker mang đúng
+        `request_id` này.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      database_time: { type: string, format: date-time }
+                      redis_ok: { type: boolean }
+                      job_queued: { type: boolean }
+                      request_id: { type: string }
+                      version: { type: string }
+
+  # =======================================================================
+  # XÁC THỰC
+  # =======================================================================
+  /auth/login:
+    post:
+      tags: [Xác thực]
+      summary: Bước một — mật khẩu
+      description: |
+        Mật khẩu đúng **không** đồng nghĩa với đăng nhập xong. Khi bật OTP,
+        endpoint này chỉ tạo một thử thách sống 5 phút; không phiên nào được
+        tạo và không token nào được cấp.
+
+        Email không tồn tại và mật khẩu sai trả **cùng một thông báo** — phân
+        biệt chúng là tặng kẻ tấn công công cụ liệt kê email nhân viên.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/LoginResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: Tài khoản bị khoá hoặc nhân viên đã nghỉ việc }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/verify-otp:
+    post:
+      tags: [Xác thực]
+      summary: Bước hai — mã xác minh
+      description: |
+        Sai quá 5 lần thì thử thách bị huỷ. Bấm gửi lại mã **không** đặt lại bộ
+        đếm — nếu không kẻ tấn công cứ bấm gửi lại là có thêm 5 lượt đoán.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VerifyOTPRequest" }
+      responses:
+        "200":
+          description: Cấp token. Refresh token nằm trong cookie httpOnly.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: "refresh_token; HttpOnly; Secure; SameSite=Strict"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/TokenPair" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/resend-otp:
+    post:
+      tags: [Xác thực]
+      summary: Gửi lại mã xác minh
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id]
+              properties:
+                challenge_id: { type: string }
+      responses:
+        "200":
+          description: Đã gửi lại
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/LoginResponse" }
+        "429": { description: Gửi lại quá sớm hoặc quá nhiều lần }
+
+  /auth/refresh:
+    post:
+      tags: [Xác thực]
+      summary: Xoay vòng token
+      description: |
+        Xác thực bằng **cookie**, không phải access token. Gọi với
+        `credentials: "include"`.
+
+        Refresh token dùng một lần. Một token đã tiêu xuất hiện lại ngoài thời
+        gian ân hạn 10 giây nghĩa là có người sao chép nó — hệ thống huỷ **toàn
+        bộ** phiên của người dùng và gửi email cảnh báo.
+
+        Trong thời gian ân hạn thì không: hai tab cùng gọi refresh là chuyện
+        hằng ngày, và cả hai bám vào cùng một phiên thay thế chứ không đẻ thêm
+        phiên mới.
+      security: []
+      responses:
+        "200":
+          description: Cặp token mới
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/TokenPair" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/forgot-password:
+    post:
+      tags: [Xác thực]
+      summary: Gửi liên kết đặt lại mật khẩu
+      description: |
+        Luôn trả 200, kể cả khi email không tồn tại — trả lời khác nhau là một
+        cách khác để dò email.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+
+  /auth/reset-password:
+    post:
+      tags: [Xác thực]
+      summary: Đặt lại mật khẩu bằng token trong email
+      description: Token dùng một lần, sống 30 phút.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string, format: password }
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /auth/me:
+    get:
+      tags: [Xác thực]
+      summary: Hồ sơ, vai trò và quyền của chính mình
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/CurrentUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/logout:
+    post:
+      tags: [Xác thực]
+      summary: Đăng xuất phiên hiện tại
+      description: |
+        Có hiệu lực **tức thì**: phiên bị xoá khỏi Redis, và mọi request sau đó
+        bị từ chối dù access token còn hạn.
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/logout-all:
+    post:
+      tags: [Xác thực]
+      summary: Đăng xuất mọi thiết bị
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/sessions:
+    get:
+      tags: [Xác thực]
+      summary: Thiết bị đang đăng nhập
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/change-password:
+    post:
+      tags: [Xác thực]
+      summary: Đổi mật khẩu của chính mình
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password: { type: string, format: password }
+                new_password: { type: string, format: password }
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # =======================================================================
+  # NHÂN VIÊN
+  # =======================================================================
+  /employees:
+    get:
+      tags: [Nhân viên]
+      summary: Danh sách nhân viên
+      description: |
+        Kết quả giới hạn theo **phạm vi dữ liệu** của người gọi: `self` chỉ
+        thấy mình, `department` thấy cả nhánh phòng ban mình quản lý.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Search"
+        - { name: status, in: query, schema: { type: string, enum: [probation, official, resigned] } }
+        - { name: department_id, in: query, schema: { type: string, format: uuid } }
+        - { name: position_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Employee" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Nhân viên]
+      summary: Tạo nhân viên
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmployeeInput" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Employee" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Trùng mã nhân viên hoặc email }
+
+  /employees/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Nhân viên]
+      summary: Xem hồ sơ một nhân viên
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Employee" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Nhân viên]
+      summary: Sửa hồ sơ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmployeeInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Employee" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Nhân viên]
+      summary: Cho nghỉ việc
+      description: |
+        Xoá **mềm** và cắt luôn mọi phiên đăng nhập của người đó. Không cắt
+        phiên thì họ vẫn dùng được hệ thống tới khi token hết hạn.
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /employees/{id}/roles:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Nhân viên]
+      summary: Vai trò của nhân viên
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      employee_id: { type: string, format: uuid }
+                      user_id: { type: string, format: uuid }
+                      roles: { type: array, items: { type: string } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Nhân viên]
+      summary: Gán vai trò
+      description: Nhận **mã** vai trò, không phải id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles:
+                  type: array
+                  items: { type: string }
+                  example: [employee]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      roles: { type: array, items: { type: string } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /employees/{id}/account:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      tags: [Nhân viên]
+      summary: Tạo tài khoản đăng nhập
+      description: |
+        Trả về mật khẩu tạm **một lần duy nhất** — nó không lưu ở dạng đọc được
+        và không xem lại được. Tài khoản bị đánh dấu phải đổi mật khẩu ngay lần
+        đăng nhập đầu.
+
+        Dùng quyền `employee:create` chứ không phải `employee:update`: tạo tài
+        khoản là cấp quyền truy cập hệ thống, nặng hơn hẳn việc sửa số điện
+        thoại.
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      user_id: { type: string, format: uuid }
+                      email: { type: string }
+                      temp_password: { type: string }
+        "409": { description: Nhân viên đã có tài khoản }
+
+  /employees/{id}/account/active:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    put:
+      tags: [Nhân viên]
+      summary: Bật hoặc tắt tài khoản
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [active]
+              properties:
+                active: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /employees/{id}/avatar/upload-url:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      tags: [Nhân viên]
+      summary: Xin URL tải ảnh đại diện
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type: { type: string, example: image/png }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/UploadTicket" }
+        "422": { description: Chưa cấu hình Cloudflare R2 }
+
+  /employees/{id}/avatar/confirm:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      tags: [Nhân viên]
+      summary: Xác nhận đã tải ảnh lên
+      description: |
+        Server đọc 512 byte đầu của tệp trên R2 và kiểm bằng **magic bytes**.
+        Content-Type client khai lúc xin URL chỉ là lời khai, sửa được tuỳ ý.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Employee" }
+        "400": { description: Nội dung tệp không phải ảnh, hoặc vượt kích thước }
+
+  /employees/{id}/avatar:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    delete:
+      tags: [Nhân viên]
+      summary: Xoá ảnh đại diện
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # =======================================================================
+  # PHÒNG BAN, CHỨC VỤ, VAI TRÒ
+  # =======================================================================
+  /departments:
+    get:
+      tags: [Phòng ban]
+      summary: Danh sách phòng ban (phẳng)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Department" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Phòng ban]
+      summary: Tạo phòng ban
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DepartmentInput" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Department" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: Trùng mã phòng ban }
+
+  /departments/tree:
+    get:
+      tags: [Phòng ban]
+      summary: Cây phòng ban
+      description: |
+        Phòng ban có cha đã bị xoá mềm hiện như phòng **gốc** thay vì biến mất
+        — làm mất nó khỏi cây nghĩa là nhân viên trong đó cũng không thấy trên
+        giao diện.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Department" }
+
+  /departments/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Phòng ban]
+      summary: Xem một phòng ban
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Department" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Phòng ban]
+      summary: Sửa phòng ban
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DepartmentInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Department" }
+        "400": { description: Tạo vòng lặp trong cây, hoặc dữ liệu không hợp lệ }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Phòng ban]
+      summary: Xoá phòng ban
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "409": { description: Phòng còn nhân viên hoặc còn phòng con }
+
+  /positions:
+    get:
+      tags: [Chức vụ]
+      summary: Danh sách chức vụ
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Position" }
+    post:
+      tags: [Chức vụ]
+      summary: Tạo chức vụ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code: { type: string }
+                name: { type: string }
+                level: { type: integer }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Position" }
+        "409": { description: Trùng mã chức vụ }
+
+  /positions/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    put:
+      tags: [Chức vụ]
+      summary: Sửa chức vụ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                name: { type: string }
+                level: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Position" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Chức vụ]
+      summary: Xoá chức vụ
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "409": { description: Còn nhân viên giữ chức vụ này }
+
+  /roles:
+    get:
+      tags: [Vai trò]
+      summary: Danh mục vai trò và quyền
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Role" }
+
+  # =======================================================================
+  # DỰ ÁN
+  # =======================================================================
+  /projects:
+    get:
+      tags: [Dự án]
+      summary: Danh sách dự án
+      description: |
+        Người không có phạm vi toàn công ty chỉ thấy dự án mình là **thành
+        viên**. `viewer_role` trong mỗi dòng cho biết họ được làm gì.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Search"
+        - { name: status, in: query, schema: { type: string } }
+        - { name: department_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Project" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Dự án]
+      summary: Tạo dự án
+      description: Chủ dự án tự động trở thành thành viên với vai trò `owner`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectInput" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Project" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: Trùng mã dự án }
+
+  /projects/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Dự án]
+      summary: Xem một dự án
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Project" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Dự án]
+      summary: Sửa dự án
+      description: Cần vai trò `owner` trong dự án, hoặc phạm vi toàn công ty.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Project" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Dự án]
+      summary: Xoá dự án
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /projects/{id}/board:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Công việc]
+      summary: Bảng Kanban
+      description: |
+        Dùng quyền xem **công việc**, không phải quyền xem dự án: người chỉ
+        được xem danh sách dự án mà không được xem việc thì bảng Kanban là rỗng
+        nghĩa.
+
+        Không phân trang — cần thấy cả cột một lúc.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Board" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /projects/{id}/progress:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Dự án]
+      summary: Tiến độ dự án
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      total_tasks: { type: integer }
+                      by_status: { type: object, additionalProperties: { type: integer } }
+                      overdue_tasks: { type: integer }
+                      progress: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /projects/{id}/members:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Dự án]
+      summary: Thành viên dự án
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ProjectMember" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Dự án]
+      summary: Thêm thành viên
+      description: |
+        Thêm lại người đã có thì **cập nhật vai trò**, không báo lỗi trùng:
+        giao diện có hai nút riêng cho hai việc nhưng người dùng hay nhầm, và
+        kết quả họ mong đợi trong cả hai trường hợp là như nhau.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employee_id, role]
+              properties:
+                employee_id: { type: string, format: uuid }
+                role: { type: string, enum: [owner, member, viewer] }
+      responses:
+        "201":
+          description: Đã thêm hoặc đã cập nhật vai trò
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ProjectMember" }
+        "400": { description: Nhân viên không tồn tại hoặc đã nghỉ việc }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /projects/{id}/members/{employeeID}:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+      - $ref: "#/components/parameters/PathEmployeeID"
+    put:
+      tags: [Dự án]
+      summary: Đổi vai trò thành viên
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [owner, member, viewer] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ProjectMember" }
+        "409": { description: Hạ vai trò chủ dự án CUỐI CÙNG sẽ để lại dự án vô chủ }
+    delete:
+      tags: [Dự án]
+      summary: Gỡ thành viên hoặc tự rời dự án
+      description: |
+        Ai cũng **tự rời** được. Gỡ người khác thì cần vai trò `owner` — cùng
+        một endpoint, hai kết quả khác nhau tuỳ người bị gỡ là ai, và
+        middleware không phân biệt được điều đó.
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Không gỡ được chủ dự án cuối cùng }
+
+  # =======================================================================
+  # CÔNG VIỆC
+  # =======================================================================
+  /tasks:
+    get:
+      tags: [Công việc]
+      summary: Danh sách công việc
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Search"
+        - { name: project_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: priority, in: query, schema: { type: string } }
+        - { name: assignee_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+    post:
+      tags: [Công việc]
+      summary: Tạo công việc
+      description: |
+        Giao việc cho người khác sẽ phát sự kiện lên hàng đợi; worker biến nó
+        thành thông báo. Tự giao cho mình thì **không** — người vừa bấm đã biết
+        mình vừa làm gì.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskInput" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: Dự án đã đóng }
+
+  /tasks/my:
+    get:
+      tags: [Công việc]
+      summary: Công việc được giao cho tôi
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+
+  /tasks/overdue:
+    get:
+      tags: [Công việc]
+      summary: Công việc quá hạn
+      description: Việc **đã xong** không bao giờ nằm trong danh sách này, dù xong muộn.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+
+  /tasks/{taskID}:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    get:
+      tags: [Công việc]
+      summary: Xem một công việc
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Task" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Công việc]
+      summary: Sửa công việc
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Task" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Công việc]
+      summary: Xoá công việc
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{taskID}/move:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    patch:
+      tags: [Công việc]
+      summary: Kéo-thả trên bảng Kanban
+      description: |
+        PATCH vì đây là sửa **một phần** trạng thái, không phải thay cả bản ghi.
+
+        Vị trí là số thực và được tính bằng trung bình hai láng giềng. Khi
+        khoảng cách nhỏ tới mức `float64` không phân biệt được nữa, hệ thống
+        đánh số lại cả cột theo bước đều 1000.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskMoveRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Task" }
+        "400": { description: Nhảy cóc trạng thái, hoặc thả sau chính nó }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Dự án đã đóng }
+
+  /tasks/{taskID}/subtasks:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    get:
+      tags: [Công việc]
+      summary: Công việc con
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Task" }
+
+  /tasks/{taskID}/activities:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    get:
+      tags: [Công việc]
+      summary: Dòng thời gian thay đổi
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Activity" }
+
+  /tasks/{taskID}/comments:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    get:
+      tags: [Công việc]
+      summary: Bình luận
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Comment" }
+    post:
+      tags: [Công việc]
+      summary: Viết bình luận
+      description: |
+        Dùng quyền `task:update` chứ không phải `task:create`: viết bình luận
+        là góp vào một công việc đã có, không phải tạo công việc mới.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Comment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /tasks/comments/{commentID}:
+    parameters: [{ $ref: "#/components/parameters/PathCommentID" }]
+    put:
+      tags: [Công việc]
+      summary: Sửa bình luận
+      description: |
+        Chỉ **tác giả** sửa được — kể cả chủ dự án cũng không. Sửa lời người
+        khác rồi để nguyên tên họ là làm sai lệch hồ sơ thảo luận.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Comment" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Công việc]
+      summary: Xoá bình luận
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{taskID}/attachments:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    get:
+      tags: [Công việc]
+      summary: Tệp đính kèm
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Attachment" }
+
+  /tasks/{taskID}/attachments/upload-url:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    post:
+      tags: [Công việc]
+      summary: Xin URL tải tệp lên
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, content_type]
+              properties:
+                file_name: { type: string }
+                content_type: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/UploadTicket" }
+        "400": { description: Loại tệp không được hỗ trợ }
+        "422": { description: Chưa cấu hình Cloudflare R2 }
+
+  /tasks/{taskID}/attachments/confirm:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    post:
+      tags: [Công việc]
+      summary: Xác nhận đã tải tệp lên
+      description: |
+        Kiểm kiểu tệp bằng **nội dung thật** (512 byte đầu). Tệp không đạt bị
+        xoá khỏi R2 ngay — để lại thì nó vẫn ở đó với một URL ký được.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, file_name]
+              properties:
+                key: { type: string }
+                file_name: { type: string }
+      responses:
+        "201":
+          description: Đã gắn
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Attachment" }
+        "400": { description: Nội dung tệp không thuộc loại được hỗ trợ }
+
+  /tasks/attachments/{attachmentID}:
+    parameters: [{ $ref: "#/components/parameters/PathAttachmentID" }]
+    delete:
+      tags: [Công việc]
+      summary: Xoá tệp đính kèm
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{taskID}/timelogs:
+    parameters: [{ $ref: "#/components/parameters/PathTaskID" }]
+    get:
+      tags: [Công việc]
+      summary: Giờ đã ghi nhận
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Timelog" }
+    post:
+      tags: [Công việc]
+      summary: Ghi nhận giờ làm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minutes]
+              properties:
+                minutes: { type: integer, minimum: 1 }
+                note: { type: string }
+                logged_at: { type: string, format: date }
+      responses:
+        "201":
+          description: Đã ghi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Timelog" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /tasks/timelogs/{timelogID}:
+    parameters: [{ $ref: "#/components/parameters/PathTimelogID" }]
+    delete:
+      tags: [Công việc]
+      summary: Xoá bản ghi giờ
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /reports/workload:
+    get:
+      tags: [Báo cáo]
+      summary: Khối lượng việc theo nhân viên
+      parameters:
+        - { name: project_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Workload" }
+
+  # =======================================================================
+  # CHẤM CÔNG
+  # =======================================================================
+  /attendance/today:
+    get:
+      tags: [Chấm công]
+      summary: Tình hình hôm nay của tôi
+      description: |
+        Dữ liệu đến từ job quét presence chạy mỗi phút, nên nó trễ tối đa một
+        phút so với thực tế.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      work_date: { type: string, format: date }
+                      status: { type: string }
+                      online_minutes: { type: integer }
+                      active_minutes: { type: integer }
+                      first_seen_at: { type: string, format: date-time }
+                      expected_minutes: { type: integer }
+                      schedule_name: { type: string }
+
+  /attendance/days:
+    get:
+      tags: [Chấm công]
+      summary: Bảng công theo khoảng ngày
+      description: |
+        `attendance:read` chỉ cho xem công **của chính mình**. Xem của người
+        khác cần thêm `attendance:read_all`, và tầng nghiệp vụ vẫn giới hạn
+        tiếp trong phạm vi phòng ban — dữ liệu chấm công là dữ liệu cá nhân.
+
+        Khoảng tối đa 400 ngày một lần.
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - { name: employee_id, in: query, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AttendanceDay" }
+        "400": { description: Khoảng ngày quá rộng }
+
+  /attendance/day:
+    get:
+      tags: [Chấm công]
+      summary: Chi tiết một ngày, kèm từng phiên làm việc
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: employee_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      day: { $ref: "#/components/schemas/AttendanceDay" }
+                      sessions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string, format: uuid }
+                            started_at: { type: string, format: date-time }
+                            ended_at: { type: string, format: date-time }
+                            minutes: { type: integer }
+                            active_minutes: { type: integer }
+                            source: { type: string, enum: [presence, manual, adjustment] }
+                            note: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /attendance/summary:
+    get:
+      tags: [Chấm công]
+      summary: Tổng hợp công theo tháng
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer } }
+        - { name: month, in: query, required: true, schema: { type: integer, minimum: 1, maximum: 12 } }
+        - { name: department_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        employee_id: { type: string, format: uuid }
+                        employee_name: { type: string }
+                        present_days: { type: integer }
+                        absent_days: { type: integer }
+                        leave_days: { type: number }
+                        total_online_minutes: { type: integer }
+                        total_late_minutes: { type: integer }
+
+  /attendance/team:
+    get:
+      tags: [Chấm công]
+      summary: Ai đang online
+      description: |
+        Cần `attendance:read_all` vì đây là thông tin về **người khác**.
+        Ba trạng thái, không phải hai — gộp `idle` vào `online` sẽ hiện chấm
+        xanh cho người đã bỏ máy đó cả buổi.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        employee_id: { type: string, format: uuid }
+                        employee_name: { type: string }
+                        status: { type: string, enum: [online, idle, offline] }
+                        last_seen_at: { type: string, format: date-time }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /attendance/check-in:
+    post:
+      tags: [Chấm công]
+      summary: Chấm công thủ công
+      description: |
+        Cho trường hợp ngoại lệ: mất mạng, họp ngoài văn phòng. Dùng quyền
+        `attendance:read` vì người ta chỉ ghi cho chính mình.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string }
+      responses:
+        "201": { description: Đã ghi nhận }
+        "409": { description: Kỳ công đã khoá }
+
+  /attendance/adjustments:
+    get:
+      tags: [Chấm công]
+      summary: Danh sách yêu cầu điều chỉnh công
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected, cancelled] } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Adjustment" }
+    post:
+      tags: [Chấm công]
+      summary: Gửi yêu cầu điều chỉnh công
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [work_date, requested_minutes, reason]
+              properties:
+                work_date: { type: string, format: date }
+                requested_minutes: { type: integer }
+                reason: { type: string }
+      responses:
+        "201":
+          description: Đã gửi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Adjustment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: Kỳ công đã khoá }
+
+  /attendance/adjustments/{id}/decision:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    put:
+      tags: [Chấm công]
+      summary: Duyệt hoặc từ chối yêu cầu điều chỉnh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [approved, rejected] }
+                note: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Adjustment" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Yêu cầu đã được quyết định trước đó }
+
+  /attendance/lock:
+    post:
+      tags: [Chấm công]
+      summary: Khoá kỳ công
+      description: |
+        Sau khi khoá, job tổng hợp **bỏ qua** những ngày trong kỳ trong im lặng
+        — đó chính là tác dụng của việc khoá, không phải một lỗi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from: { type: string, format: date }
+                to: { type: string, format: date }
+                locked: { type: boolean, default: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      affected: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # =======================================================================
+  # NGHỈ PHÉP
+  # =======================================================================
+  /leaves:
+    get:
+      tags: [Nghỉ phép]
+      summary: Danh sách đơn nghỉ phép
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - { name: status, in: query, schema: { type: string } }
+        - { name: employee_id, in: query, schema: { type: string, format: uuid } }
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Leave" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+    post:
+      tags: [Nghỉ phép]
+      summary: Gửi đơn nghỉ phép
+      description: |
+        Số ngày được tính **tự động**, đã bỏ cuối tuần và ngày lễ theo khung
+        giờ làm việc áp dụng cho người đó. Đơn rơi trọn vào cuối tuần bị từ
+        chối vì nó không tiêu ngày phép nào.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_type, start_date, end_date]
+              properties:
+                leave_type: { type: string, enum: [annual, sick, unpaid, maternity, other] }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                day_part: { type: string, enum: [full, morning, afternoon], default: full }
+                reason: { type: string }
+      responses:
+        "201":
+          description: Đã gửi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Leave" }
+        "400": { description: Ngày không hợp lệ, hoặc đơn không có ngày làm việc nào }
+        "409": { description: Trùng với đơn đã có, hoặc vượt quỹ ngày phép }
+
+  /leaves/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    delete:
+      tags: [Nghỉ phép]
+      summary: Huỷ đơn của chính mình
+      description: |
+        Dùng quyền `leave:create` chứ không phải quyền duyệt — tầng nghiệp vụ
+        chặn việc huỷ đơn người khác.
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Đơn đã được quyết định }
+
+  /leaves/{id}/decision:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    put:
+      tags: [Nghỉ phép]
+      summary: Duyệt hoặc từ chối đơn
+      description: |
+        Duyệt sẽ trừ quỹ ngày phép bằng một lệnh **cộng dồn**, không phải
+        đọc-sửa-ghi: hai đơn duyệt cùng lúc theo kiểu đọc-sửa-ghi sẽ ghi đè
+        nhau và quỹ phép sai.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [approved, rejected] }
+                note: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Leave" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Đơn đã được quyết định trước đó }
+
+  /leaves/balance:
+    get:
+      tags: [Nghỉ phép]
+      summary: Quỹ ngày phép của tôi
+      parameters:
+        - $ref: "#/components/parameters/Year"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/LeaveBalance" }
+
+  /leaves/balances:
+    get:
+      tags: [Nghỉ phép]
+      summary: Quỹ ngày phép của nhiều người
+      parameters:
+        - $ref: "#/components/parameters/Year"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/LeaveBalance" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [Nghỉ phép]
+      summary: Đặt quỹ ngày phép
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employee_id, year, total_days]
+              properties:
+                employee_id: { type: string, format: uuid }
+                year: { type: integer }
+                total_days: { type: number }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/LeaveBalance" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # =======================================================================
+  # KHUNG GIỜ LÀM VIỆC VÀ NGÀY LỄ
+  # =======================================================================
+  /work-schedules:
+    get:
+      tags: [Khung giờ làm việc]
+      summary: Danh sách khung giờ
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/WorkSchedule" }
+    post:
+      tags: [Khung giờ làm việc]
+      summary: Tạo khung giờ
+      description: |
+        Ba mức: bỏ trống cả hai id là mức công ty, có `department_id` là mức
+        phòng ban, có `employee_id` là mức cá nhân. Mức hẹp hơn thắng.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkSchedule" }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/WorkSchedule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /work-schedules/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    put:
+      tags: [Khung giờ làm việc]
+      summary: Sửa khung giờ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkSchedule" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/WorkSchedule" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Khung giờ làm việc]
+      summary: Xoá khung giờ
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /holidays:
+    get:
+      tags: [Ngày lễ]
+      summary: Danh sách ngày lễ
+      parameters:
+        - $ref: "#/components/parameters/Year"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Holiday" }
+    post:
+      tags: [Ngày lễ]
+      summary: Thêm ngày lễ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, name]
+              properties:
+                date: { type: string, format: date }
+                name: { type: string }
+                is_paid: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Đã thêm
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Holiday" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Ngày này đã có }
+
+  /holidays/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    delete:
+      tags: [Ngày lễ]
+      summary: Xoá ngày lễ
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # =======================================================================
+  # LƯƠNG
+  #
+  # Ba điểm khác biệt so với mọi module khác:
+  #   - payroll:read_own chỉ cho xem phiếu CỦA CHÍNH MÌNH. Không có ngoại lệ
+  #     theo phòng ban như chấm công — trưởng phòng KHÔNG xem được lương nhân
+  #     viên phòng mình.
+  #   - payroll:manage (chạy tính lương) tách khỏi payroll:approve (khoá kỳ,
+  #     xác nhận đã trả): nguyên tắc bốn mắt.
+  #   - Mọi lượt XEM đều ghi audit_logs, không chỉ lượt sửa.
+  # =======================================================================
+  /payroll/periods:
+    get:
+      tags: [Lương]
+      summary: Danh sách kỳ lương
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/PayrollPeriod" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Lương]
+      summary: Tạo kỳ lương
+      description: |
+        Chỉ tạo được kỳ cho tháng **đã kết thúc**: dữ liệu công của tháng chưa
+        xong còn thay đổi mỗi ngày.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [year, month]
+              properties:
+                year: { type: integer }
+                month: { type: integer, minimum: 1, maximum: 12 }
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/PayrollPeriod" }
+        "400": { description: Tháng chưa kết thúc }
+        "409": { description: Kỳ lương đã tồn tại }
+
+  /payroll/periods/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Lương]
+      summary: Xem một kỳ lương
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/PayrollPeriod" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /payroll/periods/{id}/calculate:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      tags: [Lương]
+      summary: Chạy tính lương
+      description: |
+        **Bất đồng bộ**: trả 202 ngay và đẩy việc sang worker. Kỳ lương của
+        công ty vài trăm người mất vài chục giây, quá lâu cho một request HTTP.
+
+        Job chịu được chạy lại: nó xoá sạch phiếu cũ rồi ghi bộ mới trong một
+        giao dịch.
+      responses:
+        "202": { description: Đã nhận, worker đang xử lý }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Kỳ đã khoá hoặc đã trả }
+
+  /payroll/periods/{id}/status:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    put:
+      tags: [Lương]
+      summary: Đổi trạng thái kỳ lương
+      description: |
+        Cần quyền `payroll:approve`, **khác** với quyền chạy tính lương. Người
+        chạy tính lương không được tự chốt kỳ mình vừa chạy — nguyên tắc bốn
+        mắt chỉ có tác dụng khi hai quyền nằm ở hai người.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [draft, calculated, locked, paid] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/PayrollPeriod" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Bước chuyển trạng thái không hợp lệ }
+
+  /payroll/periods/{id}/cost-by-department:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Lương]
+      summary: Chi phí nhân sự theo phòng ban
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CostRow" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /payroll/cost-by-month:
+    get:
+      tags: [Lương]
+      summary: Chi phí nhân sự theo tháng
+      parameters:
+        - $ref: "#/components/parameters/Year"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CostRow" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /payroll/payslips:
+    get:
+      tags: [Lương]
+      summary: Danh sách phiếu lương của một kỳ
+      parameters:
+        - { name: period_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Payslip" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /payroll/payslips/my:
+    get:
+      tags: [Lương]
+      summary: Phiếu lương của tôi
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Payslip" }
+
+  /payroll/payslips/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Lương]
+      summary: Xem một phiếu lương
+      description: Lượt xem này được ghi vào `audit_logs`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Payslip" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Lương]
+      summary: Sửa phiếu lương
+      description: Chỉ sửa được khi kỳ còn ở trạng thái `draft` hoặc `calculated`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: { type: string }
+                      kind: { type: string, enum: [allowance, deduction, bonus] }
+                      amount: { type: integer }
+                note: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Payslip" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Kỳ đã khoá }
+
+  /payroll/payslips/{id}/document:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Lương]
+      summary: Phiếu lương dạng tài liệu in được
+      description: |
+        Trả về HTML hoàn chỉnh, in ra PDF được từ trình duyệt.
+
+        Chưa kết xuất PDF phía máy chủ: việc đó cần một font tiếng Việt nhúng
+        vào image, và đó là quyết định về giấy phép cùng dung lượng thuộc về
+        chủ hệ thống.
+      responses:
+        "200":
+          description: OK
+          content:
+            text/html:
+              schema: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /payroll/settings:
+    get:
+      tags: [Lương]
+      summary: Tham số tính lương đang áp dụng
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/PayrollSettings" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [Lương]
+      summary: Cập nhật tham số tính lương
+      description: |
+        Ghi một **phiên bản mới** hiệu lực từ hôm nay, không ghi đè bản cũ.
+        Ghi đè sẽ phá vỡ lời hứa "tính lại tháng 3 ra đúng con số tháng 3".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PayrollSettings" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/PayrollSettings" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /payroll/audit:
+    get:
+      tags: [Lương]
+      summary: Nhật ký truy cập dữ liệu lương
+      parameters:
+        - { name: resource, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditEntry" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /employees/{employeeID}/salary:
+    parameters: [{ $ref: "#/components/parameters/PathEmployeeID" }]
+    get:
+      tags: [Lương]
+      summary: Cấu hình lương đang áp dụng
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/SalaryStructure" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Lương]
+      summary: Đặt cấu hình lương
+      description: |
+        Ghi một **phiên bản mới**. Trường thông tin ngân hàng bỏ trống sẽ được
+        mang sang từ phiên bản trước — nếu không, một lần tăng lương sẽ xoá mất
+        số tài khoản và lương tháng đó không chuyển được.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SalaryStructure" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/SalaryStructure" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /employees/{employeeID}/salary/history:
+    parameters: [{ $ref: "#/components/parameters/PathEmployeeID" }]
+    get:
+      tags: [Lương]
+      summary: Lịch sử các phiên bản cấu hình lương
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SalaryStructure" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # =======================================================================
+  # THÔNG BÁO
+  #
+  # Cố ý KHÔNG có mã quyền nào. Mỗi người chỉ đọc được của chính mình, và
+  # tầng nghiệp vụ khoá cứng theo actor — thêm một quyền ở đây chỉ tạo ảo
+  # giác rằng có thể cấp nó cho người khác.
+  # =======================================================================
+  /notifications:
+    get:
+      tags: [Thông báo]
+      summary: Thông báo của tôi
+      description: |
+        Phân trang theo **cursor**. `next_before` trong phản hồi là mốc để tải
+        trang cũ hơn; null nghĩa là đã hết.
+      parameters:
+        - $ref: "#/components/parameters/Before"
+        - $ref: "#/components/parameters/Limit"
+        - { name: unread, in: query, schema: { type: boolean } }
+        - { name: type, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/Notification" }
+                      next_before: { type: [string, "null"], format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /notifications/summary:
+    get:
+      tags: [Thông báo]
+      summary: Số thông báo chưa đọc
+      description: |
+        Con số này cũng được **đẩy qua WebSocket** mỗi khi nó đổi (loại
+        `notification.badge`), nên client không cần hỏi lại định kỳ.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      unread: { type: integer }
+
+  /notifications/read:
+    post:
+      tags: [Thông báo]
+      summary: Đánh dấu đã đọc
+      description: |
+        Đánh dấu hộ thông báo của người khác **vô hiệu**, không báo lỗi: điều
+        kiện `employee_id` nằm ngay trong câu `UPDATE`, nên gửi id nào lên cũng
+        không đụng được dữ liệu người khác.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Số chưa đọc còn lại
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      unread: { type: integer }
+
+  /notifications/read-all:
+    post:
+      tags: [Thông báo]
+      summary: Đánh dấu đã đọc tất cả
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      unread: { type: integer }
+
+  /notifications/preferences:
+    get:
+      tags: [Thông báo]
+      summary: Cấu hình nhận thông báo
+      description: |
+        Trả về **toàn bộ** danh mục 11 loại kèm trạng thái, không chỉ những
+        loại đã tắt: để client tự giữ danh sách loại là cách chắc chắn để nó
+        lệch với server sau lần thêm loại tiếp theo.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/NotificationPreference" }
+    put:
+      tags: [Thông báo]
+      summary: Bật hoặc tắt một loại thông báo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, enabled]
+              properties:
+                type: { type: string }
+                enabled: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "400": { description: Loại không tồn tại, hoặc là loại bắt buộc không tắt được }
+
+  # =======================================================================
+  # CHAT
+  #
+  # Quyền thô (chat:read, chat:create) chỉ trả lời "có được dùng chat không".
+  # Câu "được đọc hội thoại NÀO" do bảng conversation_members trả lời, và mọi
+  # thao tác đều hỏi nó trước — không phải thành viên thì nhận 404.
+  # =======================================================================
+  /chat/conversations:
+    get:
+      tags: [Chat]
+      summary: Danh sách hội thoại
+      description: Ghim lên trước, rồi sắp theo hoạt động gần nhất.
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Conversation" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Chat]
+      summary: Mở hội thoại 1-1 hoặc tạo nhóm
+      description: |
+        `kind: direct` **tái sử dụng** hội thoại đã có giữa hai người. Hai
+        người bấm "nhắn tin" cho nhau ở hai thời điểm khác nhau phải rơi vào
+        cùng một hội thoại, nếu không mỗi người thấy một nửa lịch sử.
+
+        `kind: department` và `project` bị từ chối — nhóm đó do hệ thống dựng.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind: { type: string, enum: [direct, group] }
+                peer_id: { type: string, format: uuid }
+                name: { type: string }
+                member_ids:
+                  type: array
+                  maxItems: 200
+                  items: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Đã tạo hoặc trả về hội thoại đã có
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Conversation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: Người nhận không tồn tại hoặc khác công ty }
+
+  /chat/conversations/{id}:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Chat]
+      summary: Chi tiết hội thoại kèm thành viên
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      conversation: { $ref: "#/components/schemas/Conversation" }
+                      members:
+                        type: array
+                        items: { $ref: "#/components/schemas/ChatMember" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Chat]
+      summary: Đổi tên nhóm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Conversation" }
+        "400": { description: Nhóm do hệ thống quản lý, không sửa được }
+        "403": { description: Chỉ quản trị nhóm mới đổi tên được }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /chat/conversations/{id}/flags:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    patch:
+      tags: [Chat]
+      summary: Ghim hoặc tắt thông báo hội thoại
+      description: |
+        Tuỳ chọn **riêng của người xem**, nên chỉ cần quyền đọc và dùng được cả
+        với nhóm do hệ thống quản lý. Tắt thông báo không ngăn tin nhắn
+        realtime — nó chỉ ngăn việc bị đánh động.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pinned: { type: boolean }
+                muted: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /chat/conversations/{id}/leave:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      tags: [Chat]
+      summary: Rời nhóm
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "400": { description: Hội thoại 1-1 hoặc nhóm do hệ thống quản lý }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /chat/conversations/{id}/members:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      tags: [Chat]
+      summary: Thêm thành viên vào nhóm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [member_ids]
+              properties:
+                member_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "400": { description: Nhóm tự động, hoặc có người ngoài công ty }
+        "403": { description: Chỉ quản trị nhóm }
+
+  /chat/conversations/{id}/members/{employeeID}:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+      - $ref: "#/components/parameters/PathEmployeeID"
+    delete:
+      tags: [Chat]
+      summary: Gỡ thành viên khỏi nhóm
+      description: |
+        Người đã bị gỡ nhận **404** ở mọi thao tác với hội thoại đó, không phải
+        403 — 403 xác nhận hội thoại tồn tại.
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "400": { description: Tự gỡ mình thì dùng chức năng rời nhóm }
+        "403": { description: Chỉ quản trị nhóm }
+
+  /chat/conversations/{id}/members/{employeeID}/admin:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+      - $ref: "#/components/parameters/PathEmployeeID"
+    put:
+      tags: [Chat]
+      summary: Trao hoặc thu quyền quản trị nhóm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_admin]
+              properties:
+                is_admin: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "400": { description: Không tự bỏ quyền của mình được — nhóm sẽ không còn quản trị viên }
+        "403": { description: Chỉ quản trị nhóm }
+
+  /chat/conversations/{id}/messages:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Chat]
+      summary: Lịch sử tin nhắn
+      description: |
+        Trả về theo thứ tự **tăng dần**, và trang "sau" là trang **cũ hơn** —
+        ngược với mọi danh sách khác. `next_before` là mốc cuộn ngược lên.
+
+        `q` tìm toàn văn, **bỏ dấu**: gõ "kiem thu" ra "kiểm thử".
+      parameters:
+        - $ref: "#/components/parameters/Before"
+        - $ref: "#/components/parameters/Limit"
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/Message" }
+                      next_before: { type: [string, "null"], format: date-time }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Chat]
+      summary: Gửi tin nhắn
+      description: |
+        Đường **dự phòng** — đường chính là WebSocket (`chat.send`), nhanh hơn
+        và không tốn một vòng bắt tay HTTP cho mỗi tin. Cùng một
+        `client_message_id` nên gửi lại bằng đường nào cũng không sinh tin
+        trùng.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendMessageRequest" }
+      responses:
+        "201":
+          description: Đã gửi, hoặc trả về tin cũ nếu trùng client_message_id
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Message" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /chat/conversations/{id}/read:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      tags: [Chat]
+      summary: Báo đã đọc tới một tin
+      description: |
+        Mốc chỉ dời **về phía trước**. Hai tab cùng mở một hội thoại sẽ báo đọc
+        theo thứ tự bất kỳ, và không có điều kiện đó thì tab cuộn ngược lên làm
+        tin mới "chưa đọc" trở lại.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message_id]
+              properties:
+                message_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Tổng số tin chưa đọc còn lại
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      unread: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /chat/conversations/{id}/upload-url:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    post:
+      tags: [Chat]
+      summary: Xin URL tải tệp đính kèm
+      description: |
+        Kiểm kiểu tệp theo **lời khai** ở bước này để báo lỗi sớm. Nội dung
+        thật được kiểm lại bằng magic bytes khi gắn tệp vào tin nhắn, và lời
+        khai không bao giờ thắng.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, content_type, size_bytes]
+              properties:
+                file_name: { type: string }
+                content_type: { type: string }
+                size_bytes: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/UploadTicket" }
+        "400": { description: Loại tệp không được hỗ trợ, hoặc quá lớn }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /chat/messages/{messageID}:
+    parameters: [{ $ref: "#/components/parameters/PathMessageID" }]
+    put:
+      tags: [Chat]
+      summary: Sửa tin nhắn
+      description: Chỉ **người gửi** sửa được.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, maxLength: 4000 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Message" }
+        "400": { description: Tin đã thu hồi }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Chat]
+      summary: Thu hồi tin nhắn
+      description: |
+        Người gửi **hoặc** quản trị nhóm. Nội dung bị xoá khỏi database, không
+        chỉ đánh dấu — xoá mềm là để giữ dấu vết cho quản trị, không phải để
+        nội dung vẫn nằm nguyên và rò ra qua một đường đọc nào đó quên kiểm cờ.
+      responses:
+        "200": { $ref: "#/components/responses/NoContentOK" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /chat/unread:
+    get:
+      tags: [Chat]
+      summary: Tổng số tin chưa đọc trên mọi hội thoại
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      unread: { type: integer }

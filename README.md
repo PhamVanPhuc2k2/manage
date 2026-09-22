@@ -81,6 +81,7 @@ Sửa file `.go` là Air tự build lại trong container, không cần restart.
 | [doc/OPERATIONS.md](doc/OPERATIONS.md) | Service, biến môi trường, lệnh, TLS, sao lưu và khôi phục |
 | [doc/WEBSOCKET.md](doc/WEBSOCKET.md) | Giao thức WebSocket: toàn bộ bản tin hai chiều |
 | [doc/ERD.md](doc/ERD.md) | Sơ đồ 37 bảng, kèm lý do của các quyết định schema |
+| [doc/openapi.yaml](doc/openapi.yaml) | Đặc tả OpenAPI 3.1 — 132 endpoint, đối chiếu tự động với router |
 | [doc/PHASE-1-SETUP.md](doc/PHASE-1-SETUP.md) | Thiết kế xác thực và phân quyền: chiến lược token, chống đánh cắp, phạm vi dữ liệu |
 
 ## Lộ trình
