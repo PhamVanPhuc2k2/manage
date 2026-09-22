@@ -2,7 +2,20 @@
 
 Hệ thống quản trị nội bộ doanh nghiệp: nhân sự, phòng ban, dự án, giao việc, chấm công, lương, cùng thông báo và chat thời gian thực.
 
-**Trạng thái:** Phase 0 → 5 đã xong và chạy được. Phase 6 (hoàn thiện & vận hành) đang làm — xem [doc/TASKS.md](doc/TASKS.md#phase-6--hoàn-thiện--vận-hành).
+**Trạng thái:** Phase 0 → 6 đã xong và đã nghiệm thu trên stack Docker thật.
+Phase 7 (gọi video) chưa bắt đầu — xem [doc/TASKS.md](doc/TASKS.md).
+
+Nghiệm thu hiện tại, đo trên máy thật chứ không phải ước tính:
+
+| Hạng mục | Kết quả |
+|---|---|
+| Unit test (Go) | 8/8 gói usecase ≥ 70% coverage |
+| Integration test (PostgreSQL thật) | 15 phép thử đạt |
+| API end-to-end (6 bộ smoke) | **286/286** từ cài đặt sạch |
+| E2E trình duyệt (Playwright) | **8/8** |
+| Tải WebSocket | **500/500** kết nối, 0 rớt |
+| Nhiều bản api | 3 bản, lưu lượng 10/10/10, fan-out 6/6 |
+| Khôi phục từ backup | **37 giây**, 39/39 bảng khớp |
 
 ## Kiến trúc
 

@@ -680,10 +680,24 @@ Lệnh chạy:
 
 ### Chất lượng
 
-> **Trạng thái: đang làm.** Trước Phase 6 cả dự án có 3 tệp test (501 dòng,
-> chỉ phủ máy tính lương); nay có 10 tệp. Hai sửa đổi do chính test phát hiện:
-> `Session.Minutes()` trả số phút âm cho phiên hỏng, và `sanitizeName` giữ
-> nguyên đoạn `..` trong tên tệp đính kèm.
+> **Trạng thái: XONG.** Trước Phase 6 cả dự án có 3 tệp test (501 dòng, chỉ
+> phủ máy tính lương). Nay có bốn tầng kiểm thử: unit, integration trên
+> PostgreSQL thật, API end-to-end, và trình duyệt thật.
+>
+> **Việc kiểm thử đã tìm ra 11 lỗi thật**, và phần lớn không bắt được bằng
+> cách đọc mã. Đáng nhớ nhất:
+>
+> | Lỗi | Bộ nào tìm ra |
+> |---|---|
+> | CSP chặn script Next.js — **không ai đăng nhập được qua nginx** | Playwright |
+> | Đường sao lưu — khôi phục **chưa bao giờ chạy được** (3 lỗi) | Diễn tập khôi phục |
+> | Công ty mới **không tính được lương** | e2e từ cài đặt sạch |
+> | nginx không nhận bản api mới sau khi scale hoặc triển khai | Kiểm chứng scale |
+> | Migration không tự tạo extension — CI chưa bao giờ chạy được | testcontainers |
+> | Nhãn form không gắn với ô nhập (trợ năng) | Playwright |
+> | `Session.Minutes()` trả số phút âm | Unit test |
+> | `sanitizeName` giữ nguyên `..` trong tên tệp | Unit test |
+> | Bản giả lập nói sai hợp đồng `ListAncestorIDs` | Integration test |
 >
 > Coverage hiện tại:
 >

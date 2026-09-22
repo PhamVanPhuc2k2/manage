@@ -26,6 +26,15 @@ tsconfig.tsbuildinfo
 .env.local
 *.local
 
+# Bản sao lưu database — KHÔNG BAO GIỜ commit
+#
+# scripts/backup.sh ghi vào đây theo mặc định. Một tệp dump chứa TOÀN BỘ
+# hồ sơ nhân sự, bảng lương và tin nhắn nội bộ. Đẩy nhầm một lần là nó nằm
+# trong lịch sử git vĩnh viễn, và xoá đi cũng không gỡ được khỏi các bản
+# clone đã có.
+backups/
+*.dump
+
 # IDE
 .vscode/
 .idea/
