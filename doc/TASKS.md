@@ -786,7 +786,11 @@ Lệnh chạy:
 - [x] Sơ đồ ERD cơ sở dữ liệu → `doc/ERD.md` (37 bảng, kèm lý do của các quyết định schema)
 - [x] Hướng dẫn cài đặt môi trường dev (chỉ cần Docker, không cần cài Go/Node trên máy) → `README.md` + `doc/PHASE-1-SETUP.md`
 - [x] Tài liệu vận hành Docker: danh sách service, biến môi trường, lệnh thường dùng → `doc/OPERATIONS.md`, kèm `doc/RUNBOOK.md` để xử lý sự cố
-- [ ] Sổ tay hướng dẫn sử dụng cho người dùng cuối
+- [x] Sổ tay hướng dẫn sử dụng cho người dùng cuối → `doc/HUONG-DAN-SU-DUNG.md`
+> Viết cho nhân viên, không cho lập trình viên: mỗi mục bắt đầu bằng **việc
+> người dùng muốn làm**, không bằng tên chức năng. Phần chấm công đặt lên đầu
+> vì đó là thứ ảnh hưởng tới lương và là nơi hiểu nhầm gây thiệt hại thật —
+> đóng tab là ngừng ghi nhận, và không ai đoán được điều đó nếu không nói ra.
 
 ---
 
