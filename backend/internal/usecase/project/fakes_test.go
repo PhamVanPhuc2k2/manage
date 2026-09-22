@@ -191,6 +191,8 @@ type fakeTasks struct {
 	deleted    []uuid.UUID
 	renumbered int
 	reorders   []reorderCall
+
+	lastFilter domainproject.TaskFilter
 }
 
 type reorderCall struct {
@@ -250,10 +252,32 @@ func (f *fakeTasks) GetByID(
 	return nil, domainproject.ErrNotFound
 }
 
+// List trả về task khớp bộ lọc và GHI LẠI bộ lọc đó.
+//
+// Phạm vi dự án được áp bằng cách đặt VisibleProjectIDs/RestrictProjects
+// trong filter, nên bộ lọc mà usecase gửi xuống là chỗ duy nhất kiểm chứng
+// được luật phân quyền ở đây.
 func (f *fakeTasks) List(
-	context.Context, domainproject.TaskFilter,
+	_ context.Context, filter domainproject.TaskFilter,
 ) ([]*domainproject.Task, int, error) {
-	return nil, 0, nil
+	f.lastFilter = filter
+
+	out := make([]*domainproject.Task, 0, len(f.byID))
+	for _, t := range f.byID {
+		if filter.ProjectID != nil && t.ProjectID != *filter.ProjectID {
+			continue
+		}
+		if filter.AssigneeID != nil &&
+			(t.AssigneeID == nil || *t.AssigneeID != *filter.AssigneeID) {
+			continue
+		}
+		if filter.OnlyRoots && t.ParentTaskID != nil {
+			continue
+		}
+		copied := *t
+		out = append(out, &copied)
+	}
+	return out, len(out), nil
 }
 
 // ListBoard trả về task gốc của một dự án, ĐÃ SẮP theo cột rồi sort_order.
@@ -404,21 +428,64 @@ func (f *fakeComments) CountByTask(context.Context, uuid.UUID) (int, error) {
 	return 0, nil
 }
 
-type fakeAttachments struct{}
+type fakeAttachments struct {
+	byID map[uuid.UUID]*domainproject.Attachment
 
-func (fakeAttachments) Create(context.Context, *domainproject.Attachment) error { return nil }
-func (fakeAttachments) Delete(context.Context, uuid.UUID) error                 { return nil }
+	created []*domainproject.Attachment
+	deleted []uuid.UUID
+}
 
-func (fakeAttachments) GetByID(
-	context.Context, uuid.UUID,
+func newFakeAttachments() *fakeAttachments {
+	return &fakeAttachments{byID: map[uuid.UUID]*domainproject.Attachment{}}
+}
+
+func (f *fakeAttachments) add(a *domainproject.Attachment) *domainproject.Attachment {
+	if a.ID == uuid.Nil {
+		a.ID = uuid.New()
+	}
+	f.byID[a.ID] = a
+	return a
+}
+
+func (f *fakeAttachments) Create(_ context.Context, a *domainproject.Attachment) error {
+	if a.ID == uuid.Nil {
+		a.ID = uuid.New()
+	}
+	f.created = append(f.created, a)
+	f.byID[a.ID] = a
+	return nil
+}
+
+func (f *fakeAttachments) Delete(_ context.Context, id uuid.UUID) error {
+	if f.byID[id] == nil {
+		return domainproject.ErrNotFound
+	}
+	f.deleted = append(f.deleted, id)
+	delete(f.byID, id)
+	return nil
+}
+
+func (f *fakeAttachments) GetByID(
+	_ context.Context, id uuid.UUID,
 ) (*domainproject.Attachment, error) {
+	if a := f.byID[id]; a != nil {
+		copied := *a
+		return &copied, nil
+	}
 	return nil, domainproject.ErrNotFound
 }
 
-func (fakeAttachments) ListByTask(
-	context.Context, uuid.UUID,
+func (f *fakeAttachments) ListByTask(
+	_ context.Context, taskID uuid.UUID,
 ) ([]*domainproject.Attachment, error) {
-	return nil, nil
+	var out []*domainproject.Attachment
+	for _, a := range f.byID {
+		if a.TaskID == taskID {
+			copied := *a
+			out = append(out, &copied)
+		}
+	}
+	return out, nil
 }
 
 type fakeActivities struct{ logged []*domainproject.Activity }
@@ -429,44 +496,125 @@ func (f *fakeActivities) Log(_ context.Context, a *domainproject.Activity) error
 }
 
 func (f *fakeActivities) ListByTask(
-	context.Context, uuid.UUID, int,
+	_ context.Context, taskID uuid.UUID, _ int,
 ) ([]*domainproject.Activity, error) {
-	return nil, nil
+	var out []*domainproject.Activity
+	for _, a := range f.logged {
+		if a.TaskID == taskID {
+			out = append(out, a)
+		}
+	}
+	return out, nil
 }
 
-type fakeTimelogs struct{}
+// actions trả về danh sách hành động đã ghi cho một task, để phép thử đọc
+// được gọn.
+func (f *fakeActivities) actions(taskID uuid.UUID) []string {
+	var out []string
+	for _, a := range f.logged {
+		if a.TaskID == taskID {
+			out = append(out, a.Action)
+		}
+	}
+	return out
+}
 
-func (fakeTimelogs) Create(context.Context, *domainproject.Timelog) error { return nil }
-func (fakeTimelogs) Delete(context.Context, uuid.UUID) error              { return nil }
+type fakeTimelogs struct {
+	byID map[uuid.UUID]*domainproject.Timelog
 
-func (fakeTimelogs) GetByID(
-	context.Context, uuid.UUID,
+	created []*domainproject.Timelog
+	deleted []uuid.UUID
+}
+
+func newFakeTimelogs() *fakeTimelogs {
+	return &fakeTimelogs{byID: map[uuid.UUID]*domainproject.Timelog{}}
+}
+
+func (f *fakeTimelogs) add(tl *domainproject.Timelog) *domainproject.Timelog {
+	if tl.ID == uuid.Nil {
+		tl.ID = uuid.New()
+	}
+	f.byID[tl.ID] = tl
+	return tl
+}
+
+func (f *fakeTimelogs) Create(_ context.Context, tl *domainproject.Timelog) error {
+	if tl.ID == uuid.Nil {
+		tl.ID = uuid.New()
+	}
+	f.created = append(f.created, tl)
+	f.byID[tl.ID] = tl
+	return nil
+}
+
+func (f *fakeTimelogs) Delete(_ context.Context, id uuid.UUID) error {
+	if f.byID[id] == nil {
+		return domainproject.ErrNotFound
+	}
+	f.deleted = append(f.deleted, id)
+	delete(f.byID, id)
+	return nil
+}
+
+func (f *fakeTimelogs) GetByID(
+	_ context.Context, id uuid.UUID,
 ) (*domainproject.Timelog, error) {
+	if tl := f.byID[id]; tl != nil {
+		copied := *tl
+		return &copied, nil
+	}
 	return nil, domainproject.ErrNotFound
 }
 
-func (fakeTimelogs) ListByTask(
-	context.Context, uuid.UUID,
+func (f *fakeTimelogs) ListByTask(
+	_ context.Context, taskID uuid.UUID,
 ) ([]*domainproject.Timelog, error) {
-	return nil, nil
+	var out []*domainproject.Timelog
+	for _, tl := range f.byID {
+		if tl.TaskID == taskID {
+			copied := *tl
+			out = append(out, &copied)
+		}
+	}
+	return out, nil
 }
 
-func (fakeTimelogs) SumMinutesByTask(context.Context, uuid.UUID) (int, error) {
-	return 0, nil
+func (f *fakeTimelogs) SumMinutesByTask(
+	_ context.Context, taskID uuid.UUID,
+) (int, error) {
+	sum := 0
+	for _, tl := range f.byID {
+		if tl.TaskID == taskID {
+			sum += tl.SpentMinutes
+		}
+	}
+	return sum, nil
 }
 
-type fakeReports struct{}
+type fakeReports struct {
+	progress *domainproject.ProjectProgress
+	workload []*domainproject.Workload
 
-func (fakeReports) ProjectProgress(
+	// lastIDs/lastRestrict ghi lại phạm vi mà usecase truyền xuống. Giống
+	// bên task: phạm vi chỉ nhìn thấy được ở tham số gửi cho repository.
+	lastIDs      []uuid.UUID
+	lastRestrict bool
+}
+
+func (f *fakeReports) ProjectProgress(
 	context.Context, uuid.UUID,
 ) (*domainproject.ProjectProgress, error) {
+	if f.progress != nil {
+		return f.progress, nil
+	}
 	return &domainproject.ProjectProgress{}, nil
 }
 
-func (fakeReports) Workload(
-	context.Context, []uuid.UUID, bool,
+func (f *fakeReports) Workload(
+	_ context.Context, ids []uuid.UUID, restrict bool,
 ) ([]*domainproject.Workload, error) {
-	return nil, nil
+	f.lastIDs, f.lastRestrict = ids, restrict
+	return f.workload, nil
 }
 
 type fakeProjectEmployees struct {
@@ -517,23 +665,29 @@ func (f *fakeProjectCompany) CurrentCompanyID(context.Context) (uuid.UUID, error
 type projectHarness struct {
 	uc *Usecase
 
-	projects   *fakeProjects
-	members    *fakeMembers
-	tasks      *fakeTasks
-	comments   *fakeComments
-	activities *fakeActivities
-	employees  *fakeProjectEmployees
-	events     *fakeEvents
-	company    *fakeProjectCompany
+	projects    *fakeProjects
+	members     *fakeMembers
+	tasks       *fakeTasks
+	comments    *fakeComments
+	attachments *fakeAttachments
+	activities  *fakeActivities
+	timelogs    *fakeTimelogs
+	reports     *fakeReports
+	employees   *fakeProjectEmployees
+	events      *fakeEvents
+	company     *fakeProjectCompany
 }
 
 func newProjectHarness() *projectHarness {
 	h := &projectHarness{
-		projects:   newFakeProjects(),
-		members:    newFakeMembers(),
-		tasks:      newFakeTasks(),
-		comments:   newFakeComments(),
-		activities: &fakeActivities{},
+		projects:    newFakeProjects(),
+		members:     newFakeMembers(),
+		tasks:       newFakeTasks(),
+		comments:    newFakeComments(),
+		attachments: newFakeAttachments(),
+		activities:  &fakeActivities{},
+		timelogs:    newFakeTimelogs(),
+		reports:     &fakeReports{},
 		employees: &fakeProjectEmployees{
 			names:   map[uuid.UUID]string{},
 			missing: map[uuid.UUID]bool{},
@@ -543,9 +697,12 @@ func newProjectHarness() *projectHarness {
 		company: &fakeProjectCompany{id: uuid.New()},
 	}
 
+	// storage để nil: hệ thống phải chạy được khi chưa cấu hình R2, chỉ
+	// riêng chức năng tệp là không. Phép thử nào cần lưu trữ thì tự gắn
+	// vào bằng withStorage().
 	h.uc = NewUsecase(
 		h.projects, h.members, h.tasks, h.comments,
-		fakeAttachments{}, h.activities, fakeTimelogs{}, fakeReports{},
+		h.attachments, h.activities, h.timelogs, h.reports,
 		h.employees, h.company, nil, h.events,
 	)
 	return h
