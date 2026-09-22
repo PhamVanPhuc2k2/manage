@@ -42,6 +42,19 @@ const (
 	TypePing = "ping"
 )
 
+// Bản tin GỌI ĐIỆN, chiều client → server.
+//
+// Hub chỉ CHUYỂN TIẾP nhóm này, không hiểu nội dung SDP hay ICE bên trong.
+// Đó là cố ý: signaling của WebRTC là một cuộc hội thoại giữa hai trình
+// duyệt, và máy chủ càng biết ít về nó thì càng ít thứ phải sửa khi trình
+// duyệt đổi hành vi.
+const (
+	// TypeCallSDP chuyển tiếp SDP offer/answer giữa hai đầu.
+	TypeCallSDP = "call.sdp"
+	// TypeCallICE chuyển tiếp một ICE candidate.
+	TypeCallICE = "call.ice"
+)
+
 // Bản tin server GỬI XUỐNG client.
 const (
 	TypeWelcome  = "welcome"
@@ -66,6 +79,45 @@ const (
 	TypeChatBadge = "chat.badge"
 )
 
+// =========================================================================
+// BẢN TIN GỌI ĐIỆN
+// =========================================================================
+
+// Vòng đời một cuộc gọi, nhìn từ phía bản tin:
+//
+//	người gọi          hub              người nhận
+//	   │  POST /calls   │                    │
+//	   │─────────────►│   call.incoming    │
+//	   │                │─────────────────►│  (MỌI thiết bị)
+//	   │  call.ringing  │                    │
+//	   │◄──────────────│                    │
+//	   │                │   POST /accept     │
+//	   │  call.accepted │◄─────────────────│
+//	   │◄──────────────│   call.cancelled   │
+//	   │                │─────────────────►│  (thiết bị CÒN LẠI)
+//
+// call.cancelled gửi tới các thiết bị khác của chính người nhận là phần hay
+// bị quên nhất: không có nó thì điện thoại vẫn đổ chuông sau khi người ta
+// đã bắt máy trên máy tính.
+const (
+	// TypeCallIncoming: có cuộc gọi tới, đổ chuông.
+	TypeCallIncoming = "call.incoming"
+	// TypeCallRinging: báo cho người gọi rằng đầu kia đang đổ chuông.
+	TypeCallRinging = "call.ringing"
+	// TypeCallAccepted: có người bắt máy.
+	TypeCallAccepted = "call.accepted"
+	// TypeCallRejected: người nhận từ chối, hoặc hệ thống từ chối thay vì họ
+	// đang bận cuộc khác.
+	TypeCallRejected = "call.rejected"
+	// TypeCallCancelled: lời mời không còn hiệu lực — người gọi cúp trước,
+	// hết giờ, hoặc chính người nhận đã bắt máy ở thiết bị khác.
+	TypeCallCancelled = "call.cancelled"
+	// TypeCallEnded: cuộc gọi đã kết thúc.
+	TypeCallEnded = "call.ended"
+	// TypeCallParticipant: có người vào hoặc rời phòng giữa cuộc gọi.
+	TypeCallParticipant = "call.participant"
+)
+
 // HeartbeatPayload là nội dung bản tin nhịp tim.
 //
 // IsActive phân biệt "mở tab" với "đang làm việc": client tự đặt false khi
@@ -80,6 +132,20 @@ type HeartbeatPayload struct {
 type ErrorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// CallSignalPayload là nội dung của call.sdp và call.ice.
+//
+// `Data` để nguyên dạng thô: đó là SDP hoặc ICE candidate do trình duyệt
+// sinh ra, và máy chủ không có lý do gì để đọc hay sửa chúng. Khai báo một
+// struct đầy đủ cho SDP chỉ tạo ra một thứ phải cập nhật mỗi lần chuẩn đổi.
+type CallSignalPayload struct {
+	CallID uuid.UUID `json:"call_id"`
+	// To là người nhận. Bắt buộc với gọi nhóm: trong phòng ba người, một
+	// SDP offer chỉ dành cho ĐÚNG MỘT đầu bên kia.
+	To   uuid.UUID       `json:"to"`
+	From uuid.UUID       `json:"from,omitempty"`
+	Data json.RawMessage `json:"data"`
 }
 
 // NewEnvelope đóng gói một payload bất kỳ thành Envelope.
