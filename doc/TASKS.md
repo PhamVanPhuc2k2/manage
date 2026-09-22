@@ -741,7 +741,20 @@ Lệnh chạy:
 > công, 0 thất bại, 0 rớt giữa chừng**, giữ 60 giây. Bắt tay p50 2,7 ms —
 > p95 4,2 ms — p99 21,2 ms. Chỉ số phía máy chủ khớp chính xác:
 > `manage_ws_connections` đạt đúng 500, `manage_ws_dropped_total` bằng 0.
-- [ ] Test E2E frontend bằng Playwright cho 5 luồng quan trọng nhất
+- [x] Test E2E frontend bằng Playwright cho 5 luồng quan trọng nhất
+> 8 phép thử phủ năm luồng: đăng nhập (kể cả bước nhập mã qua MailHog),
+> chấm công, thêm nhân viên, tạo dự án, và gửi tin nhắn chat. **8/8 đạt.**
+> Chạy bằng `pnpm e2e` trong thư mục frontend, job `playwright` trong ci.yml
+> dùng lại đúng phần chuẩn bị của bộ e2e.
+>
+> **Bộ này tìm ra lỗi nghiêm trọng nhất của Phase 6**: header CSP trong nginx
+> chặn script nội tuyến của Next.js, React không hydrate, và MỌI trang thành
+> HTML tĩnh khi đi qua nginx — không ai đăng nhập được. Chi tiết trong
+> `frontend/src/middleware.ts`.
+>
+> Những bộ kiểm khác không thể thấy lỗi đó: API vẫn trả 200, nginx vẫn trả
+> 200, trang vẫn hiện đúng bố cục, không dòng lỗi nào trong log. Chỉ một
+> trình duyệt thật BẤM vào nút mới phát hiện ra.
 
 ### Bảo mật
 

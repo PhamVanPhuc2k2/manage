@@ -149,9 +149,62 @@ jobs:
         if: always()
         run: docker compose down -v || true
 
+  # ==========================================================================
+  # playwright — 5 luồng quan trọng nhất trên trình duyệt thật
+  # ==========================================================================
+  #
+  # Các bộ smoke gọi thật sâu vào API nhưng không chứng minh được người dùng
+  # làm xong việc: một nút không gắn handler, một header CSP chặn script của
+  # Next.js — API vẫn xanh trong khi không ai đăng nhập được.
+  #
+  # Đó không phải ví dụ giả định: chính bộ này đã tìm ra lỗi CSP đó.
+  playwright:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - working-directory: frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Dùng lại đúng phần chuẩn bị của bộ e2e: stack, seed, đổi mật khẩu lần
+      # đầu, hai nhân viên. Hai bộ vì vậy luôn chạy trên cùng một môi trường.
+      - name: Chuẩn bị stack
+        run: |
+          PREPARE_ONLY=1 bash scripts/ci-e2e.sh | tee /tmp/prepare.log
+          grep -o 'E2E_ADMIN_PASSWORD=.*' /tmp/prepare.log >> "$GITHUB_ENV"
+
+      - name: Playwright
+        working-directory: frontend
+        run: pnpm e2e
+
+      - name: Giữ dấu vết khi hỏng
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/test-results/
+          retention-days: 7
+
+      - name: Dọn
+        if: always()
+        run: docker compose down -v || true
+
   docker:
     runs-on: ubuntu-latest
-    needs: [backend, frontend, integration, e2e]
+    needs: [backend, frontend, integration, e2e, playwright]
     permissions:
       contents: read
       packages: write

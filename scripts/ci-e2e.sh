@@ -209,6 +209,20 @@ fi
 # ------------------------------------------------------------ chạy smoke
 export ADMIN_PASS="$E2E_PASS"
 
+# PREPARE_ONLY: dừng ở đây và in ra mật khẩu.
+#
+# Bộ Playwright cần đúng môi trường này — stack đang chạy, đã seed, có hai
+# nhân viên, mật khẩu quản trị đã đổi xong — nhưng không cần chạy lại 286
+# phép kiểm smoke trước đó. Tách ra để không phải chép đôi phần chuẩn bị
+# sang một script khác, và để hai bộ luôn chạy trên cùng một môi trường.
+if [ "${PREPARE_ONLY:-0}" = "1" ]; then
+  KEEP=1
+  echo
+  ok "Môi trường đã sẵn sàng"
+  echo "  E2E_ADMIN_PASSWORD=$E2E_PASS"
+  exit 0
+fi
+
 FAILED=""
 for suite in auth hr project attendance payroll chat; do
   echo

@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Children, cloneElement, isValidElement, useId } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { FieldError } from "react-hook-form";
 
 const inputClass =
@@ -26,13 +27,47 @@ type FieldProps = {
  * dùng học một lần là hiểu ở mọi màn hình.
  */
 export function Field({ label, error, required, hint, children }: FieldProps) {
+  /*
+    Gắn nhãn với ô nhập bằng cặp htmlFor/id, với id do useId() sinh.
+
+    Trước đây thẻ label đứng riêng và không trỏ tới ô nào. Nhìn bằng mắt
+    thì không khác gì, nhưng trình đọc màn hình đọc ra một ô nhập không tên,
+    và bấm vào chữ nhãn cũng không đưa con trỏ vào ô.
+
+    Tại sao không bọc ô nhập trong thẻ label (cách gắn ngầm của HTML, đỡ
+    phải sinh id): với <select>, tên trợ năng được tính từ toàn bộ nội dung chữ
+    của label — tức là nuốt luôn mọi <option>. Trình đọc màn hình khi đó đọc
+    "Chủ dự án — Chọn — Nguyễn Văn A Trần Thị B..." trước khi người dùng kịp
+    làm gì.
+
+    Gán id bằng cloneElement thay vì bắt mọi chỗ gọi tự truyền: có hàng chục
+    Field trong hệ thống, và một thứ phải nhớ làm đúng ở hàng chục chỗ sẽ có
+    chỗ quên.
+  */
+  const id = useId();
+
+  const only = Children.count(children) === 1 ? children : null;
+  const control =
+    isValidElement(only) &&
+    // Chỉ gán cho phần tử chưa tự đặt id: chỗ gọi nào đã có id riêng thì
+    // nó biết mình đang làm gì.
+    !(only as ReactElement<{ id?: string }>).props.id
+      ? cloneElement(only as ReactElement<{ id?: string }>, { id })
+      : children;
+
+  // Chỉ dùng htmlFor khi thật sự gán được id, tránh một nhãn trỏ tới hư không.
+  const bound = control !== children;
+
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium">
+      <label
+        htmlFor={bound ? id : undefined}
+        className="mb-1 block text-sm font-medium"
+      >
         {label}
         {required && <span className="ml-0.5 text-red-600">*</span>}
       </label>
-      {children}
+      {control}
       {hint && !error && (
         <p className="mt-1 text-xs text-neutral-500">{hint}</p>
       )}
