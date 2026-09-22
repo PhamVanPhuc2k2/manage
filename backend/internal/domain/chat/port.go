@@ -134,8 +134,25 @@ type SourceLister interface {
 	Sources(ctx context.Context, companyID uuid.UUID) ([]GroupSource, error)
 }
 
-// Storage ký URL cho tệp đính kèm.
+// Storage là cổng lưu trữ tệp đính kèm.
 type Storage interface {
 	PresignPut(ctx context.Context, key, contentType string, expires time.Duration) (string, error)
 	PresignGet(ctx context.Context, key string, expires time.Duration) (string, error)
+
+	// Stat trả về kích thước và kiểu tệp THẬT trên R2.
+	//
+	// Cần vì client tải tệp lên THẲNG R2, không qua api — nên api không hề
+	// thấy nội dung và không biết tệp có đúng như đã khai hay không, kể cả
+	// kích thước.
+	Stat(ctx context.Context, key string) (size int64, contentType string, err error)
+
+	// DetectContentType đọc 512 byte đầu và suy ra kiểu tệp từ NỘI DUNG.
+	//
+	// Content-Type client khai lúc xin URL chỉ là lời khai, sửa được tuỳ ý.
+	// Đây là thứ duy nhất nói lên tệp đó thật sự là gì.
+	DetectContentType(ctx context.Context, key string) (string, error)
+
+	// Delete dọn tệp bị từ chối. Không dọn thì R2 tích dần những tệp không
+	// bản ghi nào trỏ tới, và không có cách nào biết chúng là rác.
+	Delete(ctx context.Context, key string) error
 }

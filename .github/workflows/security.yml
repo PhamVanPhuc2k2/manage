@@ -1,0 +1,227 @@
+name: Quét bảo mật định kỳ
+
+# Vì sao cần một workflow RIÊNG, chạy theo lịch:
+#
+# CI đã quét image ở mỗi lần build. Nhưng image KHÔNG thay đổi sau khi đẩy lên,
+# còn CVE thì liên tục được công bố — một image sạch hôm nay có thể có lỗ hổng
+# nghiêm trọng vào tuần sau mà không ai chạm vào code. Chỉ quét lúc build nghĩa
+# là bỏ sót mọi lỗ hổng công bố sau đó.
+#
+# Chạy sáng thứ hai để nếu có gì cần xử lý thì còn cả tuần làm việc phía trước,
+# thay vì phát hiện vào chiều thứ sáu.
+
+on:
+  schedule:
+    - cron: "0 1 * * 1" # 01:00 UTC thứ hai = 08:00 giờ Việt Nam
+  workflow_dispatch: # chạy tay khi có CVE lớn vừa công bố
+  push:
+    paths:
+      # Đổi Dockerfile hoặc dependency là đổi bề mặt tấn công — quét ngay,
+      # không chờ tới thứ hai.
+      - "docker/**/Dockerfile"
+      - "backend/go.mod"
+      - "backend/go.sum"
+      - "frontend/pnpm-lock.yaml"
+      - ".github/workflows/security.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # =======================================================================
+  # Image đang chạy trên production
+  # =======================================================================
+  images:
+    name: Quét image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      issues: write
+    strategy:
+      fail-fast: false # quét hết cả ba rồi mới báo, không dừng ở cái đầu
+      matrix:
+        image: [api, worker, frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Đăng nhập GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Quét ${{ matrix.image }}
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/manage-${{ matrix.image }}:latest
+          format: table
+          # KHÔNG đặt exit-code ở đây: mục đích của lần quét này là BÁO CÁO,
+          # không phải chặn. Chặn một workflow theo lịch chẳng ngăn được gì —
+          # code đã lên production từ lâu rồi. Việc cần làm là mở issue.
+          exit-code: "0"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      - name: Quét lại, lấy kết quả dạng máy đọc được
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/manage-${{ matrix.image }}:latest
+          format: json
+          output: trivy-${{ matrix.image }}.json
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      - name: Đếm lỗ hổng
+        id: count
+        run: |
+          COUNT=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' \
+            trivy-${{ matrix.image }}.json)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Tìm thấy $COUNT lỗ hổng HIGH/CRITICAL còn bản vá"
+
+      - name: Tóm tắt
+        if: steps.count.outputs.count != '0'
+        run: |
+          {
+            echo "## manage-${{ matrix.image }}: ${{ steps.count.outputs.count }} lỗ hổng"
+            echo
+            echo '| Gói | Đang dùng | Đã vá ở | Mức | CVE |'
+            echo '|---|---|---|---|---|'
+            jq -r '.Results[]?.Vulnerabilities // [] | .[] |
+              "| \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion) | \(.Severity) | [\(.VulnerabilityID)](\(.PrimaryURL)) |"' \
+              trivy-${{ matrix.image }}.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Mở issue khi có lỗ hổng
+        if: steps.count.outputs.count != '0'
+        uses: actions/github-script@v7
+        env:
+          IMAGE: ${{ matrix.image }}
+          COUNT: ${{ steps.count.outputs.count }}
+        with:
+          script: |
+            const title = `Lỗ hổng bảo mật trong image manage-${process.env.IMAGE}`;
+
+            // Tìm issue CŨ trước khi mở mới.
+            //
+            // Không tìm thì mỗi thứ hai lại có thêm một issue cho cùng một lỗ
+            // hổng, và sau vài tuần không ai đọc nữa — đúng cách để một cảnh
+            // báo thật bị chôn vùi.
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'security',
+            });
+
+            const found = existing.find(i => i.title === title);
+            const body = [
+              `Lần quét ${new Date().toISOString().slice(0, 10)} tìm thấy`,
+              `**${process.env.COUNT} lỗ hổng HIGH/CRITICAL đã có bản vá**.`,
+              '',
+              `Chi tiết: [kết quả lần chạy](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              '',
+              'Cách xử lý: nâng base image trong `docker/*/Dockerfile` rồi build lại.',
+              'Bảng base image và lịch cập nhật nằm trong `doc/OPERATIONS.md`.',
+            ].join('\n');
+
+            if (found) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: found.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['security'],
+              });
+            }
+
+  # =======================================================================
+  # Mã nguồn và thư viện
+  # =======================================================================
+  source:
+    name: Quét mã nguồn
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache-dependency-path: backend/go.sum
+
+      # govulncheck bổ sung cho Trivy chứ không trùng: nó phân tích LỜI GỌI
+      # HÀM thật trong code, nên chỉ báo những lỗ hổng mà chương trình thật sự
+      # chạm tới. Trivy so phiên bản thư viện nên báo cả những lỗ hổng nằm
+      # trong phần code không bao giờ được gọi.
+      #
+      # Cả hai đều cần: govulncheck ít nhiễu hơn, Trivy bắt được cả lớp phụ
+      # thuộc gián tiếp mà phân tích tĩnh bỏ sót.
+      - name: govulncheck
+        working-directory: backend
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Trivy — thư viện Go và secret lọt vào code
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: fs
+          scan-ref: ./backend
+          scanners: vuln,secret
+          format: table
+          # Ở ĐÂY thì chặn: secret lọt vào mã nguồn hoặc thư viện có lỗ hổng
+          # là thứ sửa được ngay, khác với CVE của base image.
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      - name: Trivy — cấu hình Docker và compose
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+
+  # =======================================================================
+  # Thư viện frontend
+  # =======================================================================
+  frontend:
+    name: Quét thư viện frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      # --prod: chỉ xét thư viện chạy trong production.
+      #
+      # Lỗ hổng trong thư viện chỉ dùng lúc build (eslint, typescript) không
+      # đi vào image cuối và không ai khai thác được qua mạng. Đưa chúng vào
+      # sẽ tạo ra một danh sách dài mà phần lớn là nhiễu.
+      - name: pnpm audit
+        working-directory: frontend
+        run: pnpm audit --prod --audit-level high

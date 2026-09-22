@@ -280,6 +280,38 @@ lâu chạy lại được", và nó chỉ có giá trị nếu đo bằng đồ
 |---|---|---|---|---|
 | _chưa diễn tập lần nào_ | | | | |
 
+## Kiểm tra tải WebSocket
+
+```bash
+# Lấy access token: đăng nhập rồi copy access_token từ phản hồi
+cd backend
+go run ./cmd/wsload -url ws://localhost:8080/ws -token "$TOKEN" -n 500
+```
+
+Công cụ mở N kết nối **dần** trong 10 giây chứ không cùng một lúc: mở 500 kết
+nối trong một mili giây không giống bất kỳ tải thật nào, và nó đo khả năng
+chịu đột biến của accept queue chứ không phải khả năng phục vụ.
+
+Nó gửi nhịp tim như client thật và **đọc** bản tin trả về — không đọc thì hàng
+đợi gửi phía server đầy lên và server đóng kết nối, ta sẽ đo nhầm thành "server
+không chịu nổi tải".
+
+Mã thoát khác 0 khi trên 1% kết nối hỏng hoặc bị đóng giữa chừng, nên chạy
+được trong script nghiệm thu.
+
+> **Trước khi kết luận máy chủ không chịu nổi tải, kiểm tra `ulimit -n`.**
+> Mỗi kết nối là một file descriptor, và giới hạn mặc định trên nhiều bản Linux
+> là 1024. Rất dễ đo nhầm giới hạn của chính máy chạy công cụ đo.
+>
+> Chạy từ MỘT MÁY KHÁC nếu muốn con số có ý nghĩa: 500 kết nối từ chính máy
+> chủ sẽ đo luôn cả tải của công cụ đo.
+
+Đo trong lúc chạy để xem hệ thống phản ứng thế nào:
+
+```bash
+watch -n2 'curl -s http://localhost:8080/metrics | grep -E "manage_ws_connections|manage_ws_dropped"'
+```
+
 ## Quét bảo mật image
 
 ```bash
@@ -293,9 +325,21 @@ trivy fs --scanners vuln,secret ./backend
 trivy config .
 ```
 
-Nên chạy trong CI ở mỗi lần build, và một lần theo lịch mỗi tuần: CVE mới xuất
-hiện trên image **không** thay đổi, nên chỉ quét lúc build sẽ bỏ sót mọi lỗ
-hổng công bố sau đó.
+Đã nối vào CI ở hai chỗ:
+
+| Workflow | Khi nào | Làm gì |
+|---|---|---|
+| `.github/workflows/ci.yml` | mỗi lần build | Quét image vừa build, **chặn** khi có HIGH/CRITICAL |
+| `.github/workflows/security.yml` | 08:00 thứ hai hằng tuần | Quét image đang chạy, `govulncheck`, Trivy fs + config, `pnpm audit`. Mở issue thay vì chặn |
+
+Cần cả hai: image **không** thay đổi sau khi đẩy lên, còn CVE thì liên tục
+được công bố. Một image sạch hôm nay có thể có lỗ hổng nghiêm trọng vào tuần
+sau mà không ai chạm vào code — chỉ quét lúc build là bỏ sót toàn bộ nhóm đó.
+
+Lần quét theo lịch **không chặn** mà mở issue: chặn một workflow theo lịch
+chẳng ngăn được gì, code đã lên production từ lâu rồi. Nó cũng tìm issue cũ
+trước khi mở mới, để không tích thành một chồng issue trùng nhau mà rồi không
+ai đọc.
 
 Base image đang dùng và lịch cập nhật:
 

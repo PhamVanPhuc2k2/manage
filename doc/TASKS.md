@@ -687,22 +687,26 @@ Lệnh chạy:
 >
 > Coverage hiện tại:
 >
-> | Gói | Coverage |     | Gói | Coverage |
+> | Gói | Coverage | | Gói | Coverage |
 > |---|---|---|---|---|
 > | `delivery/http/router` | 95% | | `usecase/notification` | 77% |
-> | `domain/notification` | 86% | | `usecase/chat` | 66% |
-> | `domain/auth` | 82% | | `usecase/payroll` | 25% |
+> | `domain/project` | 90% | | `usecase/chat` | 69% |
+> | `domain/notification` | 86% | | `usecase/auth` | 51% |
+> | `domain/auth` | 82% | | `usecase/project` | 36% |
+> | `domain/hr` | 77% | | `usecase/payroll` | 25% |
 > | `domain/chat` | 73% | | `usecase/attendance` | 21% |
-> | `domain/attendance` | 67% | | `usecase/project` | 0% |
+> | `domain/attendance` | 67% | | `usecase/hr` | 12% |
+> | `domain/payroll` | 18% | | `usecase/system` | 0% |
 >
-> Mục tiêu ≥ 70% cho **cả** tầng usecase chưa đạt: `usecase/project` (module
-> lớn nhất, hơn 2000 dòng), `usecase/auth`, `usecase/hr` và `usecase/system`
-> vẫn 0%.
+> Mục tiêu ≥ 70% cho **cả** tầng usecase chưa đạt. Phần còn thiếu nhiều nhất
+> là những nhánh đọc/lọc danh sách của attendance, payroll và hr — chúng cần
+> bản giả lập trả dữ liệu phong phú hơn, và giá trị mỗi phép thử ở đó thấp hơn
+> hẳn so với những gì đã phủ (thuật toán, kiểm soát truy cập, luật nghiệp vụ).
 
 - [ ] Unit test cho toàn bộ tầng `usecase` (mục tiêu ≥ 70% coverage) — *một phần*
 - [ ] Integration test cho repository bằng testcontainers (PostgreSQL thật)
 - [ ] Test API end-to-end cho các luồng chính — *đang phủ bằng 6 bộ smoke (287 mục) trên stack Docker thật, chưa phải test tự động trong CI*
-- [ ] Test tải cho WebSocket (mục tiêu: 500 kết nối đồng thời)
+- [ ] Test tải cho WebSocket (mục tiêu: 500 kết nối đồng thời) — *công cụ đã có (`backend/cmd/wsload`), chưa chạy được vì Docker đang tắt*
 - [ ] Test E2E frontend bằng Playwright cho 5 luồng quan trọng nhất
 
 ### Bảo mật
@@ -721,14 +725,14 @@ Lệnh chạy:
 - [x] Rà soát toàn bộ endpoint: mọi route đều có kiểm tra quyền, không sót route công khai
 - [x] Chống IDOR: luôn kiểm tra quyền trên bản ghi cụ thể, không chỉ trên loại tài nguyên
 - [x] Ngăn SQL injection (chỉ dùng tham số hoá), XSS (escape đầu ra), CSRF
-- [ ] Kiểm tra kiểu tệp tải lên bằng magic bytes, giới hạn dung lượng — *giới hạn dung lượng đã có, magic bytes chưa*
+- [x] Kiểm tra kiểu tệp tải lên bằng magic bytes, giới hạn dung lượng
 - [x] Đặt security header: HSTS, CSP, X-Frame-Options
 - [x] Quản lý secret bằng biến môi trường, tuyệt đối không commit vào git
 - [x] Ghi audit log cho thao tác nhạy cảm: lương, xoá nhân viên, đổi quyền
 - [x] Bảo mật container: chạy non-root, `read_only: true` cho container không cần ghi, `cap_drop: ALL`, `no-new-privileges`
 - [x] Không nhúng secret vào image (kiểm tra bằng `docker history`); dùng Docker secrets hoặc file env ngoài repo
 - [ ] Ghim phiên bản base image theo digest, không dùng tag trôi nổi như `alpine:latest` — *đang ghim theo tag có số phiên bản đầy đủ, chưa theo digest*
-- [ ] Quét image định kỳ bằng Trivy, có lịch cập nhật base image khi có CVE mới — *lệnh và lịch đã ghi trong doc/OPERATIONS.md, chưa nối vào CI*
+- [x] Quét image định kỳ bằng Trivy, có lịch cập nhật base image khi có CVE mới → `.github/workflows/security.yml`, 08:00 thứ hai hằng tuần
 
 ### Docker — production
 

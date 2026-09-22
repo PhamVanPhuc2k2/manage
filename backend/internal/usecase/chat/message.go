@@ -77,6 +77,8 @@ func (u *Usecase) Send(
 		return nil, apperror.Invalid(
 			fmt.Sprintf("mỗi tin nhắn tối đa %d tệp", maxAttachmentsPerMessage), nil)
 	}
+	// Kích thước và kiểu tệp KHÔNG kiểm ở đây: cả hai đều chỉ là lời khai của
+	// client. Chúng được kiểm bằng dữ liệu thật trên R2 trong saveAttachments.
 
 	// Chống trùng TRƯỚC khi ghi: client mất mạng giữa chừng không biết tin đã
 	// tới hay chưa nên gửi lại, và trả về đúng tin cũ là cách duy nhất để
@@ -132,36 +134,6 @@ func (u *Usecase) Send(
 
 	u.fanout(ctx, in.ConversationID, actor.EmployeeID, view)
 	return view, nil
-}
-
-func (u *Usecase) saveAttachments(
-	ctx context.Context,
-	m *domainchat.Message,
-	items []AttachmentInput,
-) error {
-	if len(items) == 0 {
-		return nil
-	}
-
-	atts := make([]*domainchat.Attachment, 0, len(items))
-	for _, it := range items {
-		if it.StorageKey == "" || it.FileName == "" {
-			return apperror.Invalid("tệp đính kèm thiếu thông tin", nil)
-		}
-		if it.SizeBytes <= 0 || it.SizeBytes > maxAttachmentSize {
-			return apperror.Invalid("kích thước tệp không hợp lệ", nil)
-		}
-		atts = append(atts, &domainchat.Attachment{
-			MessageID:   m.ID,
-			StorageKey:  it.StorageKey,
-			FileName:    it.FileName,
-			ContentType: it.ContentType,
-			SizeBytes:   it.SizeBytes,
-			Width:       it.Width,
-			Height:      it.Height,
-		})
-	}
-	return u.msgs.AddAttachments(ctx, atts)
 }
 
 // fanout phát tin nhắn cho thành viên và tạo thông báo cho người offline.
@@ -588,6 +560,18 @@ func (u *Usecase) PresignUpload(
 	if size <= 0 || size > maxAttachmentSize {
 		return "", "", apperror.Invalid(
 			fmt.Sprintf("kích thước tệp tối đa %d MB", maxAttachmentSize>>20), nil)
+	}
+
+	// Chặn kiểu tệp ngay từ bước xin URL.
+	//
+	// Đây là kiểm tra theo LỜI KHAI, nên nó không phải hàng rào bảo mật — nội
+	// dung thật được kiểm lại bằng magic bytes lúc gắn tệp vào tin nhắn. Giá
+	// trị của nó là báo lỗi SỚM: người dùng biết tệp không được hỗ trợ trước
+	// khi tốn công tải lên vài chục megabyte.
+	if _, ok := allowedAttachmentTypes[normalizeContentType(contentType)]; !ok {
+		return "", "", apperror.Invalid(
+			"Loại tệp không được hỗ trợ. Chấp nhận ảnh, PDF, văn bản, "+
+				"bảng tính, trình chiếu và ZIP.", nil)
 	}
 
 	// Khoá gồm id hội thoại và một uuid mới: hai người gửi cùng tên tệp trong

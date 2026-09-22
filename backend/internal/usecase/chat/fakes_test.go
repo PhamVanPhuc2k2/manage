@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -383,7 +384,26 @@ func (f *fakeNotifier) NotifyNewMessage(
 	return nil
 }
 
-type fakeStorage struct{ keys []string }
+type fakeStorage struct {
+	keys    []string
+	deleted []string
+
+	// stored mô phỏng nội dung THẬT trên R2: kích thước và kiểu tệp phát hiện
+	// được. Bài kiểm thử đặt vào đây thứ khác với lời khai của client để kiểm
+	// tra rằng lời khai không bao giờ thắng.
+	stored map[string]storedObject
+
+	statErr error
+}
+
+type storedObject struct {
+	size     int64
+	detected string
+}
+
+func newFakeStorage() *fakeStorage {
+	return &fakeStorage{stored: map[string]storedObject{}}
+}
 
 func (f *fakeStorage) PresignPut(
 	_ context.Context, key, _ string, _ time.Duration,
@@ -396,6 +416,35 @@ func (f *fakeStorage) PresignGet(
 	_ context.Context, key string, _ time.Duration,
 ) (string, error) {
 	return "https://r2.test/get/" + key, nil
+}
+
+func (f *fakeStorage) Stat(
+	_ context.Context, key string,
+) (int64, string, error) {
+	if f.statErr != nil {
+		return 0, "", f.statErr
+	}
+	o, ok := f.stored[key]
+	if !ok {
+		return 0, "", errors.New("không tìm thấy tệp")
+	}
+	return o.size, o.detected, nil
+}
+
+func (f *fakeStorage) DetectContentType(
+	_ context.Context, key string,
+) (string, error) {
+	o, ok := f.stored[key]
+	if !ok {
+		return "", errors.New("không tìm thấy tệp")
+	}
+	return o.detected, nil
+}
+
+func (f *fakeStorage) Delete(_ context.Context, key string) error {
+	f.deleted = append(f.deleted, key)
+	delete(f.stored, key)
+	return nil
 }
 
 type fakeChatCompany struct{ id uuid.UUID }
@@ -428,7 +477,7 @@ func newChatHarness() *chatHarness {
 		presence: &fakeChatPresence{status: map[uuid.UUID]string{}},
 		pusher:   &fakeChatPusher{},
 		notifier: &fakeNotifier{},
-		storage:  &fakeStorage{},
+		storage:  newFakeStorage(),
 		company:  &fakeChatCompany{id: uuid.New()},
 	}
 

@@ -140,8 +140,11 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           load: ${{ github.ref != 'refs/heads/main' }}
 
+      # Ghim theo TAG, không dùng @master: @master là ref trôi nổi, đổi bất kỳ
+      # lúc nào và có thể làm hỏng CI mà không ai chạm vào repo này. Với một
+      # action chạy trong pipeline build thì đó cũng là rủi ro chuỗi cung ứng.
       - name: Quét lỗ hổng bảo mật
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.29.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/manage-${{ matrix.name }}:${{ github.sha }}
           format: table

@@ -371,32 +371,19 @@ func TestSendRejectsTooManyAttachments(t *testing.T) {
 	}
 }
 
-func TestSendRejectsOversizedAttachment(t *testing.T) {
-	h, convID, me := sendSetup()
-
-	_, err := h.uc.Send(context.Background(), me, SendInput{
-		ConversationID: convID,
-		Content:        "tệp to",
-		Attachments: []AttachmentInput{{
-			StorageKey: "k", FileName: "big.zip",
-			ContentType: "application/zip", SizeBytes: maxAttachmentSize + 1,
-		}},
-	})
-	if got := statusOf(err); got != http.StatusBadRequest {
-		t.Errorf("mã lỗi = %d, muốn 400", got)
-	}
-}
-
 // TestSendAllowsAttachmentWithoutText: gửi một tấm ảnh không kèm lời nào là
 // việc bình thường nhất trong chat.
 func TestSendAllowsAttachmentWithoutText(t *testing.T) {
 	h, convID, me := sendSetup()
 
+	key := "chat/" + convID.String() + "/abc/a.png"
+	h.storage.stored[key] = storedObject{size: 1024, detected: "image/png"}
+
 	m, err := h.uc.Send(context.Background(), me, SendInput{
 		ConversationID: convID,
 		Kind:           domainchat.MessageImage,
 		Attachments: []AttachmentInput{{
-			StorageKey: "chat/x/y/a.png", FileName: "a.png",
+			StorageKey: key, FileName: "a.png",
 			ContentType: "image/png", SizeBytes: 1024,
 		}},
 	})
