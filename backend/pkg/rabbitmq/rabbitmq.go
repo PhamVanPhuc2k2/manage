@@ -232,6 +232,26 @@ func (c *Client) Channel() *amqp.Channel {
 	return c.ch
 }
 
+// NewChannel mở một channel RIÊNG trên kết nối hiện có.
+//
+// Tồn tại cho những thao tác mà RabbitMQ đóng channel khi thất bại — điển
+// hình là passive declare một hàng đợi không tồn tại. Dùng chung channel
+// chính cho việc đó sẽ biến một lần thăm dò lỗi thành mất cả luồng consume
+// job, và luồng đó không tự mở lại (chỉ kết nối mới có cơ chế nối lại).
+//
+// Người gọi chịu trách nhiệm Close. Channel KHÔNG tự mở lại sau khi kết nối
+// đứt, nên chỉ dùng cho thao tác ngắn, xong là đóng.
+func (c *Client) NewChannel() (*amqp.Channel, error) {
+	c.mu.RLock()
+	conn := c.conn
+	c.mu.RUnlock()
+
+	if conn == nil || conn.IsClosed() {
+		return nil, ErrNotConnected
+	}
+	return conn.Channel()
+}
+
 // HealthCheck dùng cho endpoint /ready.
 func (c *Client) HealthCheck(context.Context) error {
 	c.mu.RLock()

@@ -1,0 +1,194 @@
+# Quy tắc cảnh báo.
+#
+# Nguyên tắc chọn: mỗi cảnh báo phải trả lời được câu "nếu nó kêu lúc 3 giờ
+# sáng thì người nhận LÀM GÌ". Cảnh báo không có việc để làm sẽ bị tắt tiếng
+# sau vài lần, và khi đó những cảnh báo thật cũng bị tắt cùng.
+#
+# Mọi cảnh báo đều có `for:` — không có nó thì một lần chớp mạng hay một lần
+# triển khai bình thường cũng kêu.
+
+groups:
+  # =======================================================================
+  - name: container
+    rules:
+      - alert: ContainerRestartLoop
+        # Tăng 3 lần khởi động lại trong 15 phút nghĩa là container đang chết
+        # rồi được dựng lại liên tục — thường là lỗi cấu hình hoặc thiếu
+        # dependency, và nó KHÔNG tự khỏi.
+        expr: increase(container_start_time_seconds[15m]) > 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.name }} khởi động lại liên tục"
+          runbook: "doc/RUNBOOK.md#container-khoi-dong-lai-lien-tuc"
+
+      - alert: ContainerMemoryNearLimit
+        # 90% hạn mức: còn kịp xử lý trước khi kernel OOM-kill. Chờ tới lúc bị
+        # kill thì container đã mất và mọi thông tin chẩn đoán trong RAM đi theo.
+        expr: |
+          container_memory_working_set_bytes
+            / container_spec_memory_limit_bytes > 0.9
+            and container_spec_memory_limit_bytes > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} dùng trên 90% hạn mức RAM"
+
+  # =======================================================================
+  - name: disk
+    rules:
+      - alert: DiskSpaceLow
+        expr: |
+          (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+             / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 0.8
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ổ đĩa {{ $labels.mountpoint }} đã dùng trên 80%"
+          runbook: "doc/RUNBOOK.md#o-dia-gan-day"
+
+      - alert: DiskSpaceCritical
+        # 92% là ngưỡng hành động ngay: PostgreSQL ngừng ghi khi hết đĩa, và
+        # khi đó hệ thống không chỉ chậm mà dừng hẳn.
+        expr: |
+          (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+             / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 0.92
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ổ đĩa {{ $labels.mountpoint }} đã dùng trên 92%"
+          runbook: "doc/RUNBOOK.md#o-dia-gan-day"
+
+  # =======================================================================
+  - name: queue
+    rules:
+      - alert: JobQueueBacklog
+        # Hàng đợi job ứ đọng nghĩa là worker xử lý không kịp tốc độ nạp vào.
+        # Ngưỡng 500 chọn theo tải thực tế: một lần tính lương cả công ty đẩy
+        # vài trăm message một lúc và đó là bình thường, nên ngưỡng thấp hơn
+        # sẽ kêu mỗi kỳ lương.
+        expr: manage_queue_depth{queue="manage.jobs.queue"} > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hàng đợi job còn {{ $value }} message chưa xử lý"
+          runbook: "doc/RUNBOOK.md#hang-doi-u-dong"
+
+      - alert: DeadLetterQueueNotEmpty
+        # Ngưỡng là 0: có bất kỳ message nào ở dead-letter nghĩa là đã có job
+        # thất bại và bị bỏ. Luôn cần người xem, dù chỉ một cái.
+        expr: manage_queue_depth{queue="manage.jobs.dead"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Có {{ $value }} job trong dead-letter queue"
+          runbook: "doc/RUNBOOK.md#job-vao-dead-letter"
+
+  # =======================================================================
+  - name: websocket
+    rules:
+      - alert: WebSocketConnectionsDropped
+        # Số kết nối tụt trên 50% trong 5 phút mà KHÔNG phải do triển khai.
+        #
+        # Đây là cảnh báo khó đặt nhất: một lần triển khai bình thường cũng
+        # làm số kết nối tụt về 0 rồi dựng lại. Điều kiện thứ hai (số kết nối
+        # hiện tại vẫn còn > 0) loại bỏ trường hợp instance vừa khởi động lại
+        # — khi đó chỉ số biến mất hẳn chứ không tụt.
+        expr: |
+          manage_ws_connections > 0
+          and (manage_ws_connections
+               / (manage_ws_connections offset 5m + 1)) < 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kết nối WebSocket trên {{ $labels.instance }} tụt trên một nửa"
+          runbook: "doc/RUNBOOK.md#ket-noi-websocket-tut-dot-ngot"
+
+      - alert: WebSocketQueueOverflow
+        # Hàng đợi gửi đầy liên tục nghĩa là đang phát nhiều hơn client nhận
+        # kịp. Nó âm thầm làm mất bản tin, nên phải có cảnh báo riêng.
+        expr: rate(manage_ws_dropped_total[10m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Đang đóng kết nối WebSocket vì hàng đợi gửi đầy"
+
+  # =======================================================================
+  - name: api
+    rules:
+      - alert: HighErrorRate
+        # Tỷ lệ 5xx trên 5% trong 10 phút. Chỉ tính 5xx, KHÔNG tính 4xx: 4xx
+        # là client gửi sai, và một đợt quét tự động sẽ làm cảnh báo kêu oan.
+        expr: |
+          sum(rate(manage_http_requests_total{status=~"5.."}[10m]))
+            / sum(rate(manage_http_requests_total[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Trên 5% request trả lỗi 5xx"
+          runbook: "doc/RUNBOOK.md#ty-le-loi-5xx-cao"
+
+      - alert: HighLatency
+        # Phân vị 95 vượt 2 giây. Dùng histogram_quantile trên chỉ số histogram
+        # nên con số này gộp được từ mọi replica — summary thì không.
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(manage_http_request_duration_seconds_bucket[10m])) by (le)
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Phân vị 95 độ trễ API vượt 2 giây"
+
+      - alert: ServiceDown
+        expr: up{job=~"manage-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Không scrape được {{ $labels.job }} tại {{ $labels.instance }}"
+
+  # =======================================================================
+  - name: scheduled_jobs
+    rules:
+      - alert: ScheduledJobStale
+        # Job định kỳ không THÀNH CÔNG lần nào trong 2 giờ.
+        #
+        # Đo theo lần thành công chứ không theo lần chạy: một job chạy đúng
+        # giờ nhưng lỗi mỗi lần thì "lần chạy cuối" vẫn mới tinh. Ngưỡng 2 giờ
+        # phủ được job dày nhất (30 giây) lẫn job thưa nhất (15 phút) mà không
+        # kêu oan khi có một vài lần lỗi rời rạc.
+        expr: |
+          time() - manage_scheduled_job_last_success_timestamp_seconds > 7200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job {{ $labels.job }} không thành công lần nào trong 2 giờ"
+          runbook: "doc/RUNBOOK.md#job-dinh-ky-khong-chay"
+
+      - alert: AttendanceCollectorStale
+        # Riêng job quét presence có ngưỡng CHẶT hơn nhiều: nó chạy mỗi phút và
+        # là nguồn dữ liệu chấm công duy nhất. Mười phút không chạy là mười
+        # phút làm việc biến mất khỏi bảng công của mọi người, và không có cách
+        # nào dựng lại — presence trong Redis đã hết hạn.
+        expr: |
+          time() - manage_scheduled_job_last_success_timestamp_seconds{
+            job="attendance.collect_presence"
+          } > 600
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Job quét presence đã ngừng — dữ liệu chấm công đang bị mất"
+          runbook: "doc/RUNBOOK.md#job-quet-presence-ngung"

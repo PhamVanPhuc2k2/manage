@@ -140,7 +140,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 90s
-    # Dài vì Phase 5 sẽ giữ kết nối WebSocket cần đóng sạch.
+    # Dài vì api giữ kết nối WebSocket cần đóng sạch khi triển khai.
     stop_grace_period: 60s
     networks: [backend, proxy]
 
@@ -162,9 +162,12 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    # Worker không có HTTP endpoint. Kiểm tra bằng cách xem tiến trình còn chạy không.
+    # Từ Phase 6 worker có một máy chủ HTTP nhỏ chỉ để phục vụ /metrics và
+    # /health. Kiểm tra qua HTTP thay vì pgrep là một phép thử MẠNH HƠN: nó
+    # chứng minh tiến trình còn PHẢN HỒI, không chỉ còn tồn tại. Một worker
+    # treo vì deadlock vẫn qua được pgrep.
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'worker/server' > /dev/null || exit 1"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 3

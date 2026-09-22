@@ -53,6 +53,12 @@ services:
     environment:
       ENV: production
       LOG_LEVEL: info
+    # 60 giây để đóng sạch kết nối WebSocket khi triển khai.
+    #
+    # Khai báo LẠI ở đây dù docker-compose.yml đã có: file prod hay được đọc
+    # một mình khi cần biết production đang chạy thế nào, và một giá trị quan
+    # trọng như thế này không nên phải đi tìm ở file khác.
+    stop_grace_period: 60s
     deploy:
       replicas: 2
       resources:
@@ -97,3 +103,107 @@ services:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
       - ./docker/nginx/certs:/etc/nginx/certs:ro
+      # Thư mục xác thực của Let's Encrypt. certbot ghi vào, nginx phục vụ ra.
+      - ./docker/nginx/acme:/var/www/certbot:ro
+    # Tự nạp lại cấu hình mỗi 6 giờ để dùng chứng chỉ vừa gia hạn.
+    #
+    # Việc nạp lại phải do CHÍNH nginx làm. Cách hay thấy là để certbot gọi
+    # `docker kill -s HUP` sang container nginx, nhưng image certbot không có
+    # Docker CLI và không có socket Docker — lệnh đó luôn thất bại trong im
+    # lặng, và chứng chỉ mới nằm trên đĩa trong khi nginx vẫn phục vụ bản cũ
+    # cho tới một lần khởi động lại tình cờ nào đó. Nó hết hạn giữa lúc đó.
+    #
+    # `nginx -s reload` không làm rơi kết nối nào: tiến trình cũ phục vụ nốt
+    # rồi mới thoát.
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while :; do
+          sleep 6h & wait $${!}
+          nginx -s reload
+        done &
+        nginx -g 'daemon off;'
+
+  # =======================================================================
+  # TLS — Let's Encrypt, tự gia hạn
+  #
+  # certbot ở chế độ webroot chứ không standalone: standalone cần chiếm cổng
+  # 80, mà cổng đó nginx đang giữ. Webroot thì certbot chỉ ghi một file vào
+  # thư mục dùng chung và nginx phục vụ file đó — không ai phải dừng.
+  #
+  # Vòng lặp 12 giờ: Let's Encrypt chỉ gia hạn khi chứng chỉ còn dưới 30 ngày,
+  # nên gọi renew thường xuyên là vô hại và không tính vào giới hạn tốc độ.
+  # Hai lần một ngày là khuyến nghị của chính Let's Encrypt — nó bảo đảm gia
+  # hạn vẫn xảy ra dù máy chủ có tắt vài ngày.
+  #
+  # Container này chỉ GIA HẠN. Lần cấp chứng chỉ ĐẦU TIÊN phải chạy tay một
+  # lần, xem doc/OPERATIONS.md — nó cần domain đã trỏ DNS về máy chủ, và đó
+  # là việc không tự động hoá được.
+  # =======================================================================
+  certbot:
+    image: certbot/certbot:v3.1.0
+    restart: unless-stopped
+    logging: *logging
+    volumes:
+      - ./docker/nginx/certs:/etc/letsencrypt
+      - ./docker/nginx/acme:/var/www/certbot
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        trap exit TERM
+        while :; do
+          certbot renew --webroot -w /var/www/certbot --quiet --no-random-sleep-on-renew
+          sleep 12h
+        done
+
+  # =======================================================================
+  # SAO LƯU theo lịch
+  #
+  # Chạy trong container riêng chứ không bằng cron của host: nó đi cùng
+  # compose, dựng lại được trên máy mới, và cấu hình nằm trong git. Cron của
+  # host là thứ không ai nhớ đã đặt gì cho tới khi chuyển máy chủ.
+  # =======================================================================
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        trap exit TERM
+        while :; do
+          STAMP=$$(date +%Y%m%d-%H%M%S)
+          FILE=/backups/manage-$$STAMP.dump
+
+          echo "[backup] bat dau $$STAMP"
+          if pg_dump -h postgres -U ${POSTGRES_USER:-manage}                -d ${POSTGRES_DB:-manage} -Fc --no-owner --no-acl > "$$FILE"; then
+
+            # Kiem tra doc duoc NGAY sau khi tao.
+            #
+            # pg_dump co the thoat voi ma 0 ma van cho file hong neu ket noi
+            # dut giua chung. Mot ban backup hong con te hon khong co backup:
+            # no tao cam giac an toan sai.
+            if pg_restore --list "$$FILE" > /dev/null 2>&1; then
+              echo "[backup] xong: $$FILE ($$(du -h $$FILE | cut -f1))"
+            else
+              echo "[backup] LOI: ban backup khong doc duoc, da xoa"
+              rm -f "$$FILE"
+            fi
+          else
+            echo "[backup] LOI: pg_dump that bai"
+          fi
+
+          find /backups -name 'manage-*.dump' -mtime +${BACKUP_KEEP_DAYS:-30} -delete
+          sleep 24h
+        done

@@ -79,6 +79,11 @@ var infraRoutes = map[string]struct{}{
 	"GET /health": {},
 	"GET /ready":  {},
 	"GET /ws":     {}, // tự xác thực bằng token trên query string, xem ws/handler.go
+
+	// /metrics: Prometheus scrape bằng HTTP thuần, không có token. Thứ bảo vệ
+	// nó KHÔNG phải xác thực ở tầng ứng dụng mà là nginx — chỉ mạng nội bộ
+	// Docker gọi tới được, xem docker/nginx/conf.d/app.conf.
+	"GET /metrics": {},
 }
 
 // =========================================================================

@@ -1,0 +1,292 @@
+{
+  "title": "Manage — Tổng quan",
+  "uid": "manage-overview",
+  "tags": ["manage"],
+  "timezone": "Asia/Ho_Chi_Minh",
+  "editable": false,
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Tình trạng chung",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Instance api đang sống",
+      "description": "Số instance api mà Prometheus scrape được. Tụt xuống dưới số replica cấu hình nghĩa là có instance chết hoặc không scrape được.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "targets": [
+        { "expr": "count(up{job=\"manage-api\"} == 1)", "legendFormat": "api" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Kết nối WebSocket",
+      "description": "Tổng số kết nối trên MỌI instance. Cộng lại được vì mỗi instance báo số của riêng nó.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 5, "x": 4, "y": 1 },
+      "targets": [
+        { "expr": "sum(manage_ws_connections)", "legendFormat": "kết nối" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Người đang online",
+      "description": "Số NGƯỜI, không phải số kết nối. Lệch nhiều so với số kết nối là dấu hiệu client mở kết nối trùng mà không đóng.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 5, "x": 9, "y": 1 },
+      "targets": [
+        { "expr": "sum(manage_ws_online_employees)", "legendFormat": "người" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Tỷ lệ lỗi 5xx",
+      "description": "Chỉ tính 5xx. 4xx là client gửi sai và không phản ánh sức khoẻ hệ thống.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 5, "x": 14, "y": 1 },
+      "targets": [
+        {
+          "expr": "sum(rate(manage_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(manage_http_requests_total[5m])), 0.001)",
+          "legendFormat": "5xx"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Phiên bản đang chạy",
+      "description": "Lấy từ nhãn của manage_build_info. Hai giá trị khác nhau nghĩa là đang triển khai dở dang.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 5, "x": 19, "y": 1 },
+      "targets": [
+        {
+          "expr": "manage_build_info",
+          "legendFormat": "{{app}} {{version}}",
+          "instant": true
+        }
+      ],
+      "options": { "textMode": "name" }
+    },
+
+    {
+      "type": "row",
+      "title": "HTTP",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Request mỗi giây theo mã trạng thái",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(manage_http_requests_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Độ trễ (phân vị 50 / 95 / 99)",
+      "description": "Tính từ histogram nên gộp được từ mọi replica. Summary thì không — phân vị của summary chỉ đúng cho một tiến trình.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(manage_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(manage_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(manage_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "10 route chậm nhất (p95)",
+      "description": "Nhãn là MẪU đường dẫn, không phải đường dẫn thật — nếu là đường dẫn thật thì mỗi uuid sẽ là một chuỗi riêng và Prometheus hết bộ nhớ.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "targets": [
+        {
+          "expr": "topk(10, histogram_quantile(0.95, sum by (route, le) (rate(manage_http_request_duration_seconds_bucket[10m]))))",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+
+    {
+      "type": "row",
+      "title": "WebSocket",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kết nối theo instance",
+      "description": "Lệch lớn giữa các instance nghĩa là nginx phân tải không đều — với kết nối dài thì điều đó bình thường sau một lần triển khai, nhưng kéo dài thì cần xem lại.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "manage_ws_connections",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Bản tin mỗi giây theo loại",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum by (direction, type) (rate(manage_ws_messages_total[5m]))",
+          "legendFormat": "{{direction}} {{type}}"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Hàng đợi và job nền",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Độ sâu hàng đợi",
+      "description": "Tăng đều nghĩa là worker xử lý không kịp tốc độ nạp vào. Dead-letter khác 0 luôn cần người xem.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "targets": [
+        { "expr": "manage_queue_depth", "legendFormat": "{{queue}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Job xử lý mỗi giây theo kết quả",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "targets": [
+        {
+          "expr": "sum by (job, result) (rate(manage_jobs_processed_total[5m]))",
+          "legendFormat": "{{job}} — {{result}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Job định kỳ: bao lâu rồi chưa thành công",
+      "description": "Đo theo lần THÀNH CÔNG, không phải lần chạy: một job chạy đúng giờ nhưng lỗi mỗi lần thì mốc 'lần chạy cuối' vẫn mới tinh.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 41 },
+      "targets": [
+        {
+          "expr": "time() - manage_scheduled_job_last_success_timestamp_seconds",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1800 },
+              { "color": "red", "value": 7200 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "type": "row",
+      "title": "Tài nguyên container",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU theo container",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 50 },
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"manage-.*\"}[5m]))",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "RAM theo container",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 50 },
+      "targets": [
+        {
+          "expr": "sum by (name) (container_memory_working_set_bytes{name=~\"manage-.*\"})",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+
+    {
+      "type": "row",
+      "title": "Log",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 58 }
+    },
+    {
+      "type": "logs",
+      "title": "Log lỗi của api và worker",
+      "description": "Lọc theo nhãn level do Promtail bóc từ JSON của zerolog. request_id KHÔNG phải nhãn (lực lượng quá cao) nhưng vẫn tìm được bằng truy vấn trên nội dung dòng.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 59 },
+      "targets": [
+        {
+          "expr": "{service=~\"api|worker\", level=~\"error|fatal\"}",
+          "queryType": "range"
+        }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true }
+    }
+  ]
+}

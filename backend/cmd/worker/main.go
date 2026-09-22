@@ -3,7 +3,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -32,6 +34,7 @@ import (
 	ucpay "github.com/PhamVanPhuc2k2/manage/internal/usecase/payroll"
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
 	"github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
 )
@@ -56,6 +59,7 @@ func run() error {
 	}
 
 	log := logger.New("worker", cfg.LogLevel, cfg.Env)
+	metrics.SetBuildInfo("worker", version, gitSHA, buildTime)
 	log.Info().
 		Str("version", version).
 		Str("git_sha", gitSHA).
@@ -88,6 +92,35 @@ func run() error {
 		DB:       cfg.RedisDB,
 	})
 	defer func() { _ = rdb.Close() }()
+
+	// Máy chủ HTTP CHỈ để phục vụ /metrics và /health.
+	//
+	// Worker không nhận request nghiệp vụ nào, nhưng Prometheus cần scrape nó:
+	// độ sâu hàng đợi, thời gian xử lý job và mốc thành công của job định kỳ
+	// đều chỉ có ở đây. Không có cổng này thì đúng những chỉ số quan trọng
+	// nhất của phần nền lại là phần không quan sát được.
+	//
+	// Cổng KHÔNG mở ra host (xem docker-compose.yml) — chỉ mạng nội bộ Docker
+	// gọi tới được.
+	metricsSrv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),
+		Handler:           workerMux(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		log.Info().Int("port", cfg.HTTPPort).Msg("máy chủ /metrics của worker đang chạy")
+		if err := metricsSrv.ListenAndServe(); err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
+			// Không làm chết worker: mất /metrics thì mất khả năng quan sát,
+			// còn job vẫn phải tiếp tục được xử lý.
+			log.Error().Err(err).Msg("máy chủ /metrics dừng")
+		}
+	}()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = metricsSrv.Shutdown(shutdownCtx)
+	}()
 
 	dispatcher := consumer.NewDispatcher(mqClient, log)
 
@@ -238,6 +271,19 @@ func run() error {
 		},
 	})
 
+	// Đo độ sâu hàng đợi.
+	//
+	// Chu kỳ 30 giây: đủ dày để thấy hàng đợi đang dồn lên trước khi nó thành
+	// sự cố, đủ thưa để không thêm tải đáng kể lên RabbitMQ.
+	sched.Add(scheduler.Job{
+		Name:       "metrics.queue_depth",
+		Every:      30 * time.Second,
+		RunAtStart: true,
+		Run: func(ctx context.Context) error {
+			return consumer.SampleQueueDepth(ctx, mqClient)
+		},
+	})
+
 	sched.Start(ctx)
 
 	errCh := make(chan error, 1)
@@ -269,6 +315,21 @@ func run() error {
 		log.Info().Msg("worker đã dừng")
 		return nil
 	}
+}
+
+// workerMux dựng router tối thiểu của worker: chỉ /metrics và /health.
+//
+// Dùng http.ServeMux thuần chứ không chi: worker không có route nghiệp vụ,
+// không có middleware xác thực, không có gì để định tuyến. Kéo cả router của
+// api vào đây chỉ để phục vụ hai đường dẫn tĩnh là thêm phụ thuộc không cần.
+func workerMux() http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", metrics.Handler())
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+	return mux
 }
 
 // buildAttendanceUsecase lắp ráp module chấm công cho worker.

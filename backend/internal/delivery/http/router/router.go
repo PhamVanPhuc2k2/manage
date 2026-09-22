@@ -18,6 +18,7 @@ import (
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
 	"github.com/PhamVanPhuc2k2/manage/pkg/httpx"
 	"github.com/PhamVanPhuc2k2/manage/pkg/jwt"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
 	"github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
 	"github.com/PhamVanPhuc2k2/manage/pkg/storage"
@@ -63,6 +64,9 @@ func New(d Deps) http.Handler {
 	r.Use(chimw.Recoverer)               // bắt panic, không để sập cả tiến trình
 	r.Use(chimw.Timeout(30 * time.Second))
 	r.Use(chimw.Compress(5))
+	// Đo ĐẶT SAU Recoverer: request gây panic vẫn phải được tính, và nó được
+	// tính là 500 — đó chính là thứ cảnh báo cần thấy.
+	r.Use(appmw.Metrics)
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   d.Config.CORSAllowedOrigins,
@@ -75,6 +79,16 @@ func New(d Deps) http.Handler {
 
 	systemHandler := handler.NewSystemHandler(d.PingUC, d.Version)
 	requireAuth := appmw.RequireAuth(d.JWT, d.Sessions, d.AuthReader)
+
+	// --- /metrics ---
+	//
+	// Nằm NGOÀI /api/v1 và không qua RequireAuth: Prometheus scrape bằng HTTP
+	// thuần, không có token. Bù lại, endpoint này KHÔNG được mở ra internet —
+	// nginx chỉ cho mạng nội bộ Docker gọi tới nó (xem docker/nginx/conf.d).
+	//
+	// Nó cũng không đi qua middleware Metrics: tự đếm chính lượt scrape của
+	// mình là thêm nhiễu vào đúng dữ liệu mình đang phục vụ.
+	r.Method(http.MethodGet, "/metrics", metrics.Handler())
 
 	// /health trả lời ngay, không chạm vào dependency nào.
 	// Docker dùng nó để biết container còn SỐNG.

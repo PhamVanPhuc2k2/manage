@@ -1,0 +1,30 @@
+# Nguồn dữ liệu của Grafana, khai báo bằng FILE thay vì bấm trên giao diện.
+#
+# Cấu hình bấm tay nằm trong volume của Grafana: mất volume là mất hết, và
+# không ai biết trước đó đã cấu hình gì. Khai báo bằng file thì nó nằm trong
+# git, dựng lại được và review được.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      # Khớp với scrape_interval. Lệch nhau làm biểu đồ có khoảng trống giả
+      # hoặc làm mượt quá mức.
+      timeInterval: 15s
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # Nối log với chỉ số: bấm vào một dòng log có trace_id là nhảy sang
+      # đúng request đó. Đây là lý do chính để chạy Loki thay vì chỉ
+      # `docker logs`.
+      derivedFields:
+        - name: request_id
+          matcherRegex: '"request_id":"([^"]+)"'
+          url: '$${__value.raw}'

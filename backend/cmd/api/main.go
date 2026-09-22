@@ -42,6 +42,7 @@ import (
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
 	"github.com/PhamVanPhuc2k2/manage/pkg/jwt"
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 	"github.com/PhamVanPhuc2k2/manage/pkg/postgres"
 	"github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
 	"github.com/PhamVanPhuc2k2/manage/pkg/storage"
@@ -68,6 +69,7 @@ func run() error {
 	}
 
 	log := logger.New("api", cfg.LogLevel, cfg.Env)
+	metrics.SetBuildInfo("api", version, gitSHA, buildTime)
 	log.Info().
 		Str("version", version).
 		Str("git_sha", gitSHA).

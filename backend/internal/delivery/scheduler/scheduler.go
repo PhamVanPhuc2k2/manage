@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 )
 
 // Job là một việc chạy định kỳ.
@@ -140,6 +141,7 @@ func (s *Scheduler) exec(ctx context.Context, name string, run func(context.Cont
 				Interface("panic", rec).
 				Str("job", name).
 				Msg("job định kỳ panic, đã chặn lại")
+			metrics.ScheduledJobRuns.WithLabelValues(name, "panic").Inc()
 		}
 	}()
 
@@ -151,8 +153,17 @@ func (s *Scheduler) exec(ctx context.Context, name string, run func(context.Cont
 
 	if err := run(jobCtx); err != nil {
 		s.log.Error().Err(err).Str("job", name).Msg("job định kỳ thất bại")
+		metrics.ScheduledJobRuns.WithLabelValues(name, "error").Inc()
 		return
 	}
+
+	// Ghi mốc thành công, KHÔNG phải mốc "đã chạy".
+	//
+	// Một job chạy đúng giờ nhưng lỗi mỗi lần thì mốc "đã chạy" vẫn mới tinh
+	// và không cảnh báo gì. Cảnh báo dựa trên mốc thành công bắt được cả hai:
+	// job chết hẳn và job chạy mà luôn lỗi.
+	metrics.ScheduledJobRuns.WithLabelValues(name, "ok").Inc()
+	metrics.ScheduledJobLastSuccess.WithLabelValues(name).Set(float64(time.Now().Unix()))
 
 	s.log.Debug().
 		Str("job", name).

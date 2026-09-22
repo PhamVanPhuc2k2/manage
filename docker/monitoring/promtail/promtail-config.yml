@@ -1,0 +1,50 @@
+# Promtail gom log của mọi container Docker rồi đẩy sang Loki.
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  # Ghi vị trí đã đọc tới để khởi động lại không đọc lại từ đầu.
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+
+    relabel_configs:
+      # Tên container thành nhãn. Docker trả tên có dấu "/" ở đầu, phải bỏ.
+      - source_labels: [__meta_docker_container_name]
+        regex: '/(.*)'
+        target_label: container
+
+      # Tên service trong compose: nhãn hữu ích hơn tên container khi scale,
+      # vì mọi replica của api có cùng service nhưng khác tên container.
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+
+      # CHỈ gom log của dự án này. Không lọc thì Promtail gom cả log của mọi
+      # container khác trên máy — gồm cả dự án khác của người dùng.
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        regex: manage
+        action: keep
+
+    pipeline_stages:
+      # Log của api và worker là JSON một dòng (zerolog). Bóc ra để truy vấn
+      # được theo level và request_id thay vì phải grep chuỗi.
+      - json:
+          expressions:
+            level: level
+            request_id: request_id
+            app: app
+      # Chỉ level và app thành NHÃN. request_id thì KHÔNG: nó gần như duy nhất
+      # cho mỗi request, và nhãn có lực lượng cao là cách nhanh nhất làm Loki
+      # hết bộ nhớ. Nó vẫn tìm được bằng truy vấn trên nội dung dòng log.
+      - labels:
+          level:
+          app:

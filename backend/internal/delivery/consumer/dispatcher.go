@@ -13,6 +13,7 @@ import (
 
 	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 	mq "github.com/PhamVanPhuc2k2/manage/pkg/rabbitmq"
 )
 
@@ -96,6 +97,7 @@ func (d *Dispatcher) handle(ctx context.Context, msg amqp.Delivery) {
 		// requeue = false → message đi thẳng sang dead-letter queue.
 		// Requeue một message hỏng chỉ tạo vòng lặp vô tận.
 		_ = msg.Nack(false, false)
+		metrics.JobsProcessed.WithLabelValues("unparseable", "dead_letter").Inc()
 		return
 	}
 
@@ -103,6 +105,11 @@ func (d *Dispatcher) handle(ctx context.Context, msg amqp.Delivery) {
 	if !found {
 		d.log.Error().Str("job", job.Name).Msg("không có handler cho job này")
 		_ = msg.Nack(false, false)
+		// Nhãn là TÊN JOB lấy từ message, nhưng chỉ ở nhánh này thì nó đến từ
+		// bên ngoài. Vẫn ghi vì tên job do chính hệ thống sinh ra, không phải
+		// người dùng nhập — và "job nào không có handler" là câu hỏi đầu tiên
+		// khi dead-letter queue bắt đầu đầy lên.
+		metrics.JobsProcessed.WithLabelValues(job.Name, "no_handler").Inc()
 		return
 	}
 
@@ -114,12 +121,17 @@ func (d *Dispatcher) handle(ctx context.Context, msg amqp.Delivery) {
 	jobCtx, cancel := context.WithTimeout(logger.WithContext(ctx, log), 5*time.Minute)
 	defer cancel()
 
-	if err := handler(jobCtx, job); err != nil {
+	err := handler(jobCtx, job)
+	metrics.JobDuration.WithLabelValues(job.Name).Observe(time.Since(start).Seconds())
+
+	if err != nil {
 		log.Error().Err(err).Msg("xử lý job thất bại")
 		_ = msg.Nack(false, false)
+		metrics.JobsProcessed.WithLabelValues(job.Name, "error").Inc()
 		return
 	}
 
 	log.Debug().Dur("duration", time.Since(start)).Msg("xử lý job xong")
 	_ = msg.Ack(false)
+	metrics.JobsProcessed.WithLabelValues(job.Name, "ok").Inc()
 }

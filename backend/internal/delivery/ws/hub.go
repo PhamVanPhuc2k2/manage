@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 
 	domainrealtime "github.com/PhamVanPhuc2k2/manage/internal/domain/realtime"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 )
 
 // Hub giữ mọi kết nối WebSocket của MỘT instance api.
@@ -67,7 +68,14 @@ func (h *Hub) register(c *Client) {
 	}
 	h.clients[c.employeeID][c] = struct{}{}
 	n := len(h.clients[c.employeeID])
+	conns, people := h.countLocked()
 	h.mu.Unlock()
+
+	// Cập nhật chỉ số NGAY trong lúc còn biết số liệu, thay vì để Prometheus
+	// gọi lại hub lúc scrape: một hàm thu thập phải lấy khoá đọc của hub sẽ
+	// khiến việc scrape tranh khoá với chính luồng gửi tin nhắn.
+	metrics.WSConnections.Set(float64(conns))
+	metrics.WSOnlineEmployees.Set(float64(people))
 
 	h.log.Debug().
 		Str("employee_id", c.employeeID.String()).
@@ -87,7 +95,11 @@ func (h *Hub) unregister(c *Client) {
 			delete(h.clients, c.employeeID)
 		}
 	}
+	total, people := h.countLocked()
 	h.mu.Unlock()
+
+	metrics.WSConnections.Set(float64(total))
+	metrics.WSOnlineEmployees.Set(float64(people))
 
 	// Đóng kênh gửi ở ĐÂY, sau khi đã gỡ khỏi map.
 	//
@@ -133,6 +145,12 @@ func (h *Hub) Deliver(msg domainrealtime.Message) {
 	for _, c := range targets {
 		c.trySend(data)
 	}
+
+	// Đếm theo SỐ NGƯỜI NHẬN, không theo số bản tin phát ra: một tin nhắn
+	// nhóm 20 người là 20 lượt gửi thật, và đó mới là con số phản ánh tải.
+	if n := len(targets); n > 0 {
+		metrics.WSMessages.WithLabelValues("out", msg.Envelope.Type).Add(float64(n))
+	}
 }
 
 // Publish phát bản tin ra TOÀN HỆ THỐNG, qua mọi instance.
@@ -152,6 +170,17 @@ func (h *Hub) Publish(ctx context.Context, msg domainrealtime.Message) {
 		// im lặng hoàn toàn còn tệ hơn.
 		h.Deliver(msg)
 	}
+}
+
+// countLocked đếm số kết nối và số người. Người gọi PHẢI đang giữ khoá.
+//
+// Tách ra hàm riêng vì cả register và unregister đều cần, và cả hai đã giữ
+// khoá ghi — lấy khoá lần nữa bên trong sẽ tự chặn chính mình.
+func (h *Hub) countLocked() (conns, people int) {
+	for _, set := range h.clients {
+		conns += len(set)
+	}
+	return conns, len(h.clients)
 }
 
 // OnlineEmployees trả về danh sách nhân viên đang nối vào instance NÀY.
@@ -192,6 +221,9 @@ func (h *Hub) CloseAll() {
 	}
 	h.clients = make(map[uuid.UUID]map[*Client]struct{})
 	h.mu.Unlock()
+
+	metrics.WSConnections.Set(0)
+	metrics.WSOnlineEmployees.Set(0)
 
 	for _, c := range all {
 		c.closeOnce.Do(func() { close(c.send) })

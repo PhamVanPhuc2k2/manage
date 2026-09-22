@@ -1,0 +1,50 @@
+# Loki ở cấu hình một nốt, lưu trên hệ thống tệp.
+#
+# Không dùng object storage: hệ thống này có một máy chủ, và chạy Loki ở chế
+# độ phân tán sẽ thêm ba thành phần nữa để vận hành mà không giải quyết vấn đề
+# nào đang có.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Giữ log 30 ngày. Dài hơn thì ổ đĩa phình mà không ai đọc log cũ hơn một
+  # tháng; ngắn hơn thì không truy được sự cố của kỳ lương tháng trước.
+  retention_period: 720h
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Chặn một container lỗi ghi log vòng lặp làm đầy ổ đĩa.
+  ingestion_rate_mb: 10
+  ingestion_burst_size_mb: 20
+
+compactor:
+  working_directory: /loki/compactor
+  # Phải bật retention_enabled, nếu không retention_period ở trên KHÔNG có
+  # tác dụng và log giữ mãi mãi — một cái bẫy cấu hình quen thuộc của Loki.
+  retention_enabled: true
+  delete_request_store: filesystem

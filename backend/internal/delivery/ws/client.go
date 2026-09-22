@@ -11,6 +11,7 @@ import (
 
 	domainauth "github.com/PhamVanPhuc2k2/manage/internal/domain/auth"
 	domainrealtime "github.com/PhamVanPhuc2k2/manage/internal/domain/realtime"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 )
 
 const (
@@ -98,6 +99,7 @@ func (c *Client) trySend(data []byte) {
 			Str("employee_id", c.employeeID.String()).
 			Str("conn_id", c.connID.String()).
 			Msg("hàng đợi gửi đầy, đóng kết nối chậm")
+		metrics.WSDropped.Inc()
 		c.closeOnce.Do(func() { close(c.send) })
 	}
 }
@@ -179,6 +181,7 @@ func (c *Client) readPump(ctx context.Context) {
 			continue
 		}
 
+		metrics.WSMessages.WithLabelValues("in", e.Type).Inc()
 		c.handle(ctx, e)
 	}
 }

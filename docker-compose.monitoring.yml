@@ -1,0 +1,154 @@
+# Stack giám sát. Chạy THÊM vào stack chính:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#
+# Tách thành file riêng chứ không nhập vào docker-compose.yml, có chủ ý: sáu
+# container giám sát chiếm khoảng 1GB RAM, và ở môi trường phát triển thì
+# chúng chỉ làm máy chậm đi. Ai cần thì bật thêm một file.
+#
+# Cổng mở ra host chỉ có Grafana. Prometheus, Loki và mấy exporter còn lại
+# KHÔNG mở: chúng không có xác thực, và Grafana đã là cửa duy nhất cần thiết.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  prometheus:
+    # Ghim theo DIGEST, không theo tag.
+    #
+    # Tag như v3.1.0 có thể bị đẩy lại trỏ sang image khác; digest thì không.
+    # Với thành phần giám sát điều này còn quan trọng hơn: nó phải là thứ ổn
+    # định nhất trong hệ thống, vì khi mọi thứ khác hỏng thì nó là chỗ ta nhìn.
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Giữ 30 ngày HOẶC 8GB, cái nào tới trước. Chỉ đặt thời gian là không
+      # đủ: một đợt bùng nổ nhãn có thể làm đầy ổ đĩa trước khi hết 30 ngày.
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=8GB
+      - --web.enable-lifecycle
+    volumes:
+      - ./docker/monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    networks: [backend, monitoring]
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Đặt GRAFANA_PASSWORD trong .env}
+      # Tắt đăng ký và đăng nhập ẩn danh: đây là cửa duy nhất vào toàn bộ dữ
+      # liệu vận hành, gồm cả log có thể chứa thông tin nhạy cảm.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Tắt gửi thống kê ra ngoài.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./docker/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on: [prometheus]
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
+
+  loki:
+    image: grafana/loki:3.4.1
+    restart: unless-stopped
+    logging: *logging
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./docker/monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+
+  promtail:
+    image: grafana/promtail:3.4.1
+    restart: unless-stopped
+    logging: *logging
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./docker/monitoring/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      # Đọc log container qua socket Docker.
+      #
+      # Mount socket Docker là ĐÁNG CHÚ Ý về bảo mật: ai vào được container này
+      # thì điều khiển được cả Docker daemon, tức là cả máy chủ. Vì vậy nó
+      # read-only và container không có gì khác. Đổi lại, cách này gom được
+      # log của mọi container kèm nhãn compose mà không phải cấu hình từng cái.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_positions:/tmp
+    depends_on: [loki]
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  # cadvisor cho chỉ số CPU/RAM/IO của TỪNG container. Không có nó thì chỉ
+  # thấy tải của cả máy, và không biết container nào đang ăn hết.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    restart: unless-stopped
+    logging: *logging
+    # cadvisor cần quyền đọc cgroup của host; privileged là yêu cầu của chính
+    # nó, không phải lựa chọn của dự án.
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 384M }
+
+  # node-exporter cho chỉ số của MÁY: ổ đĩa, RAM, CPU, network. Cảnh báo
+  # "ổ đĩa > 80%" đọc từ đây.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - --path.rootfs=/host
+      # Bỏ qua filesystem ảo: chúng luôn báo 100% và làm cảnh báo ổ đĩa kêu oan.
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|rootfs/var/lib/docker)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { cpus: "0.3", memory: 128M }
+
+networks:
+  # Prometheus phải ở CẢ HAI mạng: monitoring để Grafana gọi nó, và backend để
+  # nó scrape được api, worker và rabbitmq. Thiếu backend thì mọi target báo
+  # "connection refused" mà cấu hình trông vẫn đúng.
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  promtail_positions:
