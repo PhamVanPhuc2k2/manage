@@ -140,15 +140,30 @@ func (f *fakeDepartments) ListSubtreeIDs(
 	return out, nil
 }
 
+// ListAncestorIDs trả về CHÍNH NÚT ĐÓ kèm toàn bộ tổ tiên.
+//
+// Gồm cả chính nó là có chủ đích, và đây là hợp đồng của repository thật:
+// truy vấn WITH RECURSIVE lấy hàng neo `WHERE id = $1` rồi đi ngược lên.
+// ListSubtreeIDs cũng gồm chính gốc, nên hai hàm đối xứng nhau.
+//
+// Bản giả lập này trước đây trả tổ tiên CHẮT — không gồm chính nó. Bộ
+// integration test trên PostgreSQL thật đã phát hiện chính sự lệch này.
+// Luật nghiệp vụ không đổi theo (validateNoCycle còn một phép kiểm riêng
+// cho trường hợp tự làm cha mình), nhưng một bản giả lập nói sai về hợp đồng
+// là một quả mìn chờ người sau giẫm phải.
 func (f *fakeDepartments) ListAncestorIDs(
 	_ context.Context, id uuid.UUID,
 ) ([]uuid.UUID, error) {
-	var out []uuid.UUID
-	seen := map[uuid.UUID]bool{}
-
 	cur := f.byID[id]
-	// Chặn trên 1000 bước: nếu cây đã có vòng lặp thì vòng while này không
-	// bao giờ dừng, và bài kiểm thử sẽ treo thay vì báo hỏng.
+	if cur == nil {
+		return nil, nil
+	}
+
+	out := []uuid.UUID{id}
+	seen := map[uuid.UUID]bool{id: true}
+
+	// Chặn trên 1000 bước: nếu cây đã có vòng lặp thì vòng này không bao giờ
+	// dừng, và bài kiểm thử sẽ treo thay vì báo hỏng.
 	for i := 0; cur != nil && cur.ParentID != nil && i < 1000; i++ {
 		p := *cur.ParentID
 		if seen[p] {

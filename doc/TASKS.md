@@ -709,7 +709,24 @@ Lệnh chạy:
 > kiểm phía "từ chối" sẽ vẫn đạt với một hàm từ chối tất cả.
 
 - [x] Unit test cho toàn bộ tầng `usecase` (mục tiêu ≥ 70% coverage)
-- [ ] Integration test cho repository bằng testcontainers (PostgreSQL thật)
+- [x] Integration test cho repository bằng testcontainers (PostgreSQL thật)
+> 15 phép thử, chạy bằng `go test -tags=integration
+> ./internal/repository/postgres/...`. Build tag là cần thiết: `go test ./...`
+> phải chạy được trên máy không có Docker và xong trong vài giây.
+>
+> Container chạy **chính** các tệp migration và **chính** tệp init extension
+> của dự án, không dựng schema riêng cho kiểm thử — một schema riêng sẽ
+> trôi khỏi schema thật mà không ai nhận ra.
+>
+> Chỉ kiểm những thứ bản giả lập không kiểm được: truy vấn WITH RECURSIVE
+> trên cây phòng ban, chỉ mục unique MỘT PHẦN (nhân viên nghỉ rồi quay lại
+> phải dùng được email cũ), hành vi xoá mềm, tìm kiếm tiếng Việt không dấu
+> qua unaccent, và phạm vi dữ liệu ở tầng SQL.
+>
+> **Nó tìm ra ngay một bản giả lập nói sai hợp đồng**: `ListAncestorIDs`
+> thật trả về chính nút đó kèm tổ tiên, còn bản giả lập ở tầng usecase trả
+> tổ tiên chặt. Luật nghiệp vụ không đổi theo, nhưng bản giả lập đã được
+> sửa cho khớp — đó chính là loại lệch mà integration test sinh ra để bắt.
 - [ ] Test API end-to-end cho các luồng chính — *đang phủ bằng 6 bộ smoke (287 mục) trên stack Docker thật, chưa phải test tự động trong CI*
 - [x] Test tải cho WebSocket (mục tiêu: 500 kết nối đồng thời)
 > Đo trên stack thật bằng `backend/cmd/wsload`: **500/500 kết nối thành
