@@ -1,5 +1,21 @@
 # syntax=docker/dockerfile:1.7
 
+# GHIM BASE IMAGE THEO DIGEST
+#
+# Thẻ `:1.27-alpine` là con trỏ di động: cùng một Dockerfile dựng hôm nay và
+# tháng sau cho ra hai image khác nhau. Khi một bản dựng hỏng, không có cách
+# nào dựng lại đúng thứ đã chạy để so sánh — và đó cũng là đường để một
+# image bị thay đổi ở thượng nguồn đi thẳng vào production.
+#
+# Giữ cả thẻ lẫn digest: Docker dùng digest, còn thẻ để người đọc biết
+# digest đó ứng với phiên bản nào mà không phải tra.
+#
+# CẬP NHẬT ĐỊNH KỲ LÀ BẮT BUỘC. Ghim rồi bỏ quên thì image đóng băng
+# luôn cả những lỗ hổng đã được vá ở thượng nguồn — tệ hơn hẳn thẻ trôi nổi.
+# Chạy `bash scripts/update-base-digests.sh` để lấy digest mới nhất; quyết
+# định có cập nhật hay không dựa vào kết quả quét Trivy hàng tuần
+# (.github/workflows/security.yml).
+
 # =============================================================================
 # base — phần dùng chung: toolchain Go + dependency đã tải.
 # Tách riêng để tầng cache dependency không bị xoá mỗi khi sửa code.
@@ -15,7 +31,7 @@
 # Go không cần binary `git`: nó tải module qua GOPROXY (proxy.golang.org),
 # chỉ những module trỏ thẳng vào VCS mới cần git — dự án này không có.
 # =============================================================================
-FROM golang:1.27-alpine AS base
+FROM golang:1.27-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS base
 
 WORKDIR /app
 
@@ -75,7 +91,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # prod — image cuối cùng. Chỉ chứa binary và chứng chỉ CA.
 # Kích thước thực tế đo được: api 32.5MB, worker 27.1MB.
 # =============================================================================
-FROM alpine:3.21 AS prod
+FROM alpine:3.21@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507 AS prod
 
 # Chứng chỉ CA copy từ image golang thay vì cài bằng apk — cần cho mọi
 # kết nối TLS đi ra (SMTP, S3, API bên ngoài).

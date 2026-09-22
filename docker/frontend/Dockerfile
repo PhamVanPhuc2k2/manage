@@ -1,6 +1,22 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS base
+# GHIM BASE IMAGE THEO DIGEST
+#
+# Thẻ `:1.27-alpine` là con trỏ di động: cùng một Dockerfile dựng hôm nay và
+# tháng sau cho ra hai image khác nhau. Khi một bản dựng hỏng, không có cách
+# nào dựng lại đúng thứ đã chạy để so sánh — và đó cũng là đường để một
+# image bị thay đổi ở thượng nguồn đi thẳng vào production.
+#
+# Giữ cả thẻ lẫn digest: Docker dùng digest, còn thẻ để người đọc biết
+# digest đó ứng với phiên bản nào mà không phải tra.
+#
+# CẬP NHẬT ĐỊNH KỲ LÀ BẮT BUỘC. Ghim rồi bỏ quên thì image đóng băng
+# luôn cả những lỗ hổng đã được vá ở thượng nguồn — tệ hơn hẳn thẻ trôi nổi.
+# Chạy `bash scripts/update-base-digests.sh` để lấy digest mới nhất; quyết
+# định có cập nhật hay không dựa vào kết quả quét Trivy hàng tuần
+# (.github/workflows/security.yml).
+
+FROM node:22-alpine@sha256:b6f26b36c8ff49624cfdac716b8ea1138d606df02586a77d364bb5536a634f85 AS base
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 ENV PNPM_HOME=/pnpm
@@ -43,7 +59,7 @@ RUN pnpm build
 # corepack/pnpm, mà image chạy production không cần trình quản lý gói —
 # nó chỉ chạy `node server.js`.
 # =============================================================================
-FROM node:22-alpine AS prod
+FROM node:22-alpine@sha256:b6f26b36c8ff49624cfdac716b8ea1138d606df02586a77d364bb5536a634f85 AS prod
 
 WORKDIR /app
 

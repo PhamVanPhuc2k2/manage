@@ -740,7 +740,17 @@ Lệnh chạy:
 - [x] Ghi audit log cho thao tác nhạy cảm: lương, xoá nhân viên, đổi quyền
 - [x] Bảo mật container: chạy non-root, `read_only: true` cho container không cần ghi, `cap_drop: ALL`, `no-new-privileges`
 - [x] Không nhúng secret vào image (kiểm tra bằng `docker history`); dùng Docker secrets hoặc file env ngoài repo
-- [ ] Ghim phiên bản base image theo digest, không dùng tag trôi nổi như `alpine:latest` — *đang ghim theo tag có số phiên bản đầy đủ, chưa theo digest*
+- [x] Ghim phiên bản base image theo digest, không dùng tag trôi nổi như `alpine:latest`
+> Ba image đã ghim: `golang:1.27-alpine`, `alpine:3.21`, `node:22-alpine`.
+> Giữ cả thẻ lẫn digest — Docker dùng digest, thẻ để người đọc biết nó ứng
+> với phiên bản nào.
+>
+> **Ghim rồi bỏ quên còn tệ hơn thẻ trôi nổi**: image đóng băng luôn cả
+> những lỗ hổng đã được vá ở thượng nguồn, trong khi thẻ trôi nổi ít ra còn
+> tự nhận bản vá. Vì vậy kèm `scripts/update-base-digests.sh`: chế độ mặc
+> định chỉ xem, `--write` mới ghi. Script cố ý KHÔNG tự commit và không
+> chạy trong CI — đổi base image có thể đổi phiên bản thư viện hệ thống, và
+> có những thứ chỉ hỏng lúc chạy chứ không hỏng lúc build.
 - [x] Quét image định kỳ bằng Trivy, có lịch cập nhật base image khi có CVE mới → `.github/workflows/security.yml`, 08:00 thứ hai hằng tuần
 
 ### Docker — production
