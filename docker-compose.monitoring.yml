@@ -134,7 +134,18 @@ services:
       - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|rootfs/var/lib/docker)($$|/)
     pid: host
     volumes:
-      - /:/host:ro,rslave
+      # KHONG dat rslave o day.
+      #
+      # rslave lam cac mount moi tren may chu hien ra trong container, nhung
+      # Docker Desktop (Windows/macOS) tu choi bind propagation tren / va bao
+      # "path / is mounted on / but it is not a shared or slave mount" — ca
+      # lenh `docker compose up` that bai, khong chi rieng service nay.
+      #
+      # Danh doi khi bo no: filesystem duoc mount SAU khi node-exporter khoi
+      # dong se khong duoc dem toi khi container chay lai. Tren may chu that,
+      # o dia duoc mount luc boot con container len sau do, nen canh bao dung
+      # dia van doc du. Gan mot o moi thi restart node-exporter.
+      - /:/host:ro
     networks: [monitoring]
     deploy:
       resources:

@@ -122,8 +122,15 @@ docker compose ps
 .\dev.ps1 up
 
 # --- Bật thêm giám sát ---
-docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#
+# PHẢI liệt kê cả docker-compose.override.yml. Khi có cờ -f tường minh,
+# Docker KHÔNG tự nạp trật tự override nữa — thiếu nó thì api mất cấu hình
+# dev (air, hot reload) và chết với "open .air.api.toml: no such file".
+docker compose -f docker-compose.yml -f docker-compose.override.yml   -f docker-compose.monitoring.yml up -d
 # Grafana: http://localhost:3001
+
+# Trên máy chủ thật thì không có override, nên bỏ nó đi:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml   -f docker-compose.monitoring.yml up -d
 
 # --- Production ---
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
