@@ -711,7 +711,11 @@ Lệnh chạy:
 - [x] Unit test cho toàn bộ tầng `usecase` (mục tiêu ≥ 70% coverage)
 - [ ] Integration test cho repository bằng testcontainers (PostgreSQL thật)
 - [ ] Test API end-to-end cho các luồng chính — *đang phủ bằng 6 bộ smoke (287 mục) trên stack Docker thật, chưa phải test tự động trong CI*
-- [ ] Test tải cho WebSocket (mục tiêu: 500 kết nối đồng thời) — *công cụ đã có (`backend/cmd/wsload`), chưa chạy được vì Docker đang tắt*
+- [x] Test tải cho WebSocket (mục tiêu: 500 kết nối đồng thời)
+> Đo trên stack thật bằng `backend/cmd/wsload`: **500/500 kết nối thành
+> công, 0 thất bại, 0 rớt giữa chừng**, giữ 60 giây. Bắt tay p50 2,7 ms —
+> p95 4,2 ms — p99 21,2 ms. Chỉ số phía máy chủ khớp chính xác:
+> `manage_ws_connections` đạt đúng 500, `manage_ws_dropped_total` bằng 0.
 - [ ] Test E2E frontend bằng Playwright cho 5 luồng quan trọng nhất
 
 ### Bảo mật
@@ -745,10 +749,16 @@ Lệnh chạy:
 > hạn mức tài nguyên, xoay vòng log). Phase 6 thêm TLS tự gia hạn, container
 > sao lưu, và ba script triển khai — quay lui — khôi phục.
 >
-> **Chưa chạy thử trên stack thật:** Docker Desktop tắt giữa lúc làm phần
-> này. Đã rà bằng cách khác: YAML của 4 file compose phân tích cú pháp đạt,
-> `bash -n` cả 4 script đạt. Còn phải làm khi Docker chạy lại: `nginx -t`,
-> `promtool check config`, và kiểm chứng `--scale api=3`.
+> **Đã chạy thử trên stack thật.** `nginx -t` đạt cho cả cấu hình dev lẫn
+> cấu hình production (phải chạy trong mạng `manage_proxy` vì upstream `api`
+> và `frontend` phân giải bằng DNS của Docker). `promtool check config` đạt,
+> 13 quy tắc cảnh báo. 15 service lên đủ, 6/6 target Prometheus xanh, cả 13
+> quy tắc nạp đúng và không quy tắc nào kêu oan.
+>
+> Việc chạy thật tìm ra ba lỗi mà kiểm cú pháp không bắt được: node-exporter
+> không dựng được trên Docker Desktop vì bind propagation, lệnh bật giám sát
+> trong tài liệu làm hỏng api vì bỏ mất override, và nginx không nhận bản api
+> mới sau khi scale hoặc triển khai.
 
 - [x] Hoàn thiện target `prod` trong Dockerfile backend: build tĩnh (`CGO_ENABLED=0`), `-ldflags="-s -w"`, base image `gcr.io/distroless/static` hoặc `alpine`
 - [x] Hoàn thiện Dockerfile frontend: chỉ copy `.next/standalone` + `.next/static` + `public` sang stage cuối
@@ -760,7 +770,22 @@ Lệnh chạy:
 - [x] `stop_grace_period: 60s` cho api để đóng sạch kết nối WebSocket khi deploy
 - [x] Nginx: bật TLS bằng Let's Encrypt (certbot container hoặc Caddy), tự gia hạn — *chưa chạy thử; lần cấp chứng chỉ đầu cần domain thật, xem doc/OPERATIONS.md*
 - [x] Nginx: bật gzip/brotli, cache asset tĩnh, đặt `client_max_body_size` khớp giới hạn upload
-- [ ] Kiểm chứng scale: `docker compose up -d --scale api=3` → chat và thông báo vẫn hoạt động đúng (xác nhận fan-out RabbitMQ chạy chuẩn) — *Phase 5 đã kiểm chứng fan-out với 2 instance; chưa thử `--scale api=3`*
+- [x] Kiểm chứng scale: `--scale api=3` → chat và thông báo vẫn đúng (fan-out RabbitMQ)
+> Ba kết quả đo trên stack thật:
+>
+> - **Lưu lượng REST chia đều**: 30 request → 10/10/10 trên ba bản.
+> - **Kết nối WebSocket chia đều**: 30 kết nối → 10/10/10.
+> - **Fan-out đúng**: 6 kết nối rải trên ba bản, gửi một tin nhắn bằng REST
+>   qua một bản → **6/6 kết nối nhận được**.
+>
+> Công cụ kiểm chứng lặp lại được: `backend/cmd/wsfanout`. Nó tự mở hội
+> thoại, gắn một mốc duy nhất vào tin nhắn rồi đếm số kết nối nhận được, và
+> thoát với mã khác 0 khi thiếu dù một kết nối.
+>
+> **Hai lỗi chặn đường đã phải sửa trước đó** — xem `docker-compose.scale.yml`
+> và ghi chú upstream trong `docker/nginx/conf.d/app.conf`: cổng cố định
+> trong override chặn bản thứ hai khởi động, và nginx không tự tra lại DNS
+> nên bản mới không nhận được request nào cho tới khi nạp lại cấu hình.
 - [x] Script deploy: pull image mới → chạy job `migrate` → rolling restart từng container api
 - [x] Quy trình rollback: đổi tag image về SHA trước đó và khởi động lại
 - [x] Container backup: `pg_dump` theo lịch, nén, đẩy lên Cloudflare R2, xoá bản cũ theo chính sách lưu trữ — *tự kiểm tra bản dump đọc được; phần đẩy lên R2 cần khoá R2 chưa có*

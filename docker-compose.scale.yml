@@ -20,6 +20,23 @@
 #
 # Phải liệt kê cả override: có cờ -f tường minh thì Docker không tự nạp nó.
 #
+# PHẢI NẠP LẠI NGINX SAU KHI SCALE
+#
+#     docker compose ... exec nginx nginx -s reload
+#
+# nginx phân giải tên `api` đúng một lần lúc nạp cấu hình. Không nạp lại thì
+# những bản vừa thêm không nhận được request nào — đo thật với bốn bản cho
+# ra 7/7/6/0, nạp lại xong mới thành 5/5/5/5. Xem ghi chú trong
+# docker/nginx/conf.d/app.conf.
+#
+# CÁC BỘ SMOKE KHÔNG CHẠY ĐƯỢC Ở ĐÂY
+#
+# scripts/smoke-*.sh cần gọi THẬNG vào api qua localhost:8080 để đo giới hạn
+# tốc độ của ứng dụng thay vì của nginx — mà tệp này vừa gỡ đúng cổng đó đi.
+# Chúng cũng tự nạp .env nên không ghi đè API_PORT từ bên ngoài được.
+# Nghiệm thu chức năng thì chạy ở cấu hình một bản; còn ở đây kiểm đúng
+# thứ thuộc về nhiều bản: lưu lượng có chia đều không.
+#
 # LƯU Ý
 #
 # Giữ nguyên `container_name` là không được — Docker không đặt được cùng một
