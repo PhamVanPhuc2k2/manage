@@ -74,8 +74,15 @@ type ParticipantRepository interface {
 
 	ListForCall(ctx context.Context, callID uuid.UUID) ([]*Participant, error)
 
-	// CountInRoom đếm người đang trong phòng, để biết khi nào phòng rỗng.
-	CountInRoom(ctx context.Context, callID uuid.UUID) (int, error)
+	// RoomState đếm người ĐANG TRONG phòng và người CÒN ĐANG ĐỔ CHUÔNG.
+	//
+	// Hai con số chứ không một, vì câu hỏi "cuộc gọi này còn sống không"
+	// cần cả hai. Một người ngồi một mình trong phòng KHÔNG phải một cuộc
+	// gọi — trừ khi còn ai đó chưa bắt máy và có thể vào.
+	//
+	// pending đếm những người đã được mời nhưng chưa vào và cũng chưa từ
+	// chối (joined_at NULL, left_at NULL).
+	RoomState(ctx context.Context, callID uuid.UUID) (inRoom, pending int, err error)
 }
 
 // =========================================================================

@@ -200,18 +200,28 @@ func (u *Usecase) End(
 	return u.finish(ctx, c, next, reason, actor.EmployeeID)
 }
 
-// endIfDeserted kết thúc cuộc gọi khi không còn ai trong phòng.
+// endIfDeserted kết thúc cuộc gọi khi nó không còn là một cuộc gọi nữa.
+//
+// ĐIỀU KIỆN KHÔNG PHẢI "PHÒNG RỖNG"
+//
+// Một người ngồi một mình trong phòng không phải một cuộc gọi. Gọi 1-1 mà
+// đầu kia từ chối thì người gọi VẪN đang trong phòng — nếu chỉ hỏi "phòng
+// có rỗng không" thì cuộc gọi treo mãi ở 'ringing', và chỉ mục một phần
+// khiến hội thoại đó không gọi được nữa.
+//
+// Luật đúng: cuộc gọi còn sống khi có TỪ HAI người trong phòng, HOẶC còn
+// ít nhất một người trong phòng và một người chưa bắt máy (vẫn có thể vào).
 func (u *Usecase) endIfDeserted(
 	ctx context.Context,
 	c *domaincall.Call,
 	status domaincall.Status,
 	reason string,
 ) error {
-	n, err := u.participants.CountInRoom(ctx, c.ID)
+	inRoom, pending, err := u.participants.RoomState(ctx, c.ID)
 	if err != nil {
 		return apperror.Internal(err)
 	}
-	if n > 0 {
+	if inRoom >= 2 || (inRoom >= 1 && pending >= 1) {
 		return nil
 	}
 	return u.finish(ctx, c, status, reason, uuid.Nil)

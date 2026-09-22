@@ -89,7 +89,6 @@ const (
 // Riêng call.sdp và call.ice ở trên là chiều ngược lại (client → server) nên
 // hub phải nhận diện được chúng — giống heartbeat và ping.
 
-
 // HeartbeatPayload là nội dung bản tin nhịp tim.
 //
 // IsActive phân biệt "mở tab" với "đang làm việc": client tự đặt false khi
