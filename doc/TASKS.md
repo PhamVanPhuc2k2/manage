@@ -923,7 +923,9 @@ Lệnh chạy:
 > | Domain `internal/domain/call` | xong |
 > | Usecase `internal/usecase/call` | xong — **40 unit test, 81.2% coverage** |
 > | Repository PostgreSQL | xong — **14 integration test trên database thật** |
-> | Adapter LiveKit (SFU + TURN) | xong — **13 unit test, 94.1% coverage** |
+> | Adapter LiveKit (SFU + TURN) | xong — **20 unit test, 92.7% coverage** |
+> | Webhook từ SFU về backend | xong — chữ ký + sha256 thân bản tin |
+> | Dấu vết luồng media (`had_audio/video/screen`) | xong — hỏi SFU ngay trước khi đóng phòng |
 > | Container LiveKit trong compose | xong |
 > | Endpoint HTTP và route | xong — **34 phép smoke qua nginx** |
 > | Nối vào hub WebSocket | xong — **14 phép `cmd/callsignal`** |
@@ -935,8 +937,7 @@ Lệnh chạy:
 > | Mục | Vì sao chưa |
 > |---|---|
 > | HTTPS | `getUserMedia` chỉ chạy trong secure context. `localhost` được miễn nên dev chạy được, nhưng **thử qua IP LAN là hỏng ngay**. Phải kéo phần TLS của Phase 6 lên trước khi mở cho người dùng thật |
-> | Webhook từ SFU | Ba cờ `had_audio/had_video/had_screen` **chưa bao giờ được ghi**. Repository có sẵn `SetTracks` nhưng không ai gọi. Nguồn đúng là webhook của SFU, không phải lời khai của client — dữ liệu audit mà chính người bị audit tự khai thì vô nghĩa |
-> | Đo tỉ lệ relay qua TURN | Cột `relay_ratio` có trong bảng nhưng luôn NULL. Cũng chờ webhook |
+> | Đo tỉ lệ relay qua TURN | Cột `relay_ratio` có trong bảng nhưng luôn NULL. LiveKit không báo kiểu kết nối của từng người, qua webhook lẫn qua API danh sách người tham gia |
 > | TURN listener trên TCP/443 | Trong dev, đường dự phòng khi mạng chặn UDP là **RTC qua TCP cổng 7881** của LiveKit. Cổng 443 cần chứng chỉ thật, nên đi cùng khối HTTPS |
 > | Màn hình kiểm tra thiết bị trước khi vào | Quyền bị từ chối đã có báo rõ và mic/camera bật trong hai khối try riêng, nên thiếu màn hình này không làm hỏng cuộc gọi — chỉ làm người dùng biết muộn hơn một nhịp |
 > | Giới hạn số người mỗi phòng | Chưa đặt. Cần đặt trước khi mở cho toàn công ty — xem bảng ước lượng băng thông ở cuối mục |
@@ -1006,7 +1007,18 @@ Lệnh chạy:
 - [ ] Chỉ hiện người đang nói ở độ nét cao, phần còn lại hạ xuống 180p
 - [ ] Giới hạn số người mỗi phòng (đề xuất khởi điểm: 16) và số phòng chạy song song
 - [x] Phát hiện người đang nói (active speaker) để làm nổi khung trên giao diện
-- [ ] Webhook từ SFU về backend: người vào/rời phòng, phòng đóng → cập nhật `call_participants`
+- [x] Webhook từ SFU về backend
+> Xác thực HAI bước: chữ ký JWT phải ký được bằng bí mật của mình, VÀ sha256
+> của thân bản tin phải khớp claim trong chính token đó. Thiếu bước hai thì
+> chặn giữa đường một bản tin hợp lệ rồi đổi nội dung là ghi được bất cứ gì
+> vào dấu vết audit.
+>
+> Dùng cho `room_finished` làm **lưới đỡ**: nếu lời gọi đóng phòng thất bại và
+> LiveKit tự dọn phòng rỗng, cuộc gọi sẽ kẹt ở 'active' và chỉ mục một phần
+> chặn vĩnh viễn mọi cuộc gọi sau trong cùng hội thoại.
+>
+> CỐ Ý không dùng `participant_left`: khi đó có HAI đường cùng kết thúc một
+> cuộc gọi trên hai tiến trình khác nhau, không thứ tự.
 - [x] Dọn phòng rác: cuộc gọi tự kết thúc khi không còn là một cuộc gọi nữa
 > Điều kiện KHÔNG phải "phòng rỗng". Gọi 1-1 mà đầu kia từ chối thì người gọi
 > VẪN đang trong phòng — hỏi "phòng có rỗng không" sẽ để cuộc gọi treo mãi ở
@@ -1032,7 +1044,14 @@ Lệnh chạy:
 - [ ] Giới hạn bitrate riêng cho luồng màn hình: 1080p chữ tĩnh khoảng 0.5 Mbps nhưng chiếu video có thể vọt lên 3 Mbps
 - [ ] Mỗi lúc chỉ một người chiếu; người sau muốn chiếu phải được nhường hoặc thay thế
 - [x] Đồng bộ khi người dùng bấm "Dừng chia sẻ" của **trình duyệt** — trạng thái nút đọc từ PHÒNG chứ không từ state riêng, nên nó luôn nói đúng sự thật
-- [ ] Ghi nhận trong `call_participants` ai đã chiếu màn hình — **chưa làm, chờ webhook SFU** (xem bảng trạng thái)
+- [x] Ghi nhận trong `call_participants` ai đã chiếu màn hình (phục vụ audit)
+> **Không lấy từ webhook `track_published`** — đã bật webhook và đếm sự kiện
+> thật: LiveKit v1.13 chỉ phát room_started/finished và participant_joined/left,
+> và bản tin participant_left cũng không kèm danh sách track.
+>
+> Thay vào đó hỏi SFU MỘT lần, ngay TRƯỚC khi đóng phòng. Thứ tự là phần dễ
+> sai nhất: hỏi sau khi đóng thì không còn ai để kể, và ba cờ im lặng ở lại
+> false mãi mãi. Có unit test canh đúng thứ tự đó.
 - [ ] Nói rõ trên giao diện: chia sẻ **tab trình duyệt** mới kèm được âm thanh, chia sẻ **toàn màn hình** thì không — giới hạn của trình duyệt, đừng để người dùng tưởng lỗi
 
 ### Ghi hình (tuỳ chọn — chỉ làm khi có nhu cầu thật)
@@ -1092,7 +1111,7 @@ Kết luận thực dụng: **simulcast không phải là tối ưu hoá, nó l�
 |---|---|---|
 | `scripts/smoke-call.sh` | **34/34** | Vòng đời, phân quyền, token, lịch sử, tin nhắn hệ thống |
 | `cmd/callsignal` | **14/14** | Đường signaling qua WebSocket, kể cả chống mạo danh `from` |
-| `e2e/call.spec.ts` | **2/2** | Hai trình duyệt thật, mic và camera giả |
+| `e2e/call.spec.ts` | **2/2** | Hai trình duyệt thật, mic và camera giả; kèm khẳng định SFU **thực sự nhận được** luồng mic và camera |
 | Toàn bộ smoke | **320/320** | Bảy bộ, không hồi quy |
 | Toàn bộ Playwright | **10/10** | |
 | `callsignal` khi `--scale api=3` | **14/14** | Hai người nối vào HAI instance khác nhau — đã đối chiếu nhật ký: người gọi ở api-2, người nhận ở api-1. Bản tin phải đi vòng qua RabbitMQ mới tới nơi |

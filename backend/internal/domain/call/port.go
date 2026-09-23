@@ -124,6 +124,48 @@ type EmployeeLookup interface {
 // HẠ TẦNG MEDIA
 // =========================================================================
 
+// MediaEvent là một sự kiện do MÁY CHỦ MEDIA báo về.
+//
+// Khai báo ở tầng domain chứ không ở adapter, vì cả ba tầng đều chạm vào
+// nó: adapter dịch bản tin của SFU sang đây, usecase xử lý, delivery khai
+// một interface hẹp trả về kiểu này. Để ở adapter thì delivery phải import
+// repository — đúng chiều ngược với kiến trúc.
+type MediaEvent struct {
+	// Kind là loại sự kiện, đã chuẩn hoá khỏi cách đặt tên của SFU.
+	Kind MediaEventKind
+
+	// RoomName để tra ra cuộc gọi. SFU chỉ biết tên phòng.
+	RoomName string
+
+	// Identity là danh tính người tham gia, chính là id nhân viên —
+	// backend nhúng nó vào access token nên client không tự đặt được.
+	Identity string
+
+	// Track chỉ có nghĩa với MediaTrackPublished.
+	Track TrackKind
+}
+
+type MediaEventKind string
+
+const (
+	// MediaTrackPublished: có người bắt đầu phát một luồng media.
+	MediaTrackPublished MediaEventKind = "track_published"
+	// MediaRoomFinished: phòng đã đóng.
+	MediaRoomFinished MediaEventKind = "room_finished"
+	// MediaOther: sự kiện hệ thống không xử lý. Có hằng riêng để adapter
+	// không phải trả chuỗi rỗng và usecase không phải đoán.
+	MediaOther MediaEventKind = ""
+)
+
+type TrackKind string
+
+const (
+	TrackAudio  TrackKind = "audio"
+	TrackVideo  TrackKind = "video"
+	TrackScreen TrackKind = "screen"
+	TrackOther  TrackKind = ""
+)
+
 // ICEServer là một mục trong danh sách máy chủ ICE gửi cho trình duyệt.
 type ICEServer struct {
 	URLs       []string `json:"urls"`
@@ -157,6 +199,26 @@ type MediaServer interface {
 	// Gọi khi cuộc gọi kết thúc. Không gọi thì phòng rỗng vẫn chiếm tài
 	// nguyên trên SFU cho tới lúc nó tự dọn.
 	CloseRoom(ctx context.Context, roomName string) error
+
+	// RoomMedia hỏi SFU xem ai trong phòng đang phát những luồng nào.
+	//
+	// Phải hỏi TRƯỚC khi đóng phòng: sau đó không còn ai để hỏi.
+	//
+	// Đây là nguồn duy nhất đáng tin cho ba cờ had_audio/had_video/
+	// had_screen. Client báo được cả ba, nhưng dữ liệu audit mà chính
+	// người bị audit tự khai thì không có giá trị — SFU là bên duy nhất
+	// THẤY luồng media đi qua.
+	RoomMedia(ctx context.Context, roomName string) ([]ParticipantMedia, error)
+}
+
+// ParticipantMedia là những gì SFU thấy một người đang phát.
+type ParticipantMedia struct {
+	// Identity chính là id nhân viên — backend nhúng nó vào access token.
+	Identity string
+
+	HasAudio  bool
+	HasVideo  bool
+	HasScreen bool
 }
 
 // Signaler đẩy bản tin gọi tới người dùng qua WebSocket.

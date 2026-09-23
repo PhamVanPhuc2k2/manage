@@ -4,7 +4,9 @@ import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   apiLogin,
+  callDetail,
   createColleague,
+  liveCall,
   login,
   openDirectConversation,
   suffix,
@@ -74,9 +76,11 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
   // lượt về còn hai, đủ để cả bộ không chạm trần.
   let callerPage: Page;
   let calleePage: Page;
+  let adminToken: string;
 
   test.beforeAll(async ({ browser }) => {
-    const admin = await apiLogin(ADMIN_EMAIL, ADMIN_PASSWORD);
+    adminToken = await apiLogin(ADMIN_EMAIL, ADMIN_PASSWORD);
+    const admin = adminToken;
 
     // Tên phải DUY NHẤT theo từng lần chạy.
     //
@@ -136,6 +140,20 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
       await expect(calleePage.getByRole("button", { name })).toBeVisible();
     }
 
+    // --- Dấu vết luồng media ---
+    //
+    // Ba cờ had_* được ghi từ thứ SFU THẤY, đúng lúc kết thúc cuộc gọi.
+    //
+    // Phép thử này canh một lỗi đã xảy ra thật: trình duyệt "nối được"
+    // vào phòng nhưng không publish luồng nào, nên cuộc gọi không có
+    // tiếng lẫn hình. Giao diện trông bình thường hoàn toàn — chỉ SFU
+    // biết, và chỉ biết nếu có ai hỏi.
+    const live = await liveCall(adminToken, conversationId);
+    expect(live, "không tra được cuộc gọi đang diễn ra").not.toBeNull();
+
+    // Đợi trình duyệt publish xong mic và camera.
+    await callerPage.waitForTimeout(5_000);
+
     // --- Kết thúc cho tất cả ---
     //
     // Chỉ người khởi tạo thấy nút này. Người kia chỉ rời được — "tôi xong
@@ -156,6 +174,17 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
       calleePage.getByRole("button", { name: "Rời cuộc gọi" }),
     ).toHaveCount(0, { timeout: 20_000 });
 
+    const done = await callDetail(adminToken, live!.id);
+    expect(done.status).toBe("ended");
+
+    // Khẳng định số người TRƯỚC khi duyệt: danh sách rỗng thì vòng lặp
+    // bên dưới chạy không lần nào và phép thử xanh mà chẳng kiểm gì.
+    expect(done.participants).toHaveLength(2);
+
+    for (const p of done.participants ?? []) {
+      expect(p.had_audio, `${p.employee_id} không phát mic`).toBe(true);
+      expect(p.had_video, `${p.employee_id} không phát camera`).toBe(true);
+    }
   });
 
   test("từ chối cuộc gọi thì màn hình gọi đóng ở cả hai phía", async () => {

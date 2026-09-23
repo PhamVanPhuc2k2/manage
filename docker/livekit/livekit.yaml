@@ -47,6 +47,29 @@ turn:
 # một Redis riêng không dùng chung với ứng dụng, hoặc đẩy cả cấu hình qua
 # biến LIVEKIT_CONFIG_BODY.
 
+webhook:
+  # Gửi sự kiện về backend: ai bật mic, ai bật camera, ai chia sẻ màn hình.
+  #
+  # Đây là nguồn DUY NHẤT đáng tin cho ba cờ had_audio/had_video/had_screen.
+  # Client báo được cả ba, nhưng dữ liệu audit mà chính người bị audit tự
+  # khai thì không có giá trị. SFU là bên duy nhất THẤY luồng media đi qua.
+  #
+  # api_key phải trùng LIVEKIT_API_KEY trong .env — LiveKit dùng cặp khoá đó
+  # để ký bản tin, và backend kiểm chữ ký bằng bí mật tương ứng.
+  #
+  # Viết thẳng vào tệp này được vì **định danh khoá không phải bí mật**:
+  # nó nằm trong trường `iss` của MỌI access token gửi xuống trình duyệt.
+  # Thứ phải giữ kín là LIVEKIT_API_SECRET, và nó không có ở đây.
+  #
+  # Giữ cố định cũng tránh phải sinh tệp cấu hình lúc chạy chỉ để thay
+  # một chuỗi — thêm một bước là thêm một chỗ hỏng lúc triển khai.
+  api_key: manage
+  urls:
+    # Tên service trong mạng Docker, KHÔNG đi qua nginx: đây là lưu lượng
+    # nội bộ giữa hai container, và để nó vòng ra ngoài rồi quay lại chỉ
+    # thêm một chặng có thể hỏng.
+    - http://api:8080/webhooks/livekit
+
 room:
   # Giới hạn số người mỗi phòng.
   #

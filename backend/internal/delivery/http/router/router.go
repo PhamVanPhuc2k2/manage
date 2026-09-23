@@ -50,6 +50,7 @@ type Deps struct {
 	Notif      *handler.NotificationHandler
 	Chat       *handler.ChatHandler
 	Call       *handler.CallHandler
+	CallHook   *handler.CallWebhookHandler
 
 	// WS có thể nil trong test. Khi nil, route /ws đơn giản không tồn tại.
 	WS http.Handler
@@ -158,6 +159,16 @@ func New(d Deps) http.Handler {
 		}
 		httpx.JSON(w, status, httpx.Envelope{Data: checks})
 	})
+
+	// --- Webhook từ máy chủ media ---
+	//
+	// Nằm NGOÀI /api/v1 và ngoài mọi middleware xác thực: người gọi là
+	// LiveKit, không phải một người đăng nhập. Nó tự ký bản tin bằng
+	// chính cặp khoá API, và handler kiểm chữ ký đó trước khi làm gì.
+	//
+	// KHÔNG mở ra Internet: nginx chỉ để lọt /api/ và /ws, còn đường này
+	// chỉ đi được từ bên trong mạng Docker.
+	r.Post("/webhooks/livekit", d.CallHook.Receive)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/ping", systemHandler.Ping)

@@ -258,9 +258,18 @@ func (u *Usecase) finish(
 	c.EndedAt = &now
 	c.EndReason = reason
 
-	// Đóng phòng SFU. Lỗi ở đây không chặn: cuộc gọi đã kết thúc về mặt
-	// nghiệp vụ, và LiveKit tự dọn phòng rỗng sau một lúc.
+	// Hỏi SFU ai đã phát những luồng nào, RỒI MỚI đóng phòng.
+	//
+	// Thứ tự quan trọng: sau khi đóng phòng thì không còn ai để hỏi, và
+	// ba cờ had_audio/had_video/had_screen mất luôn nguồn dữ liệu đáng tin
+	// duy nhất.
+	//
+	// Cả hai lời gọi đều KHÔNG chặn việc kết thúc: cuộc gọi đã xong về mặt
+	// nghiệp vụ, và mất một dòng dấu vết audit không đáng để giữ cuộc gọi
+	// ở trạng thái dở dang.
 	if u.media != nil {
+		u.recordMedia(ctx, c)
+
 		if err := u.media.CloseRoom(ctx, c.RoomName); err != nil {
 			log.Warn().Err(err).Str("room", c.RoomName).
 				Msg("không đóng được phòng trên SFU")
@@ -438,4 +447,35 @@ func (u *Usecase) announceParticipant(
 		Name:       name,
 		Joined:     joined,
 	})
+}
+
+// recordMedia ghi lại ai đã phát mic, camera hay màn hình trong cuộc gọi.
+//
+// Gọi ngay TRƯỚC khi đóng phòng, xem chú thích ở finish.
+//
+// Nuốt mọi lỗi và chỉ ghi log: đây là dấu vết phục vụ audit, không phải
+// điều kiện để cuộc gọi kết thúc đúng.
+func (u *Usecase) recordMedia(ctx context.Context, c *domaincall.Call) {
+	log := logger.FromContext(ctx)
+
+	media, err := u.media.RoomMedia(ctx, c.RoomName)
+	if err != nil {
+		log.Warn().Err(err).Str("room", c.RoomName).
+			Msg("không đọc được danh sách luồng media")
+		return
+	}
+
+	for _, m := range media {
+		employeeID, err := uuid.Parse(m.Identity)
+		if err != nil {
+			// Danh tính không phải id nhân viên: phòng của ứng dụng khác
+			// dùng chung máy chủ, hoặc một client tự nối vào bằng token
+			// do ai đó cấp ngoài hệ thống này.
+			continue
+		}
+		if err := u.participants.SetTracks(ctx, c.ID, employeeID,
+			m.HasAudio, m.HasVideo, m.HasScreen); err != nil {
+			log.Warn().Err(err).Msg("không ghi được dấu vết luồng media")
+		}
+	}
 }

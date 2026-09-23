@@ -41,44 +41,64 @@ export type Tile = {
  * người dùng thấy một ô đen của người đã rời phòng từ mười phút trước.
  */
 export function useLiveKitRoom(join: CallJoin, kind: CallKind) {
-  const [phase, setPhase] = useState<RoomPhase>("idle");
+  const [phase, setPhase] = useState<RoomPhase>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [version, bump] = useReducer((x: number) => x + 1, 0);
 
-  // Room dựng bằng hàm khởi tạo lười, KHÔNG phải trong effect.
+  // Room dựng MỚI trong mỗi lần chạy effect, và giữ trong ref.
   //
-  // Dựng trong effect thì phải setState để component thấy nó, và một
-  // setState đồng bộ trong effect kéo theo một lượt render thừa ngay sau
-  // lượt đầu. Hook này được gắn theo khoá là id cuộc gọi, nên "một lần cho
-  // mỗi lần gắn" đúng bằng "một lần cho mỗi cuộc gọi".
-  const [room] = useState(
-    () =>
-      new Room({
-        // adaptiveStream giảm độ nét của ô hình nhỏ trên màn hình. dynacast
-        // dừng hẳn việc gửi lớp độ nét cao mà không ai đang xem.
-        adaptiveStream: true,
-        dynacast: true,
-        videoCaptureDefaults: { resolution: VideoPresets.h720.resolution },
-        publishDefaults: {
-          // Simulcast là ĐIỀU KIỆN để chạy được, không phải tối ưu hoá.
-          //
-          // Không có nó, mỗi người gửi một luồng độ nét cao duy nhất và SFU
-          // phải chuyển nguyên luồng đó cho mọi người — kể cả người đang xem
-          // ô hình nhỏ bằng con tem. Băng thông phình theo bình phương số
-          // người trong phòng và mạng công ty nghẽn từ người thứ năm.
-          simulcast: true,
-        },
-      }),
-  );
+  // Bản trước dựng một lần bằng useState rồi dùng lại đối tượng đó cho cả
+  // hai lần chạy effect của React ở chế độ Strict (gắn → dọn → gắn lại).
+  // Nó chạy được, nhưng SAI theo kiểu rất khó thấy: lần dọn gọi disconnect,
+  // và đối tượng Room đã disconnect thì không publish được nữa. Triệu
+  // chứng là cuộc gọi "kết nối thành công" mà không ai nghe hay thấy gì —
+  // SFU báo is_publisher: false và tracks rỗng.
+  //
+  // Một đối tượng dùng một lần, giống như một kết nối mạng.
+  //
+  // Phải giữ trong STATE chứ không trong ref: React 19 cấm đọc ref lúc
+  // render, và hoàn toàn đúng — ref không làm component vẽ lại, nên lưới
+  // hình sẽ trống cho tới khi có một sự kiện khác tình cờ kích hoạt render.
+  const [room, setRoom] = useState<Room | null>(null);
 
   const callId = join.call.id;
   const mediaURL = join.media_url;
   const token = join.token;
 
   useEffect(() => {
-    const r = room;
+    const r = new Room({
+      // adaptiveStream giảm độ nét của ô hình nhỏ trên màn hình. dynacast
+      // dừng hẳn việc gửi lớp độ nét cao mà không ai đang xem.
+      adaptiveStream: true,
+      dynacast: true,
+      videoCaptureDefaults: { resolution: VideoPresets.h720.resolution },
+      publishDefaults: {
+        // Simulcast là ĐIỀU KIỆN để chạy được, không phải tối ưu hoá.
+        //
+        // Không có nó, mỗi người gửi một luồng độ nét cao duy nhất và SFU
+        // phải chuyển nguyên luồng đó cho mọi người — kể cả người đang xem
+        // ô hình nhỏ bằng con tem. Băng thông phình theo bình phương số
+        // người trong phòng và mạng công ty nghẽn từ người thứ năm.
+        simulcast: true,
+      },
+    });
+    // setState ĐỒNG BỘ trong effect, có chủ ý.
+    //
+    // Vòng đời của Room gắn với vòng đời của effect: dựng khi vào, ngắt
+    // khi ra. Không có cách nào khác diễn đạt điều đó — dựng bằng hàm khởi
+    // tạo lười của useState thì đối tượng sống lâu hơn effect, và ở chế độ
+    // Strict nó bị chính lần dọn đầu tiên ngắt kết nối rồi dùng lại ở lần
+    // gắn thứ hai. Đúng lỗi đã xảy ra: cuộc gọi nối được nhưng không
+    // publish luồng nào.
+    //
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- xem chú thích trên
+    setRoom(r);
 
     // Mọi sự kiện đổi cái nhìn về phòng đều chỉ tăng bộ đếm.
+    //
+    // Đây cũng là thứ khiến lần render đầu tiên sau khi nối được xảy ra:
+    // ConnectionStateChanged bắn ngay khi bắt đầu nối, nên component thấy
+    // được roomRef mà không cần setState đồng bộ trong thân effect.
     const events: RoomEvent[] = [
       RoomEvent.ParticipantConnected,
       RoomEvent.ParticipantDisconnected,
@@ -99,8 +119,6 @@ export function useLiveKitRoom(join: CallJoin, kind: CallKind) {
     let cancelled = false;
 
     const connect = async () => {
-      setPhase("connecting");
-      setError(null);
       try {
         await r.connect(mediaURL, token);
         if (cancelled) return;
@@ -143,13 +161,14 @@ export function useLiveKitRoom(join: CallJoin, kind: CallKind) {
       // vẫn sáng sau khi cúp máy — và đó là thứ người dùng báo lên như
       // một sự cố bảo mật, rất đúng.
       void r.disconnect();
+      setRoom((cur) => (cur === r ? null : cur));
     };
     // kind chỉ đọc một lần lúc vào phòng; đổi nó giữa cuộc gọi không có
     // nghĩa gì, nên nó không nằm trong danh sách phụ thuộc.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callId, room, mediaURL, token]);
+  }, [callId, mediaURL, token]);
 
-  const tiles = collectTiles(room);
+  const tiles = room ? collectTiles(room) : [];
 
   return {
     room,
@@ -158,7 +177,7 @@ export function useLiveKitRoom(join: CallJoin, kind: CallKind) {
     tiles,
     /** Dùng để buộc component con tính lại khi phòng đổi. */
     version,
-    connectionState: room.state,
+    connectionState: room?.state,
   };
 }
 

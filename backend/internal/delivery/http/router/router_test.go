@@ -12,6 +12,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +25,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/handler"
 	domainauth "github.com/PhamVanPhuc2k2/manage/internal/domain/auth"
+	domaincall "github.com/PhamVanPhuc2k2/manage/internal/domain/call"
 	"github.com/PhamVanPhuc2k2/manage/pkg/config"
 	"github.com/PhamVanPhuc2k2/manage/pkg/jwt"
 )
@@ -84,6 +87,23 @@ var infraRoutes = map[string]struct{}{
 	// nó KHÔNG phải xác thực ở tầng ứng dụng mà là nginx — chỉ mạng nội bộ
 	// Docker gọi tới được, xem docker/nginx/conf.d/app.conf.
 	"GET /metrics": {},
+
+	// Webhook của máy chủ media. Người gọi là LiveKit, không phải một
+	// người đăng nhập, nên nó không có token của ai cả. Thứ bảo vệ nó là
+	// chữ ký LiveKit đặt trên chính bản tin, kèm sha256 của thân bản tin —
+	// xem repository/media/webhook.go. Cộng thêm nginx không để đường này
+	// lọt ra Internet.
+	"POST /webhooks/livekit": {},
+}
+
+// fakeMediaWebhook luôn từ chối.
+//
+// Đủ cho bộ rà soát route: nó gọi thử từng endpoint không kèm token, và
+// điều cần khẳng định là một lời gọi không chữ ký bị từ chối.
+type fakeMediaWebhook struct{}
+
+func (fakeMediaWebhook) VerifyWebhook(*http.Request) (domaincall.MediaEvent, error) {
+	return domaincall.MediaEvent{}, errors.New("không có chữ ký")
 }
 
 // =========================================================================
@@ -154,6 +174,12 @@ func buildRouter(t *testing.T) (http.Handler, *jwt.Manager) {
 		// WS để nil: route /ws khi đó không tồn tại, nên bộ test không phải
 		// dựng cả hub chỉ để liệt kê route.
 		WS: nil,
+
+		// Webhook thì KHÔNG để nil: nó là endpoint duy nhất ngoài /api/v1
+		// nhận dữ liệu ghi, nên nó phải nằm trong tầm rà soát. Chỉ cần một
+		// bản kiểm chữ ký giả luôn từ chối — usecase không bao giờ được chạm
+		// tới, nên để nil ở đó cũng là một lời khẳng định.
+		CallHook: handler.NewCallWebhookHandler(nil, fakeMediaWebhook{}),
 	})
 	return h, jwtMgr
 }

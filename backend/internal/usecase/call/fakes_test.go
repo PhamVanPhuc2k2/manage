@@ -358,8 +358,21 @@ type fakeMedia struct {
 	tokens []string
 	closed []string
 
+	// media là thứ SFU "thấy" trong phòng, do từng phép thử đặt vào.
+	media []domaincall.ParticipantMedia
+	// askedBeforeClose ghi lại thứ tự: hỏi luồng media PHẢI trước khi
+	// đóng phòng, vì sau khi đóng thì không còn ai để hỏi.
+	askedBeforeClose bool
+
 	tokenErr error
 	closeErr error
+}
+
+func (f *fakeMedia) RoomMedia(
+	_ context.Context, _ string,
+) ([]domaincall.ParticipantMedia, error) {
+	f.askedBeforeClose = len(f.closed) == 0
+	return f.media, nil
 }
 
 func (f *fakeMedia) IssueToken(

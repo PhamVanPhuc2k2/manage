@@ -193,11 +193,32 @@ services:
   livekit:
     image: livekit/livekit-server:v1.13.7
     restart: unless-stopped
-    command: ["--config", "/etc/livekit.yaml"]
+
+    # Ghép bí mật vào tệp cấu hình LÚC KHỞI ĐỘNG, rồi mới chạy LiveKit.
+    #
+    # Bản trước truyền khoá bằng biến LIVEKIT_KEYS và nó chạy đúng — cho
+    # tới khi bật webhook. LiveKit kiểm `webhook.api_key` có nằm trong danh
+    # sách khoá của CHÍNH TỆP CẤU HÌNH hay không, không nhìn tới khoá đến từ
+    # biến môi trường, và từ chối khởi động với đúng một dòng:
+    # "api_key is required to use webhooks".
+    #
+    # Vì vậy bí mật phải vào cùng tệp — nhưng KHÔNG phải tệp trong kho mã.
+    # Chép sang /tmp rồi nối thêm dòng khoá: tệp được mount vẫn chỉ đọc và
+    # vẫn sạch bí mật.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        cp /etc/livekit.yaml /tmp/livekit.yaml
+        {
+          echo ""
+          echo "keys:"
+          echo "  $$LIVEKIT_API_KEY: $$LIVEKIT_API_SECRET"
+        } >> /tmp/livekit.yaml
+        exec /livekit-server --config /tmp/livekit.yaml
     environment:
-      # Khoá đi bằng biến môi trường chứ không nằm trong tệp cấu hình được
-      # mount, vì tệp đó nằm trong kho mã. Định dạng là YAML "khoá: bí mật".
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       TZ: Asia/Ho_Chi_Minh
     volumes:
       - ./docker/livekit/livekit.yaml:/etc/livekit.yaml:ro

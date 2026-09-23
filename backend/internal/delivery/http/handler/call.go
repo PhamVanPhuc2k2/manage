@@ -332,3 +332,71 @@ func (h *CallHandler) joinPayload(
 	}
 	return out
 }
+
+// =========================================================================
+// WEBHOOK TỪ MÁY CHỦ MEDIA
+// =========================================================================
+
+// MediaWebhook là phần adapter media mà tầng delivery cần: đúng một method.
+//
+// Khai báo ở ĐÂY, phía người dùng, nên tầng delivery không phải import
+// repository — đúng chiều của kiến trúc.
+type MediaWebhook interface {
+	VerifyWebhook(r *http.Request) (domaincall.MediaEvent, error)
+}
+
+// CallWebhookHandler nhận sự kiện do máy chủ media đẩy về.
+//
+// Tách khỏi CallHandler vì nó khác hẳn mọi endpoint còn lại: KHÔNG có
+// người dùng đăng nhập, KHÔNG đi qua middleware xác thực, và người gọi là
+// một máy chủ chứ không phải trình duyệt. Gộp chung sẽ khiến người đọc
+// tưởng nó cũng được middleware bảo vệ.
+type CallWebhookHandler struct {
+	uc     *uccall.Usecase
+	verify MediaWebhook
+}
+
+func NewCallWebhookHandler(uc *uccall.Usecase, verify MediaWebhook) *CallWebhookHandler {
+	return &CallWebhookHandler{uc: uc, verify: verify}
+}
+
+// Receive xác thực rồi xử lý một bản tin webhook.
+//
+// TRẢ 200 CHO GẦN NHƯ MỌI THỨ, và đó là chủ ý.
+//
+// LiveKit thử gửi lại khi nhận mã lỗi. Một bản tin mà hệ thống cố tình bỏ
+// qua — sự kiện không quan tâm, phòng của ứng dụng khác — mà trả lỗi thì
+// SFU sẽ gửi lại mãi, và hàng đợi webhook của nó dồn lên vì những bản tin
+// không bao giờ "thành công" được.
+//
+// Chỉ 401 là ngoại lệ: chữ ký sai nghĩa là bản tin không phải từ SFU của
+// mình, và người gửi nó xứng đáng nhận câu trả lời thẳng thắn.
+func (h *CallWebhookHandler) Receive(w http.ResponseWriter, r *http.Request) {
+	requestID := chimw.GetReqID(r.Context())
+
+	// Chưa cấu hình máy chủ media thì handler là nil, nhưng route vẫn tồn
+	// tại — đăng ký có điều kiện sẽ khiến bộ rà soát phân quyền không nhìn
+	// thấy endpoint này, và đây là endpoint duy nhất ngoài /api/v1 nhận
+	// dữ liệu ghi.
+	if h == nil || h.verify == nil {
+		Error(w, apperror.New(apperror.KindUnprocessable,
+			"Chức năng gọi chưa được cấu hình"), requestID)
+		return
+	}
+
+	ev, err := h.verify.VerifyWebhook(r)
+	if err != nil {
+		Error(w, apperror.New(apperror.KindUnauthorized,
+			"Webhook không hợp lệ"), requestID)
+		return
+	}
+
+	if err := h.uc.HandleMediaEvent(r.Context(), ev); err != nil {
+		// Lỗi THẬT (database hỏng) thì trả 500 để SFU gửi lại — lúc đó
+		// việc gửi lại là đúng, vì lần sau có thể thành công.
+		Error(w, err, requestID)
+		return
+	}
+
+	httpx.OK(w, map[string]any{"ok": true})
+}

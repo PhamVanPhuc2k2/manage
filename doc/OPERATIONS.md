@@ -296,10 +296,50 @@ Prometheus đã có sẵn job `livekit` (xem `docker/monitoring/prometheus/prome
 máy chủ tăng theo bình phương số người. Xem bảng ước lượng trong
 `doc/TASKS.md` trước khi nâng.
 
+### Webhook từ LiveKit
+
+LiveKit đẩy sự kiện về `http://api:8080/webhooks/livekit` — **tên service trong
+mạng Docker, không qua nginx**. Đường này không mở ra Internet.
+
+Xác thực bằng chính cặp khoá API, hai bước:
+
+1. Chữ ký JWT trong header `Authorization` phải ký được bằng `LIVEKIT_API_SECRET`.
+2. sha256 của **thân bản tin** phải khớp claim trong chính token đó.
+
+Thiếu bước hai thì chặn giữa đường một bản tin hợp lệ rồi đổi nội dung là ghi
+được bất cứ gì vào dấu vết audit của cuộc họp.
+
+> **`webhook.api_key` phải nằm cùng tệp cấu hình với `keys`.** LiveKit kiểm
+> điều đó lúc khởi động và **không nhìn tới khoá đến từ biến môi trường**;
+> thiếu thì nó từ chối chạy với đúng một dòng "api_key is required to use
+> webhooks". Vì vậy container ghép bí mật vào một bản sao trong `/tmp` lúc
+> khởi động — tệp trong kho mã vẫn sạch bí mật. Xem `docker-compose.yml`.
+
+### Dấu vết luồng media
+
+Ba cờ `had_audio` / `had_video` / `had_screen` trong `call_participants` trả lời
+câu hỏi audit: *"trong cuộc họp đó người này có chiếu màn hình không"*.
+
+Chúng được ghi từ thứ **SFU thấy**, không phải từ lời khai của trình duyệt:
+backend hỏi `ListParticipants` đúng một lần, ngay trước khi đóng phòng.
+
+Không dùng webhook `track_published`: LiveKit v1.13 không phát sự kiện đó nữa
+— đã kiểm chứng bằng cách bật webhook và đếm sự kiện thật.
+
+**Nếu ba cờ này đều false sau một cuộc gọi bình thường**, đó không phải vấn đề
+của audit mà là dấu hiệu trình duyệt **không publish được luồng nào** — cuộc
+gọi "nối được" nhưng không có tiếng lẫn hình. Kiểm nhanh:
+
+```bash
+docker compose exec postgres psql -U manage -d manage -c \
+  "SELECT had_audio, had_video, had_screen FROM call_participants
+   ORDER BY created_at DESC LIMIT 4;"
+```
+
 ### Chưa làm
 
-- **Webhook từ LiveKit về backend.** Ba cờ `had_audio/had_video/had_screen` và
-  cột `relay_ratio` trong `call_participants` hiện không bao giờ được ghi.
+- **Tỉ lệ relay qua TURN** (`relay_ratio`). LiveKit không báo kiểu kết nối của
+  từng người, qua webhook lẫn qua API danh sách người tham gia.
 - **TURN trên TCP cổng 443.** Đường dự phòng hiện tại là RTC qua TCP 7881.
   Cổng 443 cần chứng chỉ thật nên đi cùng khối HTTPS.
 - **Nhiều instance LiveKit.** Cấu hình hiện tại không dùng Redis (lý do ghi

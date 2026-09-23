@@ -11,6 +11,7 @@ package call
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -314,5 +315,28 @@ func (p *Participant) InRoom() bool {
 // Có tiền tố để phân biệt với mọi thứ khác có thể dùng chung một máy chủ
 // LiveKit, và để đọc log thấy ngay đây là phòng của hệ thống nào.
 func RoomNameFor(callID uuid.UUID) string {
-	return "manage-call-" + callID.String()
+	return roomPrefix + callID.String()
 }
+
+// CallIDFromRoom làm ngược lại RoomNameFor.
+//
+// Webhook của SFU chỉ biết TÊN phòng, không biết id cuộc gọi. Để cạnh
+// RoomNameFor chứ không ở tstoreng adapter: hai hàm này phải luôn khớp nhau,
+// và cách chắc nhất là để ai sửa cái này cũng nhìn thấy cái kia.
+//
+// Trả false cho mọi tên không phải của hệ thống: một máy chủ LiveKit có
+// thể phục vụ nhiều ứng dụng, và webhook của ứng dụng khác không được
+// làm hỏng gì ở đây.
+func CallIDFromRoom(room string) (uuid.UUID, bool) {
+	rest, ok := strings.CutPrefix(room, roomPrefix)
+	if !ok {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(rest)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+const roomPrefix = "manage-call-"

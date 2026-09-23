@@ -30,6 +30,12 @@ var specInfraPaths = map[string]struct{}{
 	"GET /health":  {},
 	"GET /ready":   {},
 	"GET /metrics": {},
+
+	// Webhook của máy chủ media: người gọi là LiveKit chứ không phải client
+	// nghiệp vụ nào, và hình dạng bản tin do LiveKit định đoạt. Mô tả nó
+	// trong đặc tả API của hệ thống sẽ là chép lại tài liệu của người khác,
+	// rồi để nó cũ đi.
+	"POST /webhooks/livekit": {},
 }
 
 type openAPISpec struct {

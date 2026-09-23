@@ -345,7 +345,10 @@ func run() error {
 	// media có thể nil khi chưa cấu hình LiveKit. Usecase kiểm nil và trả
 	// 422 kèm câu tiếng Việt, thay vì để cả hệ thống không khởi động được
 	// chỉ vì chưa dựng máy chủ media.
-	var media domaincall.MediaServer
+	var (
+		media    domaincall.MediaServer
+		callHook *repomedia.LiveKit
+	)
 	mediaCfg := repomedia.Config{
 		APIKey:     cfg.LiveKitAPIKey,
 		APISecret:  cfg.LiveKitAPISecret,
@@ -355,7 +358,12 @@ func run() error {
 		TURNSecret: cfg.TURNSecret,
 	}
 	if mediaCfg.Enabled() {
-		media = repomedia.New(mediaCfg)
+		lk := repomedia.New(mediaCfg)
+		media = lk
+		// Cùng một đối tượng đóng hai vai: cổng MediaServer cho usecase, và
+		// bộ kiểm chữ ký webhook cho delivery. Chúng dùng CHUNG cặp khoá,
+		// nên tách ra hai đối tượng chỉ tạo thêm một chỗ để cấu hình lệch.
+		callHook = lk
 		log.Info().Str("url", cfg.LiveKitURL).Msg("máy chủ media đã cấu hình")
 	} else {
 		log.Warn().Msg("chưa cấu hình LIVEKIT_API_KEY — chức năng gọi sẽ tắt")
@@ -409,6 +417,7 @@ func run() error {
 			Notif:      handler.NewNotificationHandler(notifUC),
 			Chat:       handler.NewChatHandler(chatUC),
 			Call:       handler.NewCallHandler(callUC, cfg.LiveKitPublicURL),
+			CallHook:   newCallWebhookHandler(callUC, callHook),
 			WS: deliveryws.NewHandler(
 				hub, jwtMgr, sessionStore, cfg.CORSAllowedOrigins),
 		}),
@@ -452,4 +461,20 @@ func run() error {
 		log.Info().Msg("api đã dừng")
 		return nil
 	}
+}
+
+// newCallWebhookHandler dựng handler webhook, hoặc nil khi chưa cấu hình
+// máy chủ media.
+//
+// Trả nil TƯỜNG MINH thay vì một handler luôn từ chối: route khi đó không
+// tồn tại, và một endpoint không tồn tại là câu trả lời đúng hơn cho người
+// dò tìm so với một endpoint luôn trả 401.
+func newCallWebhookHandler(
+	uc *uccall.Usecase,
+	lk *repomedia.LiveKit,
+) *handler.CallWebhookHandler {
+	if lk == nil {
+		return nil
+	}
+	return handler.NewCallWebhookHandler(uc, lk)
 }

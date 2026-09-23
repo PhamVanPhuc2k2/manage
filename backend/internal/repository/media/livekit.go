@@ -242,3 +242,95 @@ func (l *LiveKit) ICEServers(
 
 // Ràng buộc kiểu: adapter phải khớp cổng ở tầng domain.
 var _ domaincall.MediaServer = (*LiveKit)(nil)
+
+// RoomMedia hỏi SFU ai trong phòng đang phát những luồng nào.
+//
+// Vì sao KHÔNG dùng webhook `track_published`: LiveKit v1.13 không phát sự
+// kiện đó nữa — đã kiểm chứng bằng cách bật webhook và đếm sự kiện thật,
+// chỉ có room_started/finished và participant_joined/left, và bản tin
+// participant_left cũng không kèm danh sách track.
+//
+// Hỏi một lần đúng lúc cuộc gọi kết thúc rẻ hơn hẳn việc nhận một bản tin
+// cho mỗi lần ai đó bật/tắt camera, và trả lời đúng câu cần trả lời:
+// "trong cuộc họp đó người này có chiếu màn hình không".
+func (l *LiveKit) RoomMedia(
+	ctx context.Context,
+	roomName string,
+) ([]domaincall.ParticipantMedia, error) {
+	if !l.cfg.Enabled() {
+		return nil, nil
+	}
+
+	// Token quản trị cho ĐÚNG phòng này.
+	//
+	// RoomAdmin ở LiveKit là quyền thao tác bên trong một phòng đã biết
+	// tên, nên nó phải đi kèm Room — khác với RoomCreate dùng để xoá phòng.
+	at := auth.NewAccessToken(l.cfg.APIKey, l.cfg.APISecret)
+	at.SetVideoGrant(&auth.VideoGrant{RoomAdmin: true, Room: roomName}).
+		SetIdentity("manage-api").
+		SetValidFor(time.Minute)
+
+	token, err := at.ToJWT()
+	if err != nil {
+		return nil, fmt.Errorf("tạo token quản trị: %w", err)
+	}
+
+	body, err := json.Marshal(map[string]string{"room": roomName})
+	if err != nil {
+		return nil, err
+	}
+
+	url := strings.TrimRight(l.cfg.URL, "/") + "/twirp/livekit.RoomService/ListParticipants"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
+		bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	res, err := l.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gọi LiveKit: %w", err)
+	}
+	defer res.Body.Close()
+
+	// Phòng chưa từng được tạo (không ai vào) là chuyện bình thường, không
+	// phải lỗi — xem chú thích ở CloseRoom.
+	if res.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if res.StatusCode >= 300 {
+		msg, _ := io.ReadAll(io.LimitReader(res.Body, 512))
+		return nil, fmt.Errorf("LiveKit trả %d: %s", res.StatusCode, msg)
+	}
+
+	var payload struct {
+		Participants []struct {
+			Identity string `json:"identity"`
+			Tracks   []struct {
+				Source string `json:"source"`
+			} `json:"tracks"`
+		} `json:"participants"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("giải mã danh sách người tham gia: %w", err)
+	}
+
+	out := make([]domaincall.ParticipantMedia, 0, len(payload.Participants))
+	for _, p := range payload.Participants {
+		m := domaincall.ParticipantMedia{Identity: p.Identity}
+		for _, tr := range p.Tracks {
+			switch tr.Source {
+			case lkSourceMicrophone:
+				m.HasAudio = true
+			case lkSourceCamera:
+				m.HasVideo = true
+			case lkSourceScreenShare:
+				m.HasScreen = true
+			}
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}

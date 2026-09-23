@@ -303,3 +303,29 @@ export async function openDirectConversation(
   });
   return conv.id;
 }
+
+export type CallDetail = {
+  id: string;
+  status: string;
+  participants?: {
+    employee_id: string;
+    had_audio: boolean;
+    had_video: boolean;
+    had_screen: boolean;
+  }[];
+};
+
+/** Cuộc gọi đang diễn ra của một hội thoại, hoặc null. */
+export async function liveCall(
+  token: string,
+  conversationId: string,
+): Promise<CallDetail | null> {
+  return (await call<CallDetail | null>(`/calls/live/${conversationId}`, { token })) ?? null;
+}
+
+export async function callDetail(
+  token: string,
+  callId: string,
+): Promise<CallDetail> {
+  return call<CallDetail>(`/calls/${callId}`, { token });
+}
