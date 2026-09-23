@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { CallButtons } from "@/features/call/CallButtons";
 import { useAuth } from "@/lib/auth/useAuth";
 import { clockTime, dayKey, dayLabel } from "@/features/notifications/format";
 
@@ -121,6 +122,7 @@ export function MessagePane({ conversationId }: { conversationId: string }) {
             placeholder="Tìm trong hội thoại..."
             className="w-48 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
           />
+          <CallButtons conversationId={conversationId} />
           <button
             onClick={() => setShowPanel((v) => !v)}
             className="rounded border border-neutral-300 px-2.5 py-1 text-sm transition hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"

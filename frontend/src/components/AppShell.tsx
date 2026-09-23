@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { WorkStatusWidget } from "@/features/attendance/WorkStatusWidget";
+import { CallHost } from "@/features/call/CallHost";
 import { ChatBubble } from "@/features/chat/ChatBubble";
 import { useChatRealtime } from "@/features/chat/queries";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
@@ -115,6 +116,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {can("chat:read") && <ChatBubble />}
+      {/* Gắn ở đây chứ không trong trang chat: cuộc gọi phải sống qua việc
+          điều hướng, và cuộc gọi tới phải reo ở MỌI trang. */}
+      {can("call:read") && <CallHost />}
     </div>
   );
 }
