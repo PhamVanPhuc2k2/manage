@@ -70,3 +70,16 @@ func (p *Pusher) PushChat(
 ) {
 	p.publish(ctx, recipients, eventType, payload)
 }
+
+// PushCall hiện thực call.Signaler cho worker.
+//
+// Worker cần nó cho job dọn cuộc gọi quá hạn: người đang đổ chuông phải
+// thấy màn hình gọi tắt đi, chứ không ngồi nghe chuông mãi.
+func (p *Pusher) PushCall(
+	ctx context.Context,
+	recipients []uuid.UUID,
+	eventType string,
+	payload any,
+) {
+	p.publish(ctx, recipients, eventType, payload)
+}

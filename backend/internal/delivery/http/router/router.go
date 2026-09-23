@@ -49,6 +49,7 @@ type Deps struct {
 	Payroll    *handler.PayrollHandler
 	Notif      *handler.NotificationHandler
 	Chat       *handler.ChatHandler
+	Call       *handler.CallHandler
 
 	// WS có thể nil trong test. Khi nil, route /ws đơn giản không tồn tại.
 	WS http.Handler
@@ -570,6 +571,48 @@ func New(d Deps) http.Handler {
 					Put("/messages/{messageID}", d.Chat.EditMessage)
 				r.With(appmw.RequirePermission(domainauth.PermChatRead)).
 					Delete("/messages/{messageID}", d.Chat.DeleteMessage)
+			})
+
+			// --- Gọi thoại / video ---
+			//
+			// Signaling (SDP, ICE) KHÔNG đi qua đây mà đi qua WebSocket: một
+			// lượt đục NAT sinh hàng chục ICE candidate trong vài giây, và
+			// mỗi cái một request HTTP thì người dùng ngồi nhìn màn hình đen
+			// lâu hơn hẳn. REST chỉ lo vòng đời và quyền.
+			r.Route("/calls", func(r chi.Router) {
+				r.With(appmw.RequirePermission(domainauth.PermCallStart)).
+					Post("/", d.Call.Start)
+
+				// ice-servers đứng TRƯỚC {id} vì chi có thể khớp nó như một
+				// id. Đặt sau thì mọi lợt xin ICE sẽ thành "id không hợp lệ".
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Get("/ice-servers", d.Call.ICEServers)
+
+				// Lịch sử và cuộc gọi đang diễn ra tra theo hội thoại.
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Get("/live/{conversationID}", d.Call.Live)
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Get("/history/{conversationID}", d.Call.History)
+
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Get("/{id}", d.Call.Get)
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Post("/{id}/token", d.Call.Token)
+
+				// Bốn hành động dưới đây chỉ cần quyền ĐỌC.
+				//
+				// Người không được phép MỞ cuộc gọi vẫn phải bắt máy và
+				// cúp máy được — chặn ở đây là nhốt họ trong một cuộc
+				// gọi không thoát ra được. Quyền "kết thúc cho tất cả" do
+				// usecase kiểm theo người khởi tạo, không phải middleware.
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Post("/{id}/accept", d.Call.Accept)
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Post("/{id}/reject", d.Call.Reject)
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Post("/{id}/leave", d.Call.Leave)
+				r.With(appmw.RequirePermission(domainauth.PermCallRead)).
+					Post("/{id}/end", d.Call.End)
 			})
 
 			// --- Chức vụ ---

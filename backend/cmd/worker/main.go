@@ -22,12 +22,15 @@ import (
 
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/consumer"
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/scheduler"
+	domaincall "github.com/PhamVanPhuc2k2/manage/internal/domain/call"
 	domainproject "github.com/PhamVanPhuc2k2/manage/internal/domain/project"
 	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
+	repomedia "github.com/PhamVanPhuc2k2/manage/internal/repository/media"
 	repopg "github.com/PhamVanPhuc2k2/manage/internal/repository/postgres"
 	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
 	reporedis "github.com/PhamVanPhuc2k2/manage/internal/repository/redis"
 	ucatt "github.com/PhamVanPhuc2k2/manage/internal/usecase/attendance"
+	uccall "github.com/PhamVanPhuc2k2/manage/internal/usecase/call"
 	ucchat "github.com/PhamVanPhuc2k2/manage/internal/usecase/chat"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
 	ucnotif "github.com/PhamVanPhuc2k2/manage/internal/usecase/notification"
@@ -271,6 +274,33 @@ func run() error {
 		},
 	})
 
+	// Dọn cuộc gọi đổ chuông quá hạn.
+	//
+	// Chu kỳ 15 giây so với RingTimeout 45 giây: một cuộc gọi nhỡ được ghi
+	// nhận chậm nhất sau 60 giây. Thưa hơn thì người gọi nhìn màn hình
+	// "đang đổ chuông" lâu hơn hẳn thời gian thật sự chờ.
+	//
+	// Cần job này DÙ client tự tắt chuông theo hạn: client có thể đã đóng
+	// tab, và một cuộc gọi kẹt ở 'ringing' vĩnh viễn sẽ chặn MỌI cuộc gọi
+	// sau trong cùng hội thoại — chỉ mục một phần không cho hai cuộc cùng
+	// sống. Đó là kiểu hỏng người dùng mô tả là "tự dưng không gọi được
+	// cho anh A nữa" và không ai lần ra nguyên nhân.
+	//
+	// Chạy lại vô hại: câu UPDATE có điều kiện status = 'ringing', nên
+	// nhiều worker cùng chạy thì chỉ một cái đổi được mỗi dòng.
+	callUC := buildCallUsecase(db, mqClient, cfg, chatUC)
+	sched.Add(scheduler.Job{
+		Name:  "call.expire_ringing",
+		Every: 15 * time.Second,
+		Run: func(ctx context.Context) error {
+			n, err := callUC.ExpireRinging(ctx)
+			if err == nil && n > 0 {
+				log.Info().Int("count", n).Msg("đã dọn cuộc gọi đổ chuông quá hạn")
+			}
+			return err
+		},
+	})
+
 	// Đo độ sâu hàng đợi.
 	//
 	// Chu kỳ 30 giây: đủ dày để thấy hàng đợi đang dồn lên trước khi nó thành
@@ -392,6 +422,38 @@ func buildChatUsecase(
 		nil,
 		nil,
 		hrUC,
+	)
+}
+
+// buildCallUsecase lắp ráp module gọi cho worker.
+//
+// Worker chỉ dùng nó cho job dọn cuộc gọi quá hạn. Truyền chatUC làm
+// SystemMessenger để dòng "Cuộc gọi nhỡ" vẫn xuất hiện trong khung chat —
+// đó chính là thứ người nhận thấy khi mở máy lên.
+func buildCallUsecase(
+	db *postgres.DB,
+	mqClient *rabbitmq.Client,
+	cfg *config.Config,
+	chatUC *ucchat.Usecase,
+) *uccall.Usecase {
+	var media domaincall.MediaServer
+	mediaCfg := repomedia.Config{
+		APIKey:    cfg.LiveKitAPIKey,
+		APISecret: cfg.LiveKitAPISecret,
+		URL:       cfg.LiveKitURL,
+	}
+	if mediaCfg.Enabled() {
+		media = repomedia.New(mediaCfg)
+	}
+
+	return uccall.NewUsecase(
+		repopg.NewCallRepository(db),
+		repopg.NewCallParticipantRepository(db),
+		repopg.NewCallConversationLookup(db),
+		repopg.NewChatLookup(db),
+		chatUC,
+		media,
+		repomq.NewPusher(mqClient),
 	)
 }
 

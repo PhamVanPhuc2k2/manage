@@ -536,6 +536,32 @@ func (u *Usecase) announce(
 	u.broadcast(ctx, conversationID, domainchat.EventMessageNew, toMessageView(m))
 }
 
+// PostSystem ghi một tin nhắn hệ thống từ MODULE KHÁC vào hội thoại.
+//
+// Hiện có đúng một người dùng: module gọi, để lại dòng "Cuộc gọi video ·
+// 12 phút" sau mỗi cuộc gọi. Nó đi qua đây thay vì ghi thẳng vào bảng
+// messages để được phát realtime cùng một đường với mọi tin nhắn khác —
+// ghi thẳng thì dòng đó chỉ hiện ra khi người dùng tải lại trang.
+//
+// KHÁC announce ở chỗ có trả lỗi: bên gọi cần biết để ghi log, vì ở đây
+// không có thao tác chính nào đã thành công để mà giữ.
+func (u *Usecase) PostSystem(
+	ctx context.Context,
+	conversationID uuid.UUID,
+	content string,
+) error {
+	m := &domainchat.Message{
+		ConversationID: conversationID,
+		Kind:           domainchat.MessageSystem,
+		Content:        content,
+	}
+	if err := u.msgs.Create(ctx, m); err != nil {
+		return err
+	}
+	u.broadcast(ctx, conversationID, domainchat.EventMessageNew, toMessageView(m))
+	return nil
+}
+
 // PresignUpload cấp URL để client tải tệp thẳng lên R2.
 //
 // Tệp KHÔNG đi qua api: đẩy vài chục megabyte qua tiến trình Go chỉ để chuyển

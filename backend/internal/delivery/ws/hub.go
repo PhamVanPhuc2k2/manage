@@ -37,6 +37,9 @@ type Hub struct {
 	// chat có thể nil (test, hoặc bản chạy chưa bật chat). Khi nil, các bản
 	// tin chat gửi lên bị từ chối tử tế thay vì làm panic cả tiến trình.
 	chat ChatService
+
+	// call cũng có thể nil — khi chưa cấu hình máy chủ media.
+	call CallService
 }
 
 // SetChat cắm module chat vào hub.
@@ -45,6 +48,9 @@ type Hub struct {
 // lại bọc chính Hub này. Truyền qua hàm dựng sẽ tạo ra vòng tròn không gỡ
 // được ở composition root.
 func (h *Hub) SetChat(c ChatService) { h.chat = c }
+
+// SetCall cắm module gọi vào hub. Cùng lý do thứ tự khởi tạo như SetChat.
+func (h *Hub) SetCall(c CallService) { h.call = c }
 
 func NewHub(
 	log zerolog.Logger,
@@ -95,8 +101,25 @@ func (h *Hub) unregister(c *Client) {
 			delete(h.clients, c.employeeID)
 		}
 	}
+	// Ghi lại NGAY trong vùng khoá: ngoài vùng khoá, người đó có thể đã mở
+	// tab mới và câu trả lời sẽ khác.
+	gone := len(conns) == 0
 	total, people := h.countLocked()
 	h.mu.Unlock()
+
+	// Kết nối CUỐI CÙNG của người này vừa đóng: họ không còn nhận được
+	// signaling nữa, nên nếu đang trong cuộc gọi thì phải rời phòng.
+	//
+	// Không làm bước này thì một người đóng laptop giữa cuộc gọi sẽ để cuộc
+	// gọi treo mãi ở 'active', và chỉ mục một phần khiến hội thoại đó không
+	// bao giờ gọi lại được.
+	//
+	// Chạy trong goroutine với context nền: hàm này nằm trên đường đóng kết
+	// nối, và context của kết nối đã huỷ rồi. Chặn ở đây còn làm chậm việc
+	// giải phóng mọi kết nối khác đang đóng cùng lúc.
+	if gone && h.call != nil {
+		go h.call.HandleDisconnect(context.Background(), c.employeeID)
+	}
 
 	metrics.WSConnections.Set(float64(total))
 	metrics.WSOnlineEmployees.Set(float64(people))

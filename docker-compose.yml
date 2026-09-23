@@ -24,6 +24,13 @@ x-go-env: &go-env
   JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
   JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-168h}
   AUTH_OTP_ENABLED: ${AUTH_OTP_ENABLED:-true}
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+  LIVEKIT_URL: http://livekit:7880
+  LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}
+  STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302}
+  TURN_URLS: ${TURN_URLS:-}
+  TURN_SECRET: ${TURN_SECRET:-}
   TZ: Asia/Ho_Chi_Minh
 
 services:
@@ -175,6 +182,51 @@ services:
     # Đủ dài để xử lý nốt job đang cầm.
     stop_grace_period: 120s
     networks: [backend]
+
+  # =========================================================================
+  # MÁY CHỦ MEDIA — SFU cho gọi nhóm, kèm TURN cho đường dự phòng.
+  #
+  # Media KHÔNG đi qua nginx. nginx là proxy HTTP; đẩy âm thanh và hình
+  # ảnh thời gian thực qua nó là thêm một chặng buffer vào đường mà mọi
+  # mili giây đều nghe thấy. Trình duyệt nối thẳng vào các cổng dưới đây.
+  # =========================================================================
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      # Khoá đi bằng biến môi trường chứ không nằm trong tệp cấu hình được
+      # mount, vì tệp đó nằm trong kho mã. Định dạng là YAML "khoá: bí mật".
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - ./docker/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      # Signaling WebSocket — trình duyệt nối trực tiếp.
+      - "${LIVEKIT_PORT:-7880}:7880"
+      # RTC qua TCP, cho mạng chặn UDP.
+      - "${LIVEKIT_TCP_PORT:-7881}:7881"
+      # MỘT cổng UDP duy nhất cho toàn bộ media (UDP mux). Xem lý do
+      # trong docker/livekit/livekit.yaml — map dải rộng là treo máy.
+      - "${LIVEKIT_UDP_PORT:-7882}:7882/udp"
+      # TURN tích hợp.
+      - "${TURN_UDP_PORT:-3478}:3478/udp"
+    healthcheck:
+      # LiveKit trả "OK" ở gốc khi đã sẵn sàng nhận phiên.
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:7880/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # SFU ăn CPU theo số luồng phải chuyển tiếp, khác hẳn api vốn
+          # chỉ đợi I/O. Giới hạn để một cuộc họp đông người không
+          # làm chết cả máy chủ kéo theo toàn bộ hệ thống.
+          cpus: "2.0"
+          memory: 1g
+    networks: [backend, proxy]
 
   frontend:
     build:

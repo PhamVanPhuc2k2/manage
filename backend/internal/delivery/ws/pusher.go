@@ -72,3 +72,16 @@ func (p *Pusher) PushChatBadge(ctx context.Context, employeeID uuid.UUID, unread
 	p.publish(ctx, []uuid.UUID{employeeID}, domainrealtime.TypeChatBadge,
 		map[string]int{"unread": unread})
 }
+
+// PushCall hiện thực call.Signaler.
+//
+// Cùng khuôn với PushChat: loại sự kiện do module gọi quyết định, nên nó là
+// tham số chứ không phải hằng ở đây.
+func (p *Pusher) PushCall(
+	ctx context.Context,
+	recipients []uuid.UUID,
+	eventType string,
+	payload any,
+) {
+	p.publish(ctx, recipients, eventType, payload)
+}

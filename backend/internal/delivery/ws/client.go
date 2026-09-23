@@ -200,6 +200,13 @@ func (c *Client) handle(ctx context.Context, e domainrealtime.Envelope) {
 		return
 	}
 
+	// Signaling của cuộc gọi cũng là ngoại lệ có cân nhắc, và vì lý do gắt
+	// hơn chat: SDP và ICE candidate phải tới nơi trong vài trăm mili giây,
+	// nếu không cuộc gọi không kết nối được chứ không chỉ là chậm.
+	if c.handleCall(ctx, e) {
+		return
+	}
+
 	switch e.Type {
 	case domainrealtime.TypePing:
 		c.sendEnvelope(domainrealtime.TypePong, nil)

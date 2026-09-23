@@ -157,6 +157,7 @@ func TestPermissionCodesAreUnique(t *testing.T) {
 		PermSalaryRead, PermSalaryManage,
 		PermAuditRead,
 		PermChatRead, PermChatCreate,
+		PermCallStart, PermCallRead,
 	}
 
 	seen := make(map[string]int, len(all))

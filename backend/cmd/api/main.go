@@ -24,15 +24,18 @@ import (
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/handler"
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/http/router"
 	deliveryws "github.com/PhamVanPhuc2k2/manage/internal/delivery/ws"
+	domaincall "github.com/PhamVanPhuc2k2/manage/internal/domain/call"
 	domainchat "github.com/PhamVanPhuc2k2/manage/internal/domain/chat"
 	domainhr "github.com/PhamVanPhuc2k2/manage/internal/domain/hr"
 	domainproject "github.com/PhamVanPhuc2k2/manage/internal/domain/project"
+	repomedia "github.com/PhamVanPhuc2k2/manage/internal/repository/media"
 	repopg "github.com/PhamVanPhuc2k2/manage/internal/repository/postgres"
 	repomq "github.com/PhamVanPhuc2k2/manage/internal/repository/rabbitmq"
 	reporedis "github.com/PhamVanPhuc2k2/manage/internal/repository/redis"
 	reposto "github.com/PhamVanPhuc2k2/manage/internal/repository/storage"
 	ucatt "github.com/PhamVanPhuc2k2/manage/internal/usecase/attendance"
 	ucauth "github.com/PhamVanPhuc2k2/manage/internal/usecase/auth"
+	uccall "github.com/PhamVanPhuc2k2/manage/internal/usecase/call"
 	ucchat "github.com/PhamVanPhuc2k2/manage/internal/usecase/chat"
 	uchr "github.com/PhamVanPhuc2k2/manage/internal/usecase/hr"
 	ucnotif "github.com/PhamVanPhuc2k2/manage/internal/usecase/notification"
@@ -337,6 +340,44 @@ func run() error {
 	// lại bọc chính hub này. Truyền qua hàm dựng sẽ tạo vòng tròn không gỡ được.
 	hub.SetChat(chatUC)
 
+	// --- Gọi thoại / video ---
+	//
+	// media có thể nil khi chưa cấu hình LiveKit. Usecase kiểm nil và trả
+	// 422 kèm câu tiếng Việt, thay vì để cả hệ thống không khởi động được
+	// chỉ vì chưa dựng máy chủ media.
+	var media domaincall.MediaServer
+	mediaCfg := repomedia.Config{
+		APIKey:     cfg.LiveKitAPIKey,
+		APISecret:  cfg.LiveKitAPISecret,
+		URL:        cfg.LiveKitURL,
+		STUNURLs:   cfg.STUNURLs,
+		TURNURLs:   cfg.TURNURLs,
+		TURNSecret: cfg.TURNSecret,
+	}
+	if mediaCfg.Enabled() {
+		media = repomedia.New(mediaCfg)
+		log.Info().Str("url", cfg.LiveKitURL).Msg("máy chủ media đã cấu hình")
+	} else {
+		log.Warn().Msg("chưa cấu hình LIVEKIT_API_KEY — chức năng gọi sẽ tắt")
+	}
+
+	callUC := uccall.NewUsecase(
+		repopg.NewCallRepository(db),
+		repopg.NewCallParticipantRepository(db),
+		repopg.NewCallConversationLookup(db),
+		chatLookup,
+		// chatUC đáp ứng call.SystemMessenger nhờ method PostSystem. Đi qua
+		// usecase chat thay vì ghi thẳng bảng messages để dòng "Cuộc gọi
+		// video · 12 phút" được phát realtime cùng đường với tin nhắn khác.
+		chatUC,
+		media,
+		wsPusher,
+	)
+
+	// Hub cần usecase gọi để chuyển tiếp SDP/ICE và để dọn cuộc gọi khi
+	// kết nối cuối cùng của một người đóng.
+	hub.SetCall(callUC)
+
 	// --- Handler ---
 	// Cookie Secure chỉ bật khi chạy HTTPS. Bật ở môi trường dev HTTP sẽ
 	// khiến trình duyệt vứt cookie đi và refresh không bao giờ hoạt động.
@@ -367,6 +408,7 @@ func run() error {
 			Payroll:    handler.NewPayrollHandler(payrollUC),
 			Notif:      handler.NewNotificationHandler(notifUC),
 			Chat:       handler.NewChatHandler(chatUC),
+			Call:       handler.NewCallHandler(callUC, cfg.LiveKitPublicURL),
 			WS: deliveryws.NewHandler(
 				hub, jwtMgr, sessionStore, cfg.CORSAllowedOrigins),
 		}),

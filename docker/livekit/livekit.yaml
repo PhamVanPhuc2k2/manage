@@ -1,0 +1,52 @@
+# Cấu hình LiveKit — SFU cho gọi nhóm, kèm TURN cho đường dự phòng.
+#
+# Khoá API KHÔNG nằm trong tệp này: nó được gắn vào container qua biến môi
+# trường LIVEKIT_KEYS, đọc từ .env. Tệp này nằm trong kho mã, nên mọi thứ
+# ghi ở đây là công khai với cả công ty.
+
+port: 7880
+
+rtc:
+  # MỘT cổng UDP duy nhất cho toàn bộ media, không phải một dải.
+  #
+  # Docker sinh một tiến trình docker-proxy cho MỖI cổng được publish. Map
+  # dải 50000-60000 như hướng dẫn WebRTC thông thường sẽ sinh mười nghìn
+  # tiến trình: máy dev treo, máy chủ thì khởi động hàng phút. UDP mux gom
+  # tất cả về một cổng và tách luồng bằng thông tin trong gói tin.
+  udp_port: 7882
+
+  # Đường dự phòng khi mạng chặn UDP. Chậm hơn hẳn — TCP retransmit làm
+  # tiếng bị giật — nhưng vẫn hơn là không gọi được.
+  tcp_port: 7881
+
+  # Sau NAT (VPS, cloud), LiveKit phải quảng bá IP công khai chứ không phải
+  # IP nội bộ của container. Bật bằng biến môi trường ở production; để false
+  # trong dev vì mọi thứ đều là localhost và việc dò IP ngoài chỉ làm chậm
+  # lúc khởi động.
+  use_external_ip: false
+
+turn:
+  enabled: true
+  # Chỉ bật listener UDP trong dev. TLS cần chứng chỉ thật, nên ở production
+  # đặt thêm tls_port (nên là 443) và trỏ cert vào — cổng 443 là cổng duy
+  # nhất gần như mọi firewall công ty đều mở.
+  udp_port: 3478
+  domain: localhost
+  # LiveKit tự cấp credential TURN cho từng người qua đường signaling của
+  # nó, nên không cần bí mật chia sẻ ở đây. Đây là lý do backend KHÔNG tự
+  # sinh credential TURN cho đường SFU — xem chú thích ở GET /calls/ice-servers.
+  external_tls: false
+
+# KHÔNG cấu hình Redis ở đây dù LiveKit hỗ trợ.
+#
+# Redis của hệ thống có mật khẩu, mà tệp cấu hình này nằm trong kho mã và
+# LiveKit không thay biến môi trường trong tệp cấu hình. Viết mật
+# khẩu vào đây là đẩy nó lên git vĩnh viễn.
+#
+# Hệ quả: chỉ chạy ĐÚNG MỘT instance LiveKit. Muốn scale thì cấp cho nó
+# một Redis riêng không dùng chung với ứng dụng, hoặc đẩy cả cấu hình qua
+# biến LIVEKIT_CONFIG_BODY.
+
+logging:
+  level: info
+  json: false

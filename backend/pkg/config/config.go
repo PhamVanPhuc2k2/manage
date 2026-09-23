@@ -55,6 +55,25 @@ type Config struct {
 	R2SecretAccessKey string `mapstructure:"R2_SECRET_ACCESS_KEY"`
 	R2Bucket          string `mapstructure:"R2_BUCKET"`
 	R2PublicURL       string `mapstructure:"R2_PUBLIC_URL"`
+
+	// LiveKit — máy chủ media cho gọi thoại/video. Để trống thì chức năng
+	// gọi tắt, phần còn lại của hệ thống vẫn chạy bình thường.
+	//
+	// LiveKitURL là địa chỉ NỘI BỘ để backend gọi API quản trị, còn
+	// LiveKitPublicURL là địa chỉ WebSocket gửi xuống trình duyệt. Hai
+	// cái này khác nhau sau NAT, và lấy nhầm là trình duyệt gọi vào một
+	// tên máy chỉ tồn tại trong mạng Docker.
+	LiveKitAPIKey    string `mapstructure:"LIVEKIT_API_KEY"`
+	LiveKitAPISecret string `mapstructure:"LIVEKIT_API_SECRET"`
+	LiveKitURL       string `mapstructure:"LIVEKIT_URL"`
+	LiveKitPublicURL string `mapstructure:"LIVEKIT_PUBLIC_URL"`
+
+	// STUN chỉ giúp máy tự biết địa chỉ công khai của mình; TURN mới là thứ
+	// cứu được người sau NAT đối xứng và mạng chặn UDP. Thiếu TURN thì
+	// một số người kết nối được còn số khác thì không, tùy mạng họ ngồi.
+	STUNURLs   []string `mapstructure:"STUN_URLS"`
+	TURNURLs   []string `mapstructure:"TURN_URLS"`
+	TURNSecret string   `mapstructure:"TURN_SECRET"`
 }
 
 func (c Config) IsProduction() bool { return c.Env == "production" }
@@ -110,6 +129,18 @@ func Load(appName string) (*Config, error) {
 	setDefault("R2_SECRET_ACCESS_KEY", "")
 	setDefault("R2_BUCKET", "")
 	setDefault("R2_PUBLIC_URL", "")
+
+	setDefault("LIVEKIT_API_KEY", "")
+	setDefault("LIVEKIT_API_SECRET", "")
+	setDefault("LIVEKIT_URL", "http://livekit:7880")
+	setDefault("LIVEKIT_PUBLIC_URL", "ws://localhost:7880")
+
+	// Mặc định dùng STUN công cộng của Google cho môi trường dev.
+	// Ở production nên trỏ vào STUN của chính mình: mỗi lần gọi là một
+	// lần lộ địa chỉ IP nhân viên cho bên thứ ba.
+	setDefault("STUN_URLS", []string{"stun:stun.l.google.com:19302"})
+	setDefault("TURN_URLS", []string{})
+	setDefault("TURN_SECRET", "")
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {

@@ -170,6 +170,15 @@ const (
 	// chỉ tạo ra ảo giác rằng có thể cấp cho người khác.
 	PermChatRead   = "chat:read"
 	PermChatCreate = "chat:create"
+
+	// Gọi thoại/video đi theo đúng mô hình của chat: quyền chỉ trả lời
+	// "người này có được gọi không". "Được gọi trong hội thoại NÀO" do
+	// bảng conversation_members quyết định và usecase kiểm.
+	//
+	// Tách start khỏi read để có thể cho một nhóm xem được lịch sử cuộc gọi
+	// mà không tự mở được cuộc gọi mới.
+	PermCallStart = "call:start"
+	PermCallRead  = "call:read"
 )
 
 // Actor là danh tính của người đang thực hiện request.

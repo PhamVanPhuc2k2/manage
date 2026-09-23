@@ -106,6 +106,16 @@ tags:
     description: Kỳ lương, phiếu lương, cấu hình, báo cáo chi phí
   - name: Thông báo
   - name: Chat
+  - name: Gọi
+    description: |
+      Gọi thoại và gọi video. Các endpoint ở đây chỉ lo **vòng đời và quyền**.
+
+      Signaling (SDP, ICE candidate) đi qua WebSocket `/ws`, không qua REST:
+      một lượt đục NAT sinh hàng chục candidate trong vài giây, và mỗi cái
+      một request HTTP thì người dùng ngồi nhìn màn hình đen lâu hơn hẳn.
+
+      Media không đi qua API này và cũng không qua nginx — trình duyệt nối
+      thẳng tới SFU bằng `media_url` và `token` trả về ở đây.
   - name: Báo cáo
   - name: Hạ tầng
     description: Endpoint vận hành, không trả dữ liệu nghiệp vụ
@@ -250,6 +260,98 @@ components:
                   ok: { type: boolean }
 
   schemas:
+    Call:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        initiator_id: { type: string, format: uuid }
+        initiator_name: { type: string }
+        kind: { type: string, enum: [audio, video] }
+        status:
+          type: string
+          enum: [ringing, active, ended, missed, rejected, cancelled, failed]
+        room_name: { type: string }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        end_reason:
+          type: string
+          enum: [hangup, timeout, busy, rejected, network, empty]
+        duration_seconds:
+          type: integer
+          description: |
+            Tính sẵn ở máy chủ. Client tự trừ hai mốc thời gian sẽ ra số
+            khác khi đồng hồ máy nó lệch, mà lịch sử cuộc gọi là thứ người
+            dùng đem ra đối chiếu với nhau. Bằng 0 khi cuộc gọi còn đang diễn ra.
+        relay_ratio:
+          type: number
+          nullable: true
+          description: Tỉ lệ người phải relay qua TURN, từ 0 tới 1.
+        participants:
+          type: array
+          items: { $ref: "#/components/schemas/CallParticipant" }
+
+    CallParticipant:
+      type: object
+      properties:
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        avatar_key: { type: string }
+        joined_at: { type: string, format: date-time, nullable: true }
+        left_at: { type: string, format: date-time, nullable: true }
+        in_room: { type: boolean }
+        had_audio:
+          type: boolean
+          description: |
+            Ba cờ `had_*` ghi lại việc **đã từng bật**, không phải trạng thái
+            hiện tại. Tắt mic giữa cuộc họp không xóa dấu vết đã nói.
+        had_video: { type: boolean }
+        had_screen: { type: boolean }
+
+    CallJoin:
+      type: object
+      description: |
+        Mọi thứ client cần để vào phòng ngay, gói trong một lượt gọi.
+      properties:
+        call: { $ref: "#/components/schemas/Call" }
+        token:
+          type: string
+          description: |
+            Access token vào phòng SFU. Nhúng sẵn tên phòng và danh tính, nên
+            client không tự chọn được phòng. TTL ngắn — xin lại qua
+            `POST /calls/{id}/token`.
+        media_url:
+          type: string
+          description: |
+            Địa chỉ WebSocket của SFU mà **trình duyệt** dùng, không phải địa
+            chỉ backend dùng. Trong Docker hai cái này khác hẳn nhau.
+        ringing:
+          type: array
+          items: { type: string, format: uuid }
+          description: Những người thật sự đang đổ chuông.
+        busy:
+          type: array
+          items: { type: string, format: uuid }
+          description: |
+            Những người bị bỏ qua vì đang trong cuộc gọi khác. Họ không đổ
+            chuông — người gọi biết ngay thay vì chờ hết 45 giây.
+
+    ICEServer:
+      type: object
+      properties:
+        urls:
+          type: array
+          items: { type: string }
+        username:
+          type: string
+          description: |
+            Dạng `hạn:danh-tính`. Chỉ có với TURN; STUN không cần credential.
+        credential:
+          type: string
+          description: |
+            HMAC theo thời gian, sống rất ngắn. Không phải mật khẩu tĩnh — một
+            cặp tĩnh lộ ra là bị dùng chùa băng thông và không thu hồi được.
+
     # ------------------------------------------------------------ vỏ bọc
     ErrorEnvelope:
       type: object
@@ -3414,6 +3516,284 @@ paths:
   # Câu "được đọc hội thoại NÀO" do bảng conversation_members trả lời, và mọi
   # thao tác đều hỏi nó trước — không phải thành viên thì nhận 404.
   # =======================================================================
+  /calls:
+    post:
+      tags: [Gọi]
+      summary: Mở cuộc gọi trong một hội thoại
+      description: |
+        Mỗi hội thoại chỉ có **đúng một** cuộc gọi đang diễn ra. Gọi endpoint
+        này khi đã có cuộc gọi sẽ **tham gia cuộc đó**, không tạo cuộc thứ
+        hai — nếu không, hai người cùng bấm gọi trong một giây sẽ vào hai
+        phòng khác nhau và cả hai ngồi nhìn màn hình trống.
+
+        Người đang bận cuộc khác không đổ chuông; họ nằm trong `busy`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversation_id, kind]
+              properties:
+                conversation_id: { type: string, format: uuid }
+                kind: { type: string, enum: [audio, video] }
+      responses:
+        "201":
+          description: Đã mở, hoặc đã tham gia cuộc gọi đang diễn ra
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/CallJoin" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: Chưa cấu hình máy chủ media
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /calls/ice-servers:
+    get:
+      tags: [Gọi]
+      summary: Danh sách STUN/TURN cho đường P2P
+      description: |
+        Chỉ dùng cho đường **P2P của gọi 1-1**. Đường qua SFU không dùng danh
+        sách này: SFU tự cấp credential TURN của nó qua đường signaling riêng.
+
+        Bắt buộc đăng nhập: credential TURN cho phép relay băng thông thật qua
+        máy chủ, mở công khai là mời người lạ dùng chùa.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ice_servers:
+                        type: array
+                        items: { $ref: "#/components/schemas/ICEServer" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: Chưa cấu hình máy chủ media
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /calls/live/{conversationID}:
+    get:
+      tags: [Gọi]
+      summary: Cuộc gọi đang diễn ra của một hội thoại
+      description: |
+        Trả `data: null` khi hội thoại đang không có cuộc gọi — **không phải
+        404**. Giao diện gọi endpoint này mỗi lần mở hội thoại để biết có nên
+        hiện nút "Tham gia" hay không; một 404 ở đó sẽ nhuộm đỏ mọi bảng
+        giám sát lỗi.
+      parameters:
+        - name: conversationID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK — `data` có thể là null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    nullable: true
+                    allOf:
+                      - $ref: "#/components/schemas/Call"
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /calls/history/{conversationID}:
+    get:
+      tags: [Gọi]
+      summary: Lịch sử cuộc gọi của một hội thoại
+      parameters:
+        - name: conversationID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Mới nhất trước
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Call" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /calls/{id}:
+    get:
+      tags: [Gọi]
+      summary: Chi tiết một cuộc gọi
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Call" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /calls/{id}/token:
+    post:
+      tags: [Gọi]
+      summary: Cấp lại token vào phòng
+      description: |
+        Token vào phòng có TTL ngắn. Cuộc họp dài hơn TTL phải xin lại qua
+        đường này; không có nó thì người dùng bị rớt giữa buổi mà không
+        hiểu vì sao.
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token: { type: string }
+                      media_url: { type: string }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Cuộc gọi đã kết thúc
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /calls/{id}/accept:
+    post:
+      tags: [Gọi]
+      summary: Bắt máy
+      description: |
+        Trả kèm token vào phòng để không phải gọi thêm một lượt nữa.
+
+        Hệ thống cũng đẩy `call.cancelled` về chính người bắt máy để các
+        thiết bị khác của họ ngừng đổ chuông.
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/CallJoin" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Cuộc gọi đã kết thúc
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /calls/{id}/reject:
+    post:
+      tags: [Gọi]
+      summary: Từ chối cuộc gọi
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ok: { type: boolean }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /calls/{id}/leave:
+    post:
+      tags: [Gọi]
+      summary: Rời cuộc gọi
+      description: |
+        Chỉ mình rời, người khác vẫn nói tiếp. Cuộc gọi tự kết thúc khi nó
+        không còn là một cuộc gọi nữa — tức là phòng còn dưới hai người và
+        không ai đang đổ chuông.
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ok: { type: boolean }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /calls/{id}/end:
+    post:
+      tags: [Gọi]
+      summary: Kết thúc cuộc gọi cho tất cả
+      description: |
+        **Chỉ người khởi tạo** dùng được. Người khác chỉ `leave` — "tôi xong
+        rồi" và "cuộc họp này xong rồi" là hai việc khác nhau.
+
+        Chưa ai bắt máy mà người gọi cúp thì cuộc gọi là **cancelled**, không
+        phải ended — phân biệt này hiển thị thẳng trong khung chat.
+      parameters:
+        - $ref: "#/components/parameters/PathID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ok: { type: boolean }
+        "403":
+          description: Không phải người khởi tạo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /chat/conversations:
     get:
       tags: [Chat]
