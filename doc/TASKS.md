@@ -1094,7 +1094,8 @@ Kết luận thực dụng: **simulcast không phải là tối ưu hoá, nó l�
 | `cmd/callsignal` | **14/14** | Đường signaling qua WebSocket, kể cả chống mạo danh `from` |
 | `e2e/call.spec.ts` | **2/2** | Hai trình duyệt thật, mic và camera giả |
 | Toàn bộ smoke | **320/320** | Bảy bộ, không hồi quy |
-| Toàn bộ Playwright | **10/10**, chạy liền hai lần | |
+| Toàn bộ Playwright | **10/10** | |
+| `callsignal` khi `--scale api=3` | **14/14** | Hai người nối vào HAI instance khác nhau — đã đối chiếu nhật ký: người gọi ở api-2, người nhận ở api-1. Bản tin phải đi vòng qua RabbitMQ mới tới nơi |
 
 **Chưa làm — cần máy và mạng thật, không dựng được trên một máy:**
 
@@ -1103,9 +1104,8 @@ Kết luận thực dụng: **simulcast không phải là tối ưu hoá, nó l�
 - [ ] Trình chiếu màn hình giữa lúc đang gọi — chữ đọc được rõ
 - [ ] Gọi được từ **mạng công ty chặn UDP**
 - [ ] Đổi WiFi sang 4G giữa cuộc gọi — cuộc gọi không rớt
-- [ ] `docker compose up -d --scale api=3` — signaling vẫn đúng khi hai người nối vào hai instance khác nhau
 
-> Một phép thử chưa chạy không được tính là đã đạt. Sáu dòng trên vẫn để trống
+> Một phép thử chưa chạy không được tính là đã đạt. Năm dòng trên vẫn để trống
 > cho đến khi có người thật ngồi ở hai đầu mạng khác nhau và bấm gọi.
 
 ---
