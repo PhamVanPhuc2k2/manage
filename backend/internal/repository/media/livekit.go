@@ -118,11 +118,20 @@ func (l *LiveKit) IssueToken(
 // adminToken cấp token quản trị để gọi API của LiveKit.
 //
 // Sống rất ngắn và không rời khỏi tiến trình này. Tách khỏi token người
-// dùng vì nó mang quyền RoomAdmin: lọt xuống trình duyệt là ai cũng đóng
-// được phòng của người khác.
+// dùng vì nó mang quyền quản trị phòng: lọt xuống trình duyệt là ai cũng
+// đóng được phòng của người khác.
+//
+// Quyền phải là RoomCreate, KHÔNG phải RoomAdmin.
+//
+// Tên gọi đánh lừa: RoomAdmin ở LiveKit là quyền thao tác BÊN TRONG một
+// phòng đã biết tên (đuổi người, tắt mic của người khác), còn xoá cả
+// phòng thuộc nhóm thao tác vòng đời phòng và cần RoomCreate. Đặt nhầm
+// thì DeleteRoom trả 401 "permissions denied" — và vì lỗi đóng phòng chỉ
+// được ghi log chứ không làm hỏng việc kết thúc cuộc gọi, triệu chứng duy
+// nhất là phòng rỗng nằm lại trên SFU cho tới lúc nó tự dọn.
 func (l *LiveKit) adminToken() (string, error) {
 	at := auth.NewAccessToken(l.cfg.APIKey, l.cfg.APISecret)
-	at.SetVideoGrant(&auth.VideoGrant{RoomAdmin: true}).
+	at.SetVideoGrant(&auth.VideoGrant{RoomCreate: true, RoomList: true}).
 		SetIdentity("manage-api").
 		SetValidFor(time.Minute)
 	return at.ToJWT()
@@ -166,6 +175,17 @@ func (l *LiveKit) CloseRoom(ctx context.Context, roomName string) error {
 		return fmt.Errorf("gọi LiveKit: %w", err)
 	}
 	defer res.Body.Close()
+
+	// 404 nghĩa là phòng không tồn tại — và đó chính là kết quả mong muốn.
+	//
+	// Xảy ra thường xuyên chứ không hiếm: LiveKit chỉ tạo phòng khi có
+	// người thật sự vào. Cuộc gọi bị từ chối hoặc hết giờ đổ chuông thì
+	// chưa ai vào cả, nên không có phòng nào để xoá. Coi đó là lỗi sẽ sinh
+	// một dòng cảnh báo cho MỖI cuộc gọi nhỡ, và nhật ký đầy cảnh báo vô
+	// hại là cách nhanh nhất để không ai đọc nhật ký nữa.
+	if res.StatusCode == http.StatusNotFound {
+		return nil
+	}
 
 	if res.StatusCode >= 300 {
 		msg, _ := io.ReadAll(io.LimitReader(res.Body, 512))

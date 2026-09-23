@@ -310,11 +310,17 @@ func TestCloseRoomGoiDungAPIVaMangQuyenQuanTri(t *testing.T) {
 		t.Errorf("thân = %v", than)
 	}
 
-	// Token quản trị KHÔNG được kèm quyền vào phòng: nó chỉ để gọi API.
+	// Quyền phải là RoomCreate. RoomAdmin nghe có vẻ đúng hơn nhưng ở
+	// LiveKit nó là quyền thao tác BÊN TRONG một phòng đã biết tên; xoá
+	// cả phòng cần RoomCreate. Đặt nhầm thì DeleteRoom trả 401, và vì lỗi
+	// đó chỉ được ghi log nên triệu chứng duy nhất là phòng rỗng nằm lại
+	// trên SFU — đã xảy ra thật một lần.
 	g := grantsOf(t, token)
-	if !g.Video.RoomAdmin {
-		t.Error("thiếu quyền RoomAdmin")
+	if !g.Video.RoomCreate {
+		t.Error("thiếu quyền RoomCreate — DeleteRoom sẽ trả 401")
 	}
+
+	// Token quản trị KHÔNG được kèm quyền vào phòng: nó chỉ để gọi API.
 	if g.Video.RoomJoin {
 		t.Error("token quản trị không được mang cả quyền vào phòng")
 	}
@@ -337,6 +343,24 @@ func TestCloseRoomBaoLoiKemThanPhanHoi(t *testing.T) {
 	if !strings.Contains(err.Error(), "401") ||
 		!strings.Contains(err.Error(), "invalid API key") {
 		t.Errorf("lỗi = %q, thiếu mã hoặc thân phản hồi", err)
+	}
+}
+
+// Phòng không tồn tại KHÔNG phải lỗi: LiveKit chỉ tạo phòng khi có người
+// thật sự vào, nên mọi cuộc gọi bị từ chối hay hết giờ đổ chuông đều rơi
+// vào nhánh này. Coi là lỗi thì nhật ký đầy cảnh báo vô hại, và nhật ký
+// đầy cảnh báo vô hại là cách nhanh nhất để không ai đọc nhật ký nữa.
+func TestCloseRoomPhongKhongTonTaiThiKhongLoi(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"code":"not_found","msg":"requested room does not exist"}`))
+	}))
+	defer srv.Close()
+
+	c := cfg()
+	c.URL = srv.URL
+	if err := media.New(c).CloseRoom(context.Background(), "r1"); err != nil {
+		t.Errorf("muốn nil, nhận %v", err)
 	}
 }
 
