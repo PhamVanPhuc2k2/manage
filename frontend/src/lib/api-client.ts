@@ -139,13 +139,31 @@ async function request<T>(
   }
 
   const raw = await res.text();
-  const parsed: Envelope<T> = raw ? JSON.parse(raw) : {};
+
+  // KHÔNG mọi phản hồi đều là JSON của chính ứng dụng.
+  //
+  // nginx tự sinh trang lỗi HTML cho 429 (vượt giới hạn tốc độ), 502 và
+  // 504 (api chưa sẵn sàng hoặc quá hạn), 413 (tệp quá lớn). Trước đây
+  // JSON.parse ném SyntaxError ở đây, lỗi đó KHÔNG phải ApiError, nên màn
+  // hình đăng nhập báo "Không kết nối được máy chủ" — sai hẳn, và nó đẩy
+  // người dùng đi kiểm tra đường mạng trong khi việc cần làm là chờ một lát.
+  let parsed: Envelope<T> = {};
+  if (raw) {
+    try {
+      parsed = JSON.parse(raw) as Envelope<T>;
+    } catch {
+      if (res.ok) {
+        throw new ApiError(res.status, "BAD_RESPONSE",
+          "Máy chủ trả về dữ liệu không đọc được");
+      }
+    }
+  }
 
   if (!res.ok) {
     throw new ApiError(
       res.status,
-      parsed.error?.code ?? "UNKNOWN",
-      parsed.error?.message ?? "Đã có lỗi xảy ra",
+      parsed.error?.code ?? gatewayCode(res.status),
+      parsed.error?.message ?? gatewayMessage(res.status),
       parsed.error?.details,
       parsed.error?.request_id,
     );
@@ -172,3 +190,41 @@ export const api = {
   delete: <T>(path: string, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "DELETE" }),
 };
+
+/* ------------------------------------------------------------------ *
+ * Lỗi do NGINX sinh ra, không phải do api
+ *
+ * Những phản hồi này không có vỏ bọc JSON của hệ thống, nên phải tự
+ * dựng câu tiếng Việt ở đây. Câu phải nói đúng VIỆC CẦN LÀM: "chờ một
+ * lát" và "báo kỹ thuật" là hai hướng xử lý khác hẳn nhau.
+ * ------------------------------------------------------------------ */
+
+function gatewayCode(status: number): string {
+  switch (status) {
+    case 429:
+      return "TOO_MANY_REQUESTS";
+    case 413:
+      return "PAYLOAD_TOO_LARGE";
+    case 502:
+    case 503:
+    case 504:
+      return "SERVICE_UNAVAILABLE";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+function gatewayMessage(status: number): string {
+  switch (status) {
+    case 429:
+      return "Bạn thao tác quá nhanh. Chờ khoảng một phút rồi thử lại.";
+    case 413:
+      return "Tệp hoặc dữ liệu gửi lên quá lớn.";
+    case 502:
+    case 503:
+    case 504:
+      return "Máy chủ đang bận hoặc vừa khởi động lại. Thử lại sau một lát.";
+    default:
+      return "Đã có lỗi xảy ra";
+  }
+}

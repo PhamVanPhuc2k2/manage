@@ -36,6 +36,32 @@ export function CallHost() {
     <>
       <IncomingCall />
       <CallScreen />
+      <CallNotice />
     </>
+  );
+}
+
+/**
+ * Dải báo nhỏ khi KHÔNG có màn hình cuộc gọi nào đang mở.
+ *
+ * Màn hình cuộc gọi có chỗ hiện báo của riêng nó, nhưng những câu đáng
+ * nói nhất lại rơi vào lúc không có màn hình nào: bấm "Nghe" nhưng cuộc
+ * gọi vừa kết thúc, người nhận đang bận, hay hết giờ đổ chuông. Không
+ * có dải này thì những câu đó đi thẳng vào hư vô và người dùng chỉ thấy
+ * màn hình đứng im.
+ */
+function CallNotice() {
+  const notice = useCallStore((s) => s.notice);
+  const active = useCallStore((s) => s.active);
+
+  if (!notice || active) return null;
+
+  return (
+    <div
+      role="status"
+      className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-neutral-900 px-4 py-2 text-sm text-white shadow-lg dark:bg-neutral-100 dark:text-neutral-900"
+    >
+      {notice}
+    </div>
   );
 }

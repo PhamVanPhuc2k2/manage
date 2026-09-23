@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dựng stack sạch, seed dữ liệu, rồi chạy cả 6 bộ smoke.
+# Dựng stack sạch, seed dữ liệu, rồi chạy cả 7 bộ smoke.
 #
 #   bash scripts/ci-e2e.sh
 #
@@ -224,7 +224,7 @@ if [ "${PREPARE_ONLY:-0}" = "1" ]; then
 fi
 
 FAILED=""
-for suite in auth hr project attendance payroll chat; do
+for suite in auth hr project attendance payroll chat call; do
   echo
   log "smoke-$suite"
   if bash "scripts/smoke-$suite.sh"; then

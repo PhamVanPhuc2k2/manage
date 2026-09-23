@@ -122,7 +122,13 @@ test.describe("Luồng 4 — Dự án và công việc", () => {
     const id = suffix();
 
     await page.goto("/projects");
-    await expect(page.getByRole("heading", { name: "Dự án" })).toBeVisible();
+    // exact: sau vài lần chạy, danh sách có những dự án tên "Dự án E2E ..."
+    // và tiêu đề của chúng cũng là heading. Không chốt exact thì phép thử
+    // hỏng vì "strict mode violation" — một lỗi của chính phép thử, trông y
+    // hệt như lỗi sản phẩm.
+    await expect(
+      page.getByRole("heading", { name: "Dự án", exact: true }),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Thêm dự án" }).click();
 

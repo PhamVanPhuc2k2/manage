@@ -59,22 +59,63 @@ export function useCallRealtime(): void {
     [stopRinging, answered],
   );
 
-  const onClosed = useCallback(
+  // Ba sự kiện đóng — và chúng KHÔNG giống nhau.
+  //
+  // Gộp cả ba vào một nhánh "cuộc gọi đã đóng" là lỗi đã xảy ra thật
+  // ở đây, và triệu chứng rất khó đoán: bấm "Nghe" thì màn hình cuộc gọi
+  // hiện lên rồi biến mất ngay, không báo gì. Lý do: máy chủ đẩy
+  // call.cancelled về CHÍNH người vừa bắt máy để các thiết bị khác của họ
+  // ngừng đổ chuông — nó không phân biệt được thiết bị, chỉ biết nhân
+  // viên, nên bản sao đó về luôn tab vừa bấm.
+
+  // ended: cuộc gọi thật sự đã xong cho MỌI người.
+  const onEnded = useCallback(
     (e: Envelope) => {
       const p = e.payload as StatusPayload;
       stopRinging(p.call_id);
       hangUp(p.call_id);
-
-      if (p.status !== "ended" || p.reason) {
+      if (p.status !== "ended" || p.reason !== "hangup") {
         setNotice(endReasonLabel(p.reason));
       }
-
-      // Lịch sử hội thoại có thêm một dòng tin nhắn hệ thống, và danh sách
-      // cuộc gọi đổi. Đánh dấu hỏng thay vì tự dựng lại: bản tin không
-      // mang đủ dữ liệu để vẽ, và một lượt tải lại ở đây không ai thấy.
+      // Lịch sử hội thoại có thêm một dòng tin nhắn hệ thống. Đánh dấu
+      // hỏng thay vì tự dựng lại: bản tin không mang đủ dữ liệu để vẽ.
       void qc.invalidateQueries({ queryKey: ["calls"] });
     },
     [stopRinging, hangUp, setNotice, qc],
+  );
+
+  // cancelled: lời mời không còn hiệu lực. Chỉ tắt CHUÔNG.
+  //
+  // Ngoại lệ duy nhất: người GỌI đang chờ đầu kia bắt máy thì đây là
+  // tin báo hết giờ, và họ phải thoát khỏi màn hình "đang gọi...".
+  const onCancelled = useCallback(
+    (e: Envelope) => {
+      const p = e.payload as StatusPayload;
+      stopRinging(p.call_id);
+
+      if (useCallStore.getState().outgoing) {
+        hangUp(p.call_id);
+        setNotice(endReasonLabel(p.reason));
+      }
+      void qc.invalidateQueries({ queryKey: ["calls"] });
+    },
+    [stopRinging, hangUp, setNotice, qc],
+  );
+
+  // rejected: MỘT người từ chối, không phải cả cuộc gọi kết thúc.
+  //
+  // Trong cuộc gọi nhóm, một người bấm từ chối không được làm những
+  // người đang nói rớt khỏi phòng. Khi gọi 1-1 thì máy chủ gửi tiếp
+  // call.ended ngay sau đó, và chính bản tin đó mới đóng màn hình.
+  const onRejected = useCallback(
+    (e: Envelope) => {
+      const p = e.payload as StatusPayload;
+      stopRinging(p.call_id);
+      setNotice(
+        p.reason === "busy" ? "Người nhận đang bận" : "Cuộc gọi bị từ chối",
+      );
+    },
+    [stopRinging, setNotice],
   );
 
   const onParticipant = useCallback(
@@ -89,9 +130,9 @@ export function useCallRealtime(): void {
   useWsMessage(CALL_EVENTS.incoming, onIncoming);
   useWsMessage(CALL_EVENTS.ringing, onRinging);
   useWsMessage(CALL_EVENTS.accepted, onAccepted);
-  useWsMessage(CALL_EVENTS.rejected, onClosed);
-  useWsMessage(CALL_EVENTS.cancelled, onClosed);
-  useWsMessage(CALL_EVENTS.ended, onClosed);
+  useWsMessage(CALL_EVENTS.rejected, onRejected);
+  useWsMessage(CALL_EVENTS.cancelled, onCancelled);
+  useWsMessage(CALL_EVENTS.ended, onEnded);
   useWsMessage(CALL_EVENTS.participant, onParticipant);
 
   // Câu báo tự tắt sau vài giây. Không tắt thì nó nằm mãi trên màn hình và

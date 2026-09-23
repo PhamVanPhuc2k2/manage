@@ -35,7 +35,13 @@ export default defineConfig({
   // đôi khi chậm thật.
   retries: process.env.CI ? 1 : 0,
 
-  timeout: 60_000,
+  // 180 giây chứ không phải 60.
+  //
+  // nginx giới hạn 30 lượt/phút cho nhóm endpoint đăng nhập. Khi chạm
+  // trần, helper login() chờ hơn một phút rồi thử lại — cố ý, vì đó là
+  // giới hạn ĐÚNG của sản phẩm và nới nó ra cho dễ test là bỏ đi lớp
+  // chặn dò mật khẩu quy mô lớn. Hạn 60 giây sẽ cắt ngang lần chờ đó.
+  timeout: 180_000,
   expect: { timeout: 15_000 },
 
   reporter: process.env.CI ? [["github"], ["list"]] : [["list"]],
@@ -60,7 +66,20 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          args: [
+            // Micro và camera GIẢ cho luồng gọi điện.
+            //
+            // Thiếu chúng thì getUserMedia treo ở hộp thoại xin quyền và
+            // phép thử hết giờ chờ — triệu chứng giống hệt lỗi sản phẩm,
+            // nên rất tốn thời gian lần ra.
+            "--use-fake-ui-for-media-stream",
+            "--use-fake-device-for-media-stream",
+          ],
+        },
+      },
     },
   ],
 });
