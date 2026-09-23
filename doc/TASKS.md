@@ -1005,7 +1005,10 @@ Lệnh chạy:
 - [x] Đặt tên phòng theo `call_id`, không theo `conversation_id`
 - [x] Bật **simulcast** ngay từ đầu, kèm `adaptiveStream` và `dynacast`
 - [ ] Chỉ hiện người đang nói ở độ nét cao, phần còn lại hạ xuống 180p
-- [ ] Giới hạn số người mỗi phòng (đề xuất khởi điểm: 16) và số phòng chạy song song
+- [x] Giới hạn số người mỗi phòng: **16**, đặt ở `docker/livekit/livekit.yaml`
+> Chưa giới hạn SỐ PHÒNG chạy song song: LiveKit không có tham số đó, và
+> trần thật nằm ở CPU và băng thông — đã đặt `deploy.resources.limits` cho
+> container SFU, xem doc/OPERATIONS.md.
 - [x] Phát hiện người đang nói (active speaker) để làm nổi khung trên giao diện
 - [x] Webhook từ SFU về backend
 > Xác thực HAI bước: chữ ký JWT phải ký được bằng bí mật của mình, VÀ sha256
@@ -1040,8 +1043,12 @@ Lệnh chạy:
 
 ### Trình chiếu màn hình
 - [x] `getDisplayMedia()` — thêm track màn hình vào cuộc gọi **đang chạy**; màn hình chia sẻ là một ô RIÊNG, không thay ô camera
-- [ ] Đặt `contentHint`: `text` cho màn hình tĩnh (ưu tiên nét chữ), `motion` khi chiếu video. Khác biệt rõ rệt, đừng bỏ qua
-- [ ] Giới hạn bitrate riêng cho luồng màn hình: 1080p chữ tĩnh khoảng 0.5 Mbps nhưng chiếu video có thể vọt lên 3 Mbps
+- [x] Đặt `contentHint: text` cho luồng màn hình
+> Đổi hẳn cách bộ mã hoá đánh đổi: giữ nét chữ, chấp nhận giật hình khi cuộn.
+> Đúng thứ cần cho slide và bảng tính, tức là gần như mọi lần người ta chia
+> sẻ. Chưa tự chuyển sang `motion` khi chiếu video — sẽ cần người dùng nói ra
+> họ đang chiếu gì, và đó là một nút nữa trên thanh điều khiển.
+- [x] Giới hạn bitrate riêng cho luồng màn hình: **1.5 Mbps, 15 khung/giây**
 - [ ] Mỗi lúc chỉ một người chiếu; người sau muốn chiếu phải được nhường hoặc thay thế
 - [x] Đồng bộ khi người dùng bấm "Dừng chia sẻ" của **trình duyệt** — trạng thái nút đọc từ PHÒNG chứ không từ state riêng, nên nó luôn nói đúng sự thật
 - [x] Ghi nhận trong `call_participants` ai đã chiếu màn hình (phục vụ audit)
@@ -1052,7 +1059,10 @@ Lệnh chạy:
 > Thay vào đó hỏi SFU MỘT lần, ngay TRƯỚC khi đóng phòng. Thứ tự là phần dễ
 > sai nhất: hỏi sau khi đóng thì không còn ai để kể, và ba cờ im lặng ở lại
 > false mãi mãi. Có unit test canh đúng thứ tự đó.
-- [ ] Nói rõ trên giao diện: chia sẻ **tab trình duyệt** mới kèm được âm thanh, chia sẻ **toàn màn hình** thì không — giới hạn của trình duyệt, đừng để người dùng tưởng lỗi
+- [x] Nói rõ trên giao diện: chia sẻ **tab trình duyệt** mới kèm được âm thanh
+> Chú thích ngay trên nút, và một mục riêng trong doc/HUONG-DAN-SU-DUNG.md.
+> Nói TRƯỚC để người trình bày không chiếu xong một video dài rồi mới biết cả
+> phòng không nghe thấy gì.
 
 ### Ghi hình (tuỳ chọn — chỉ làm khi có nhu cầu thật)
 - [ ] Ghi hình bằng LiveKit Egress, xuất thẳng lên Cloudflare R2
@@ -1071,13 +1081,20 @@ Lệnh chạy:
 - [x] Thanh điều khiển: tắt/bật mic, camera, chia sẻ màn hình, rời cuộc gọi, kết thúc cho tất cả (chỉ người khởi tạo)
 - [ ] Màn hình kiểm tra thiết bị trước khi vào: chọn mic/camera/loa, xem trước hình, đo mức âm thanh
 - [x] Xử lý khi người dùng **từ chối quyền** camera/mic — mic và camera bật trong HAI khối try riêng, nên máy không có webcam không mất luôn cả micro
-- [ ] Hiện chất lượng kết nối (tốt / yếu / mất kết nối) dựa trên thống kê WebRTC
+- [x] Hiện chất lượng kết nối, và **chỉ hiện khi đã yếu**
+> Một chỉ báo luôn hiện thì không ai nhìn. Chỉ hiện khi có chuyện thì nó trả
+> lời đúng câu người dùng đang hỏi: "hình giật là do máy tôi hay do họ".
 - [x] Cửa sổ nổi (picture-in-picture), kèm nút thu gọn màn hình cuộc gọi thành một ô nhỏ
 - [x] Chặn mở cuộc gọi ở nhiều tab cùng lúc (BroadcastChannel)
 > Hai tab cùng vào một phòng là hai luồng tiếng của CÙNG một cái micro, và
 > tiếng vọng giữa chúng tạo ra tiếng hú. Backend KHÔNG giải được: với nó cả
 > hai tab đều là cùng một nhân viên có quyền hợp lệ.
-- [ ] Báo rõ khi trình duyệt không hỗ trợ (Safari cũ, trình duyệt nhúng trong app Facebook/Zalo)
+- [x] Báo rõ khi trình duyệt không hỗ trợ
+> Ba nhóm được nhận diện riêng: trang không chạy trong secure context, trình
+> duyệt nhúng trong Zalo/Facebook, và trình duyệt quá cũ.
+>
+> NÓI RA chứ không ẩn nút. Ẩn nút là cách tệ nhất: người dùng thấy đồng nghiệp
+> có nút còn mình thì không, và kết luận là mình bị thiếu quyền.
 
 ### Hạ tầng & Docker — phần dễ sai nhất
 - [ ] **HTTPS trở thành bắt buộc, không còn là tuỳ chọn.** `getUserMedia` và `getDisplayMedia` chỉ chạy trong secure context. `localhost` được miễn, nhưng test qua IP LAN là hỏng ngay → **kéo phần TLS của Phase 6 lên làm trước phase này**
@@ -1087,7 +1104,11 @@ Lệnh chạy:
 - [x] `use_external_ip` có trong cấu hình, đặt `false` cho dev và có chú thích phải bật khi chạy sau NAT
 - [ ] Mở UDP ở firewall / security group; nhiều nhà cung cấp chặn UDP mặc định
 - [x] Đặt `deploy.resources.limits` riêng cho SFU (2 CPU, 1 GB)
-- [ ] Thêm SFU và TURN vào stack giám sát Phase 6: băng thông vào/ra, số phòng, số người, tỉ lệ relay
+- [x] Thêm SFU vào stack giám sát Phase 6
+> Job `livekit` trong Prometheus, đã kiểm chứng bằng cách chạy thật: target
+> báo `up`. Ba chỉ số đáng theo dõi nhất ghi trong doc/OPERATIONS.md.
+>
+> **Không** có chỉ số tỉ lệ relay: LiveKit v1.13 không phát ra nó.
 
 ### Ước lượng băng thông — tính trước khi mở cho toàn công ty
 

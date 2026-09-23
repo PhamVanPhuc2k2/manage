@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/useAuth";
 
 import * as api from "./api";
+import { DevicePanel } from "./DevicePanel";
 import { useCallStore } from "./store";
 import type { CallJoin } from "./types";
 import { useLiveKitRoom } from "./useLiveKitRoom";
@@ -37,6 +38,7 @@ function CallStage({ join: active }: { join: CallJoin }) {
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [showDevices, setShowDevices] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
   const kind = active.call.kind;
@@ -222,7 +224,11 @@ function CallStage({ join: active }: { join: CallJoin }) {
         )}
       </div>
 
-      <footer className="flex flex-wrap items-center justify-center gap-2 border-t border-neutral-800 px-4 py-3">
+      <footer className="relative flex flex-wrap items-center justify-center gap-2 border-t border-neutral-800 px-4 py-3">
+        {showDevices && room && (
+          <DevicePanel room={room} onClose={() => setShowDevices(false)} />
+        )}
+
         <ControlButton on={micOn} onClick={toggleMic}>
           {micOn ? "Tắt mic" : "Bật mic"}
         </ControlButton>
@@ -241,6 +247,13 @@ function CallStage({ join: active }: { join: CallJoin }) {
         </ControlButton>
         <ControlButton on={false} onClick={pip}>
           Cửa sổ nhỏ
+        </ControlButton>
+        <ControlButton
+          on={showDevices}
+          onClick={() => setShowDevices((v) => !v)}
+          title="Chọn micro, camera, loa và thử xem micro có thu được tiếng không"
+        >
+          Thiết bị
         </ControlButton>
 
         <div className="mx-2 h-6 w-px bg-neutral-800" />

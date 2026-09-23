@@ -16,6 +16,7 @@ import (
 	domaincall "github.com/PhamVanPhuc2k2/manage/internal/domain/call"
 	"github.com/PhamVanPhuc2k2/manage/pkg/apperror"
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 )
 
 // maxHistoryRows là trần số cuộc gọi trả về khi xem lịch sử.
@@ -167,6 +168,7 @@ func (u *Usecase) Start(
 	if err := u.calls.Create(ctx, c); err != nil {
 		return nil, apperror.Internal(err)
 	}
+	metrics.CallsStarted.WithLabelValues(string(kind)).Inc()
 
 	// Ghi người được mời TRƯỚC khi đổ chuông: một cuộc gọi nhỡ vẫn phải
 	// hiện ra với đúng những người đã bị gọi, kể cả khi không ai bắt máy.

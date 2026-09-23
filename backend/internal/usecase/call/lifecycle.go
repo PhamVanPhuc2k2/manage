@@ -10,6 +10,7 @@ import (
 	domaincall "github.com/PhamVanPhuc2k2/manage/internal/domain/call"
 	"github.com/PhamVanPhuc2k2/manage/pkg/apperror"
 	"github.com/PhamVanPhuc2k2/manage/pkg/logger"
+	"github.com/PhamVanPhuc2k2/manage/pkg/metrics"
 )
 
 // Phần còn lại của vòng đời cuộc gọi: bắt máy, từ chối, rời phòng, kết thúc.
@@ -257,6 +258,13 @@ func (u *Usecase) finish(
 	c.Status = status
 	c.EndedAt = &now
 	c.EndReason = reason
+
+	metrics.CallsEnded.WithLabelValues(string(status), reason).Inc()
+	// Chỉ ghi thời lượng của cuộc gọi ĐÃ CÓ NGƯỜI BẮT MÁY. Đưa cuộc gọi nhỡ
+	// (0 giây) vào cùng histogram sẽ kéo trung vị xuống gần 0.
+	if status.Answered() {
+		metrics.CallDuration.Observe(c.Duration().Seconds())
+	}
 
 	// Hỏi SFU ai đã phát những luồng nào, RỒI MỚI đóng phòng.
 	//

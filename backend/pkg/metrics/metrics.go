@@ -185,6 +185,54 @@ var (
 // Mẫu quen thuộc của Prometheus: nó cho phép dashboard hiện phiên bản đang
 // chạy và cho phép so sánh chỉ số giữa hai lần triển khai, mà không cần một
 // cơ chế riêng nào.
+// =========================================================================
+// GỌI THOẠI / VIDEO
+// =========================================================================
+
+var (
+	// CallsStarted đếm cuộc gọi mở ra, tách theo audio và video.
+	//
+	// Cặp với CallsEnded để trả lời câu "bao nhiêu cuộc gọi mỗi ngày" mà
+	// không phải quét bảng calls — một câu hỏi vận hành hỏi hằng ngày thì
+	// không nên là một câu SELECT trên database nghiệp vụ.
+	CallsStarted = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "manage_calls_started_total",
+			Help: "Số cuộc gọi đã mở, theo kiểu.",
+		},
+		[]string{"kind"},
+	)
+
+	// CallsEnded tách theo LÝ DO kết thúc, không chỉ theo trạng thái.
+	//
+	// Lý do mới là thứ đáng nhìn: tỉ lệ 'timeout' tăng nghĩa là người ta
+	// gọi nhau mà không ai nghe; tỉ lệ 'network' tăng nghĩa là hạ tầng có
+	// vấn đề. Gộp cả hai thành "cuộc gọi hỏng" sẽ giấu mất hai câu chuyện
+	// hoàn toàn khác nhau.
+	CallsEnded = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "manage_calls_ended_total",
+			Help: "Số cuộc gọi đã kết thúc, theo trạng thái cuối và lý do.",
+		},
+		[]string{"status", "reason"},
+	)
+
+	// CallDuration chỉ ghi cuộc gọi ĐÃ CÓ NGƯỜI BẮT MÁY.
+	//
+	// Đưa cuộc gọi nhỡ (0 giây) vào cùng một histogram sẽ kéo trung vị
+	// xuống gần 0 và làm con số mất hết ý nghĩa.
+	CallDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name: "manage_call_duration_seconds",
+			Help: "Thời lượng cuộc gọi đã có người bắt máy.",
+			// Mốc chọn theo cách người ta thật sự gọi nhau: vài chục giây
+			// để hỏi một câu, vài phút để bàn một việc, nửa tiếng trở lên
+			// là một cuộc họp.
+			Buckets: []float64{10, 30, 60, 300, 900, 1800, 3600},
+		},
+	)
+)
+
 var BuildInfo = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "manage_build_info",
@@ -199,6 +247,7 @@ func init() {
 		WSConnections, WSOnlineEmployees, WSMessages, WSDropped,
 		JobsProcessed, JobDuration, QueueDepth,
 		ScheduledJobRuns, ScheduledJobLastSuccess,
+		CallsStarted, CallsEnded, CallDuration,
 		BuildInfo,
 
 		// Chỉ số của chính tiến trình Go: bộ nhớ, goroutine, GC, số file

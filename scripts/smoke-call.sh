@@ -331,6 +331,24 @@ MSGS=$(curl -s "$BASE/chat/conversations/$CONV_ID/messages" -H "$AUTH")
 check "Có tin nhắn hệ thống về cuộc gọi trong khung chat" "yes" \
   "$(echo "$MSGS" | grep -q 'Cuộc gọi' && echo yes || echo no)"
 
+# ======================================================== chỉ số vận hành
+echo
+echo "── Chỉ số vận hành ──"
+
+# Đọc /metrics THẲNG trong container: nginx cố ý không để đường này lọt ra
+# ngoài, và số cuộc gọi đang diễn ra không nên để ai cũng xem được.
+#
+# Ba chỉ số này trả lời câu hỏi quyết định chi phí băng thông — "mỗi ngày
+# bao nhiêu cuộc gọi, dài bao lâu" — mà không phải quét bảng calls.
+METRICS="$(docker compose exec -T api wget -q -O- http://localhost:8080/metrics 2>/dev/null)"
+
+check "Có đếm cuộc gọi mở ra" "yes" \
+  "$(echo "$METRICS" | grep -q '^manage_calls_started_total{kind="video"}' && echo yes || echo no)"
+check "Có đếm cuộc gọi kết thúc theo lý do" "yes" \
+  "$(echo "$METRICS" | grep -q '^manage_calls_ended_total{reason=' && echo yes || echo no)"
+check "Có histogram thời lượng cuộc gọi" "yes" \
+  "$(echo "$METRICS" | grep -q '^manage_call_duration_seconds_count' && echo yes || echo no)"
+
 # --------------------------------------------------------------- dọn dẹp
 echo
 echo "── Dọn dữ liệu kiểm thử ──"
