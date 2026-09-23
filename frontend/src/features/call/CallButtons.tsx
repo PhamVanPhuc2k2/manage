@@ -7,6 +7,7 @@ import { usePermission } from "@/lib/auth/useAuth";
 
 import * as api from "./api";
 import { useCallStore } from "./store";
+import { callSupportProblem } from "./support";
 import type { CallKind } from "./types";
 
 /**
@@ -24,6 +25,9 @@ export function CallButtons({ conversationId }: { conversationId: string }) {
   const setNotice = useCallStore((s) => s.setNotice);
   const [busy, setBusy] = useState(false);
 
+  // Tính MỘT lần: câu trả lời không đổi trong suốt phiên.
+  const [problem] = useState(callSupportProblem);
+
   const { data: live } = useQuery({
     queryKey: ["calls", "live", conversationId],
     queryFn: () => api.liveCall(conversationId),
@@ -39,6 +43,21 @@ export function CallButtons({ conversationId }: { conversationId: string }) {
 
   // Đang ở trong một cuộc gọi rồi thì không hiện nút gọi cuộc khác.
   if (active) return null;
+
+  // Trình duyệt không gọi được thì NÓI RA, đừng ẩn nút.
+  //
+  // Ẩn nút là cách tệ nhất: người dùng thấy đồng nghiệp có nút còn mình
+  // thì không, và kết luận là mình bị thiếu quyền.
+  if (problem) {
+    return (
+      <span
+        title={problem}
+        className="rounded border border-amber-400 px-2.5 py-1 text-sm text-amber-700 dark:text-amber-400"
+      >
+        Không gọi được trên trình duyệt này
+      </span>
+    );
+  }
 
   const start = async (kind: CallKind) => {
     if (busy) return;

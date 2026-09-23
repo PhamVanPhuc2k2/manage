@@ -70,3 +70,14 @@ scrape_configs:
   - job_name: rabbitmq
     static_configs:
       - targets: [rabbitmq:15692]
+
+  # LiveKit tự phục vụ /metrics trên một cổng RIÊNG (prometheus_port trong
+  # docker/livekit/livekit.yaml), không phải cổng 7880 của signaling.
+  #
+  # Đây là nguồn duy nhất trả lời được ba câu quyết định chi phí: bao nhiêu
+  # phòng đang mở, bao nhiêu người trong đó, và băng thông đang ra vào bao
+  # nhiêu. Không scrape thì hoá đơn băng thông là thứ đầu tiên báo cho bạn
+  # biết có chuyện.
+  - job_name: livekit
+    static_configs:
+      - targets: [livekit:6789]

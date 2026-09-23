@@ -20,6 +20,14 @@ import { defineConfig, devices } from "@playwright/test";
  *
  *   docker compose up -d
  *   cd frontend && pnpm e2e
+ *
+ * CHẠY LIỀN NHIỀU LẦN THÌ PHẢI CHỜ
+ *
+ * nginx giới hạn 30 lượt/phút cho nhóm endpoint đăng nhập, và mỗi lần
+ * đăng nhập tốn hai lượt (login + verify-otp). Cả bộ dùng ~6 lần đăng
+ * nhập, tức ~12 lượt — một lần chạy thì thoải mái, ba lần liền nhau là
+ * chạm trần. Helper login() sẽ chờ rồi thử lại, nhưng mỗi lần chờ hơn
+ * một phút. Chờ một phút giữa hai lần chạy là xong.
  */
 export default defineConfig({
   testDir: "./e2e",

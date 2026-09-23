@@ -2,6 +2,7 @@
 
 import { useEffect, useReducer, useState } from "react";
 import {
+  ConnectionQuality,
   Room,
   RoomEvent,
   Track,
@@ -24,6 +25,7 @@ export type Tile = {
   publication?: TrackPublication;
   micOn: boolean;
   speaking: boolean;
+  quality: ConnectionQuality;
 };
 
 /**
@@ -90,6 +92,7 @@ export function useLiveKitRoom(join: CallJoin, kind: CallKind) {
       RoomEvent.TrackUnmuted,
       RoomEvent.ActiveSpeakersChanged,
       RoomEvent.ConnectionStateChanged,
+      RoomEvent.ConnectionQualityChanged,
     ];
     for (const e of events) r.on(e, bump);
 
@@ -178,6 +181,7 @@ function collectTiles(room: Room): Tile[] {
       publication: camera,
       micOn: !!mic && !mic.isMuted,
       speaking: p.isSpeaking,
+      quality: p.connectionQuality,
     });
 
     // Màn hình chia sẻ là một ô RIÊNG, không thay ô camera: người trình
@@ -193,6 +197,7 @@ function collectTiles(room: Room): Tile[] {
         publication: screen,
         micOn: false,
         speaking: false,
+        quality: p.connectionQuality,
       });
     }
   };

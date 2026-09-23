@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { ConnectionQuality } from "livekit-client";
 
 import type { Tile } from "./useLiveKitRoom";
 
@@ -65,9 +66,31 @@ export function VideoTile({ tile }: { tile: Tile }) {
             tắt mic
           </span>
         )}
+        {/*
+          Chỉ báo khi mạng ĐÃ yếu, không hiện vạch sóng lúc mọi thứ bình
+          thường. Một chỉ báo luôn hiện thì không ai nhìn; một chỉ báo
+          chỉ hiện khi có chuyện thì trả lời đúng câu người dùng đang hỏi:
+          "hình giật là do máy tôi hay do họ".
+        */}
+        {qualityLabel(tile.quality) && (
+          <span className="rounded bg-amber-500 px-1 text-[10px] text-neutral-900">
+            {qualityLabel(tile.quality)}
+          </span>
+        )}
       </div>
     </div>
   );
+}
+
+function qualityLabel(q: ConnectionQuality): string {
+  switch (q) {
+    case ConnectionQuality.Poor:
+      return "mạng yếu";
+    case ConnectionQuality.Lost:
+      return "mất kết nối";
+    default:
+      return "";
+  }
 }
 
 function initials(name: string): string {

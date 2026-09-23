@@ -1,18 +1,25 @@
 # Manage — Hệ thống quản lý công ty
 
-Hệ thống quản trị nội bộ doanh nghiệp: nhân sự, phòng ban, dự án, giao việc, chấm công, lương, cùng thông báo và chat thời gian thực.
+Hệ thống quản trị nội bộ doanh nghiệp: nhân sự, phòng ban, dự án, giao việc, chấm công, lương, thông báo và chat thời gian thực, gọi thoại và gọi video.
 
-**Trạng thái:** Phase 0 → 6 đã xong và đã nghiệm thu trên stack Docker thật.
-Phase 7 (gọi video) chưa bắt đầu — xem [doc/TASKS.md](doc/TASKS.md).
+**Trạng thái:** Phase 0 → 7 đã xong phần chạy được và đã nghiệm thu trên stack
+Docker thật. Phần còn lại của Phase 7 cần máy và mạng thật (hai đầu khác
+mạng, mạng chặn UDP) — xem [doc/TASKS.md](doc/TASKS.md).
+
+> **Gọi video cần HTTPS.** `getUserMedia` chỉ chạy trong secure context.
+> `localhost` được miễn nên chạy thử trên máy cá nhân là được, nhưng mở
+> qua IP LAN là hỏng ngay. Xem mục "Máy chủ media" trong
+> [doc/OPERATIONS.md](doc/OPERATIONS.md).
 
 Nghiệm thu hiện tại, đo trên máy thật chứ không phải ước tính:
 
 | Hạng mục | Kết quả |
 |---|---|
-| Unit test (Go) | 8/8 gói usecase ≥ 70% coverage |
-| Integration test (PostgreSQL thật) | 15 phép thử đạt |
-| API end-to-end (6 bộ smoke) | **286/286** từ cài đặt sạch |
-| E2E trình duyệt (Playwright) | **8/8** |
+| Unit test (Go) | 9/9 gói usecase ≥ 70% coverage |
+| Integration test (PostgreSQL thật) | 29 phép thử đạt |
+| API end-to-end (7 bộ smoke) | **320/320** từ cài đặt sạch |
+| Đường signaling cuộc gọi (`cmd/callsignal`) | **14/14** |
+| E2E trình duyệt (Playwright) | **10/10** |
 | Tải WebSocket | **500/500** kết nối, 0 rớt |
 | Nhiều bản api | 3 bản, lưu lượng 10/10/10, fan-out 6/6 |
 | Khôi phục từ backup | **37 giây**, 39/39 bảng khớp |
@@ -23,12 +30,16 @@ Monolith theo module, hai binary chạy độc lập:
 
 | Thành phần | Vai trò |
 |---|---|
-| `api` | HTTP REST và WebSocket (chat, thông báo, presence) |
-| `worker` | Job nền qua RabbitMQ: gửi mail, tính lương, xuất Excel |
+| `api` | HTTP REST và WebSocket (chat, thông báo, presence, signaling cuộc gọi) |
+| `worker` | Job nền qua RabbitMQ: gửi mail, tính lương, xuất Excel, dọn cuộc gọi quá hạn |
 
 Hai binary dùng chung toàn bộ `internal/`, chỉ khác tầng `delivery`.
 
-**Stack:** Go 1.27 + go-chi · PostgreSQL 16 · Redis 7 · RabbitMQ 3.13 · Next.js 16 · nginx — toàn bộ chạy trong Docker. Tệp lưu trên Cloudflare R2 (dịch vụ ngoài).
+**Stack:** Go 1.27 + go-chi · PostgreSQL 16 · Redis 7 · RabbitMQ 3.13 · LiveKit (SFU) · Next.js 16 · nginx — toàn bộ chạy trong Docker. Tệp lưu trên Cloudflare R2 (dịch vụ ngoài).
+
+Media của cuộc gọi **không đi qua nginx**: trình duyệt nối thẳng tới LiveKit.
+nginx là proxy HTTP, và đẩy âm thanh thời gian thực qua nó là thêm một chặng
+buffer vào đường mà mọi mili giây đều nghe thấy.
 
 Backend theo Clean Architecture: `delivery` → `usecase` → `domain` ← `repository`.
 

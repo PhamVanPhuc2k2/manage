@@ -13,6 +13,7 @@ Mỗi phần bắt đầu bằng việc bạn muốn làm, không phải bằng 
 - [Xin nghỉ phép](#xin-nghỉ-phép)
 - [Công việc và dự án](#công-việc-và-dự-án)
 - [Nhắn tin](#nhắn-tin)
+- [Gọi thoại và gọi video](#gọi-thoại-và-gọi-video)
 - [Thông báo](#thông-báo)
 - [Phiếu lương](#phiếu-lương)
 - [Dành cho quản lý](#dành-cho-quản-lý)
@@ -307,6 +308,104 @@ Mất mạng thì tin hiện mờ với chữ "đang gửi". Có mạng lại l�
 
 Nếu báo "gửi lỗi" thì gõ lại. Hệ thống **không** gửi trùng — gửi lại một tin
 đã tới nơi sẽ không tạo ra hai tin.
+
+---
+
+## Gọi thoại và gọi video
+
+### Gọi cho ai đó
+
+Mở cuộc trò chuyện với người đó, rồi bấm **Gọi** hoặc **Gọi video** ở góc
+trên bên phải.
+
+Gọi được cả trong nhóm. Mọi thành viên đều đổ chuông, ai rảnh thì vào.
+
+Lần đầu, trình duyệt sẽ hỏi xin quyền dùng micro và camera. **Phải bấm
+"Cho phép"** — bấm "Chặn" thì lần sau trình duyệt không hỏi lại nữa, và bạn
+phải vào phần cài đặt của trình duyệt để mở lại.
+
+### Khi có người gọi bạn
+
+Một ô nhỏ hiện lên ở góc dưới bên phải, kèm tiếng chuông. Nó hiện **ở
+mọi trang**, không cần bạn đang mở khung chat.
+
+- **Nghe** — vào cuộc gọi.
+- **Từ chối** — người gọi biết ngay là bạn không nghe.
+
+Không bấm gì thì sau **45 giây** chuông tự tắt, và cuộc gọi được ghi là
+*cuộc gọi nhỡ* trong khung chat.
+
+Đăng nhập trên nhiều máy thì **tất cả cùng đổ chuông**. Bắt máy ở một máy
+là những máy kia tự tắt chuông.
+
+> **Không nghe thấy chuông?** Trình duyệt chặn phát âm thanh ở tab bạn chưa
+> bấm vào lần nào kể từ khi mở. Ô thông báo vẫn hiện đầy đủ — nhìn màn
+> hình là thấy.
+
+### Trong cuộc gọi
+
+Thanh nút ở dưới cùng:
+
+| Nút | Làm gì |
+|---|---|
+| **Tắt mic / Bật mic** | Người khác thấy chữ "tắt mic" dưới ô hình của bạn |
+| **Tắt camera / Bật camera** | Tắt thì hiện chữ cái đầu tên bạn thay cho hình |
+| **Chia sẻ màn hình** | Xem mục riêng bên dưới |
+| **Cửa sổ nhỏ** | Tách hình người đối diện ra một cửa sổ nổi, làm việc khác vẫn thấy |
+| **Thu gọn** | Thu màn hình gọi thành một nút nhỏ, dùng hệ thống bình thường |
+| **Rời cuộc gọi** | Chỉ mình bạn ra, người khác vẫn nói tiếp |
+| **Kết thúc cho tất cả** | **Chỉ người bắt đầu cuộc gọi** mới thấy nút này |
+
+Viền xanh quanh một ô hình nghĩa là người đó đang nói.
+
+Chữ **"mạng yếu"** hay **"mất kết nối"** dưới ô hình là nói về đường mạng
+của **người đó**, không phải của bạn. Hình giật thì nhìn vào đây trước khi
+đổ cho máy mình.
+
+### Thu gọn để vừa họp vừa làm việc
+
+Bấm **Thu gọn** thì màn hình gọi nằm lại thành một nút xanh nhỏ ở góc dưới
+bên trái, kèm đồng hồ đếm thời gian. Bạn tra phiếu lương, mở bảng công
+việc, chuyển trang tuỳ ý — **cuộc gọi không rớt**. Bấm vào nút đó để mở lại.
+
+Nhưng **đóng tab hay tải lại trang là rời cuộc gọi.** Hệ thống sẽ hỏi lại
+trước khi đóng tab.
+
+### Chia sẻ màn hình
+
+Bấm **Chia sẻ màn hình**, trình duyệt hỏi bạn muốn chia sẻ gì:
+
+- **Một tab trình duyệt** — chọn cái này khi cần **kèm âm thanh** (chiếu
+  video, mở bài hát).
+- **Một cửa sổ ứng dụng** — chỉ cửa sổ đó, an toàn hơn cả.
+- **Toàn màn hình** — mọi người thấy **tất cả** những gì hiện trên màn hình
+  bạn, kể cả thông báo tin nhắn riêng nhảy lên giữa chừng.
+
+> **Chia sẻ toàn màn hình KHÔNG kèm được âm thanh.** Đây là giới hạn của
+> trình duyệt chứ không phải lỗi hệ thống. Muốn cả phòng nghe được tiếng
+> thì phải chọn chia sẻ **một tab**.
+
+Màn hình bạn chia sẻ hiện thành một ô **riêng**, không thay ô camera — mọi
+người vẫn thấy mặt bạn trong lúc đọc slide.
+
+Dừng chia sẻ bằng nút **Dừng chia sẻ** trong hệ thống, hoặc bằng thanh
+"Bạn đang chia sẻ màn hình" của chính trình duyệt — cả hai đều được.
+
+### Sau cuộc gọi
+
+Khung chat có thêm một dòng: *"Cuộc gọi video · 12 phút"*, hoặc *"Cuộc gọi
+nhỡ"* nếu không ai bắt máy. Dòng đó nằm đúng theo thứ tự thời gian cùng các
+tin nhắn khác.
+
+### Không gọi được
+
+| Thấy gì | Làm gì |
+|---|---|
+| Chữ *"Không gọi được trên trình duyệt này"* thay cho nút gọi | Bạn đang mở hệ thống trong ứng dụng Zalo hoặc Facebook. Chọn "Mở bằng trình duyệt" |
+| *"Người nhận đang bận"* | Họ đang trong cuộc gọi khác. Nhắn tin thay vì gọi lại liên tục |
+| *"Không truy cập được micro"* | Bạn đã lỡ bấm "Chặn". Mở lại trong cài đặt quyền của trình duyệt (biểu tượng ở đầu thanh địa chỉ) |
+| Tham gia nhưng không thấy ai | Mạng công ty có thể đang chặn. Báo bộ phận kỹ thuật — **nói rõ là gọi video**, vì đó là một đường mạng khác với phần còn lại |
+| Đang họp thì bị đưa ra | Bạn đã mở cuộc gọi ở một tab khác. Mỗi người chỉ ở trong cuộc gọi tại **một tab** — hai tab cùng bật micro sẽ tạo tiếng hú |
 
 ---
 

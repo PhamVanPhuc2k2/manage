@@ -105,9 +105,25 @@ function CallStage({ join: active }: { join: CallJoin }) {
       // Người dùng bấm "Huỷ" trên hộp chọn màn hình của trình duyệt thì
       // SDK ném lỗi. Đó không phải sự cố, nên không hiện thông báo lỗi.
       try {
-        await room.localParticipant.setScreenShareEnabled(!sharing, {
-          audio: true,
-        });
+        await room.localParticipant.setScreenShareEnabled(
+          !sharing,
+          {
+            audio: true,
+            // contentHint "text" đổi hẳn cách bộ mã hoá đánh đổi: giữ nét
+            // chữ, chấp nhận giật hình khi cuộn. Đúng thứ cần cho slide và
+            // bảng tính — thứ người ta chia sẻ 9 lần trên 10. Để mặc định
+            // thì chữ nhỏ nhòe đi và người xem phải hỏi "đọc được không".
+            contentHint: "text",
+          },
+          {
+            // Giới hạn bitrate riêng cho luồng màn hình.
+            //
+            // 1080p chữ tĩnh chỉ tốn khoảng 0.5 Mbps, nhưng chỉ cần ai đó
+            // chiếu một đoạn video trong slide là vọt lên 3 Mbps — và đó là
+            // băng thông của máy chủ nhân với số người trong phòng.
+            screenShareEncoding: { maxBitrate: 1_500_000, maxFramerate: 15 },
+          },
+        );
       } catch {
         /* người dùng đổi ý */
       }
@@ -213,7 +229,14 @@ function CallStage({ join: active }: { join: CallJoin }) {
         <ControlButton on={camOn} onClick={toggleCam}>
           {camOn ? "Tắt camera" : "Bật camera"}
         </ControlButton>
-        <ControlButton on={sharing} onClick={toggleShare}>
+        <ControlButton
+          on={sharing}
+          onClick={toggleShare}
+          // Giới hạn của trình duyệt, không phải lỗi của hệ thống. Nói trước
+          // ở đây để người trình bày không chiếu xong một video dài rồi mới
+          // biết cả phòng không nghe thấy gì.
+          title="Chọn chia sẻ MỘT TAB trình duyệt thì kèm được âm thanh; chọn toàn màn hình thì không."
+        >
           {sharing ? "Dừng chia sẻ" : "Chia sẻ màn hình"}
         </ControlButton>
         <ControlButton on={false} onClick={pip}>
@@ -249,15 +272,18 @@ function CallStage({ join: active }: { join: CallJoin }) {
 function ControlButton({
   on,
   onClick,
+  title,
   children,
 }: {
   on: boolean;
   onClick: () => void;
+  title?: string;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
+      title={title}
       className={`rounded-full px-4 py-2 text-sm transition ${
         on
           ? "bg-white text-neutral-900 hover:bg-neutral-200"

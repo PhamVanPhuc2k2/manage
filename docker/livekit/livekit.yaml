@@ -47,6 +47,25 @@ turn:
 # một Redis riêng không dùng chung với ứng dụng, hoặc đẩy cả cấu hình qua
 # biến LIVEKIT_CONFIG_BODY.
 
+room:
+  # Giới hạn số người mỗi phòng.
+  #
+  # Băng thông GỬI ĐI của máy chủ tăng theo BÌNH PHƯƠNG số người. Với
+  # simulcast, 16 người đã vào khoảng 70 Mbps — xem bảng ước lượng trong
+  # doc/TASKS.md. Không đặt trần thì một cuộc họp toàn công ty sẽ làm nghẹn
+  # đường truyền của mọi dịch vụ khác chạy chung máy chủ.
+  max_participants: 16
+
+  # Tự đóng phòng rỗng. Backend cũng gọi DeleteRoom khi cuộc gọi kết thúc,
+  # nhưng lời gọi đó có thể thất bại — đây là lưới đỡ thứ hai.
+  empty_timeout: 60
+
+# Cổng /metrics RIÊNG, không phải cổng 7880 của signaling. Không publish
+# ra host: chỉ Prometheus trong mạng nội bộ cần đọc, và số người đang họp
+# là thông tin không nên để ai cũng xem được.
+prometheus:
+  port: 6789
+
 logging:
   level: info
   json: false

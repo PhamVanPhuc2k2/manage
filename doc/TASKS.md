@@ -915,7 +915,7 @@ Lệnh chạy:
 
 ### Trạng thái hiện tại
 
-> **Đã xong phần lõi backend, chưa nối dây và chưa có giao diện.**
+> **Gọi 1-1 và gọi nhóm chạy được, đã nghiệm thu trên stack Docker thật.**
 >
 > | Tầng | Trạng thái |
 > |---|---|
@@ -923,15 +923,24 @@ Lệnh chạy:
 > | Domain `internal/domain/call` | xong |
 > | Usecase `internal/usecase/call` | xong — **40 unit test, 81.2% coverage** |
 > | Repository PostgreSQL | xong — **14 integration test trên database thật** |
-> | Adapter LiveKit (SFU + TURN) | **chưa làm** |
-> | Container LiveKit trong compose | **chưa làm** |
-> | Endpoint HTTP và route | **chưa làm** |
-> | Nối vào hub WebSocket | **chưa làm** |
-> | Job dọn cuộc gọi quá hạn ở worker | **chưa làm** |
-> | Giao diện | **chưa làm** |
+> | Adapter LiveKit (SFU + TURN) | xong — **13 unit test, 94.1% coverage** |
+> | Container LiveKit trong compose | xong |
+> | Endpoint HTTP và route | xong — **34 phép smoke qua nginx** |
+> | Nối vào hub WebSocket | xong — **14 phép `cmd/callsignal`** |
+> | Job dọn cuộc gọi quá hạn ở worker | xong |
+> | Giao diện | xong — **2 phép Playwright, hai trình duyệt thật** |
 >
-> Những mục bên dưới đã có đủ luật nghiệp vụ nhưng **chưa gọi tới được**
-> vì thiếu route và chưa nối hub. Chúng vẫn để trống để không nói quá sự thật.
+> **Chưa làm, và có lý do rõ:**
+>
+> | Mục | Vì sao chưa |
+> |---|---|
+> | HTTPS | `getUserMedia` chỉ chạy trong secure context. `localhost` được miễn nên dev chạy được, nhưng **thử qua IP LAN là hỏng ngay**. Phải kéo phần TLS của Phase 6 lên trước khi mở cho người dùng thật |
+> | Webhook từ SFU | Ba cờ `had_audio/had_video/had_screen` **chưa bao giờ được ghi**. Repository có sẵn `SetTracks` nhưng không ai gọi. Nguồn đúng là webhook của SFU, không phải lời khai của client — dữ liệu audit mà chính người bị audit tự khai thì vô nghĩa |
+> | Đo tỉ lệ relay qua TURN | Cột `relay_ratio` có trong bảng nhưng luôn NULL. Cũng chờ webhook |
+> | TURN listener trên TCP/443 | Trong dev, đường dự phòng khi mạng chặn UDP là **RTC qua TCP cổng 7881** của LiveKit. Cổng 443 cần chứng chỉ thật, nên đi cùng khối HTTPS |
+> | Màn hình kiểm tra thiết bị trước khi vào | Quyền bị từ chối đã có báo rõ và mic/camera bật trong hai khối try riêng, nên thiếu màn hình này không làm hỏng cuộc gọi — chỉ làm người dùng biết muộn hơn một nhịp |
+> | Giới hạn số người mỗi phòng | Chưa đặt. Cần đặt trước khi mở cho toàn công ty — xem bảng ước lượng băng thông ở cuối mục |
+> | Ghi hình | Xem bảng quyết định bên dưới |
 
 ### Quyết định đã chốt
 
@@ -939,16 +948,25 @@ Lệnh chạy:
 |---|---|---|
 | Người nhận đang bận cuộc khác | **Từ chối ngay, báo "đang bận"** | Người gọi biết ngay thay vì chờ 45 giây; người đang họp không bị làm phiền; ít trạng thái phải quản lý nhất |
 | Ghi hình cuộc gọi | **Chưa làm** | Đặc tả ghi là tuỳ chọn; nó kéo theo container Egress, khoá R2, chính sách lưu trữ, màn hình xin đồng ý và audit log — một khối riêng |
+| Gọi 1-1 đi P2P hay qua SFU | **Qua SFU, không làm P2P** | Đặc tả đề xuất P2P cho 1-1 để tiết kiệm băng thông. Nhưng làm P2P là viết thêm một đường media THỨ HAI: tự quản `RTCPeerConnection`, tự xử lý renegotiation khi bật/tắt camera, tự xử lý ICE restart khi đổi WiFi sang 4G, và tự chuyển sang SFU khi thất bại. Bốn việc đó SFU đã làm sẵn và đã chạy đúng. Một đường media thay vì hai cũng có nghĩa mọi lỗi chỉ có một chỗ để tìm. Đổi lại: mỗi cuộc gọi 1-1 tốn băng thông của máy chủ. Làm P2P khi chỉ số băng thông thật sự thành vấn đề, không phải trước đó |
+| TURN riêng (coturn) hay TURN tích hợp | **Tích hợp trong LiveKit** | coturn cần một **dải cổng UDP relay** — đúng thứ không được map trong Docker. Backend vẫn giữ sẵn mã sinh credential HMAC và hai biến `TURN_URLS`/`TURN_SECRET`: điền vào là dùng được coturn riêng ở production mà không phải sửa mã |
 
 ### Signaling — mở rộng hub WebSocket của Phase 5
 - [x] Bổ sung nhóm bản tin `call.*` vào định dạng chuẩn `{ type, payload, ts, trace_id }`
-- [ ] `call.invite` / `call.accept` / `call.reject` / `call.cancel` / `call.end`
-- [ ] `call.sdp` và `call.ice` — chuyển tiếp SDP offer/answer và ICE candidate giữa hai đầu
-- [ ] Định tuyến bản tin gọi qua bản đồ `user_id → instance_id` trên Redis (dùng lại cơ chế Phase 5)
-- [ ] Đổ chuông trên **mọi thiết bị** của người nhận; ai bắt máy trước thì các thiết bị còn lại nhận `call.cancelled`
-- [ ] Tự huỷ cuộc gọi nếu không ai bắt máy sau 45 giây
-- [ ] Kiểm tra quyền khi mời: chỉ thành viên hội thoại mới gọi được vào hội thoại đó
-- [ ] Người gọi rớt mạng giữa chừng: hub phát `call.end` khi kết nối WS đóng, không để cuộc gọi treo
+- [x] `call.incoming` / `call.accepted` / `call.rejected` / `call.cancelled` / `call.ended` / `call.ringing` / `call.participant`
+- [x] `call.sdp` và `call.ice` — chuyển tiếp SDP offer/answer và ICE candidate giữa hai đầu
+> Trường `from` do MÁY CHỦ đặt, không lấy từ payload. Tin client ở đây là cho
+> phép bất kỳ ai mạo danh người khác giữa lúc thương lượng kết nối. `cmd/callsignal`
+> cố ý gửi một `from` giả để canh điểm này.
+- [x] Định tuyến bản tin gọi qua cơ chế fan-out của Phase 5 — không viết gì mới, `PushCall` dùng chung đường với chat và thông báo
+- [x] Đổ chuông trên **mọi thiết bị** của người nhận; ai bắt máy trước thì các thiết bị còn lại nhận `call.cancelled`
+> Chính chỗ này sinh ra một lỗi đáng nhớ ở frontend: máy chủ không phân biệt
+> được THIẾT BỊ, chỉ biết nhân viên, nên bản sao `call.cancelled` về luôn tab
+> vừa bấm "Nghe". Client gộp cancelled chung với ended thì màn hình cuộc gọi
+> hiện lên rồi biến mất ngay. `call.cancelled` chỉ được tắt CHUÔNG.
+- [x] Tự huỷ cuộc gọi nếu không ai bắt máy sau 45 giây — client tự tắt theo `expires_at` của máy chủ, job ở worker quét mỗi 15 giây làm phần còn lại
+- [x] Kiểm tra quyền khi mời: chỉ thành viên hội thoại mới gọi được vào hội thoại đó — trả **404 chứ không phải 403**, vì 403 là xác nhận cuộc gọi đó có thật
+- [x] Người gọi rớt mạng giữa chừng: hub gọi `HandleDisconnect` khi kết nối **cuối cùng** của một người đóng
 - [x] Chốt hành vi khi người nhận đang bận cuộc khác — **từ chối ngay**, xem bảng quyết định ở trên
 
 ### Migration & lưu trữ
@@ -962,39 +980,59 @@ Lệnh chạy:
 - [ ] Thống kê vận hành: số cuộc gọi, thời lượng trung bình, **tỉ lệ phải relay qua TURN** (chỉ số quyết định chi phí băng thông)
 
 ### TURN / NAT traversal — làm SỚM, đừng để cuối phase
-- [ ] Dựng TURN server (dùng bản tích hợp trong LiveKit, hoặc coturn riêng nếu muốn tách)
-- [ ] Xác thực TURN bằng credential tạm thời (HMAC theo thời gian). **Không dùng user/pass tĩnh** — lộ ra là bị dùng chùa băng thông
-- [ ] `GET /api/v1/calls/ice-servers` — cấp credential TURN ngắn hạn (TTL khoảng 10 phút) cho người đã đăng nhập
+- [x] Dựng TURN server — **bản tích hợp trong LiveKit**, xem bảng quyết định
+- [x] Xác thực TURN bằng credential tạm thời (HMAC theo thời gian). **Không dùng user/pass tĩnh**
+> Mã có và có test tính lại HMAC ĐỘC LẬP thay vì gọi cùng hàm — đổi thuật toán
+> là credential hết hiệu lực trên TURN server thật, và test phải bắt được điều đó.
+> Hiện **chưa dùng tới** vì LiveKit tự cấp credential TURN của nó qua đường
+> signaling riêng. Điền `TURN_URLS` và `TURN_SECRET` là dùng được coturn riêng.
+- [x] `GET /api/v1/calls/ice-servers` — cấp credential TURN ngắn hạn (TTL 30 phút) cho người đã đăng nhập
 - [ ] Bật listener TURN trên **TCP cổng 443** làm đường cuối cho mạng chặn UDP
 - [ ] Kiểm chứng trên **mạng 4G**, **mạng công ty** và **máy sau VPN** — ba môi trường này hỏng theo ba kiểu khác nhau
 - [ ] Đo và ghi log tỉ lệ kết nối phải đi qua TURN
 
 ### SFU — gọi nhóm
-- [ ] Dựng LiveKit bằng container, đặt khoá API riêng, không để khoá mặc định
-- [ ] Backend cấp **access token** vào phòng: nhúng `room`, `identity`, quyền publish/subscribe, TTL ngắn
-- [ ] `POST /api/v1/calls/{id}/token` — kiểm tra người gọi là thành viên hội thoại rồi mới phát token. **Không để client tự chọn phòng**
-- [ ] Đặt tên phòng theo `call_id`, không theo `conversation_id` (một hội thoại có nhiều cuộc gọi theo thời gian)
-- [ ] Bật **simulcast**: mỗi người gửi 3 mức 180p/360p/720p, server chọn mức phù hợp cho từng người nhận
+- [x] Dựng LiveKit bằng container, đặt khoá API riêng, không để khoá mặc định
+> Khoá đi bằng biến môi trường chứ KHÔNG nằm trong `docker/livekit/livekit.yaml`,
+> vì tệp đó nằm trong kho mã. Cặp mẫu `devkey/secret` mà tài liệu LiveKit hay
+> dẫn thì ai cũng biết — và biết nó là tự ký được token vào MỌI phòng họp.
+- [x] Backend cấp **access token** vào phòng: nhúng `room`, `identity`, quyền publish/subscribe, TTL 10 phút
+> Quyền publish/subscribe đặt TƯỜNG MINH. Trong SDK chúng là con trỏ, và `nil`
+> nghĩa là "theo mặc định của máy chủ" chứ không phải `false` — mặc định đó
+> đổi được ở phía LiveKit mà backend không hay biết.
+- [x] `POST /api/v1/calls/{id}/token` — kiểm tra thành viên rồi mới phát token; tên phòng **nhúng sẵn trong token** nên client không tự chọn được
+- [x] Đặt tên phòng theo `call_id`, không theo `conversation_id`
+- [x] Bật **simulcast** ngay từ đầu, kèm `adaptiveStream` và `dynacast`
 - [ ] Chỉ hiện người đang nói ở độ nét cao, phần còn lại hạ xuống 180p
 - [ ] Giới hạn số người mỗi phòng (đề xuất khởi điểm: 16) và số phòng chạy song song
-- [ ] Phát hiện người đang nói (active speaker) để làm nổi khung trên giao diện
+- [x] Phát hiện người đang nói (active speaker) để làm nổi khung trên giao diện
 - [ ] Webhook từ SFU về backend: người vào/rời phòng, phòng đóng → cập nhật `call_participants`
-- [ ] Dọn phòng rác: tự đóng phòng không còn ai sau 30 giây
+- [x] Dọn phòng rác: cuộc gọi tự kết thúc khi không còn là một cuộc gọi nữa
+> Điều kiện KHÔNG phải "phòng rỗng". Gọi 1-1 mà đầu kia từ chối thì người gọi
+> VẪN đang trong phòng — hỏi "phòng có rỗng không" sẽ để cuộc gọi treo mãi ở
+> `ringing`, và chỉ mục một phần khiến hội thoại đó không gọi được nữa. Luật
+> đúng: còn sống khi có từ HAI người trong phòng, HOẶC một người trong phòng
+> và một người chưa bắt máy. Hằng `EmptyRoomGrace` 30 giây hiện **chưa dùng
+> tới** — kết thúc ngay, không chờ.
 
 ### Gọi 1-1
-- [ ] Đi P2P trực tiếp khi đục được NAT, tự chuyển qua TURN/SFU khi thất bại
-- [ ] Khởi tạo `RTCPeerConnection` với danh sách ICE lấy từ `/calls/ice-servers`
-- [ ] Xử lý **renegotiation** khi bật/tắt camera hoặc thêm luồng màn hình giữa cuộc gọi
-- [ ] Xử lý **ICE restart** khi đổi mạng (WiFi sang 4G) thay vì để rớt cuộc gọi
-- [ ] Gọi thoại (chỉ audio) dùng chung luồng này, khác ở chỗ không xin quyền camera
+
+**Chốt: gọi 1-1 cũng đi qua SFU.** Xem bảng quyết định ở đầu mục. Bốn gạch
+đầu dòng dưới đây là việc của đường P2P, và SFU đã làm sẵn cả bốn.
+
+- [ ] Đi P2P trực tiếp khi đục được NAT — **cố ý chưa làm**
+- [ ] Khởi tạo `RTCPeerConnection` với danh sách ICE tự quản — **cố ý chưa làm**
+- [x] Xử lý **renegotiation** khi bật/tắt camera hoặc thêm luồng màn hình — SFU lo
+- [x] Xử lý **ICE restart** khi đổi mạng — SFU lo, kèm tự nối lại
+- [x] Gọi thoại (chỉ audio) dùng chung luồng, khác ở chỗ không xin quyền camera
 
 ### Trình chiếu màn hình
-- [ ] `getDisplayMedia()` — thêm track màn hình vào cuộc gọi **đang chạy**, không mở cuộc gọi mới
+- [x] `getDisplayMedia()` — thêm track màn hình vào cuộc gọi **đang chạy**; màn hình chia sẻ là một ô RIÊNG, không thay ô camera
 - [ ] Đặt `contentHint`: `text` cho màn hình tĩnh (ưu tiên nét chữ), `motion` khi chiếu video. Khác biệt rõ rệt, đừng bỏ qua
 - [ ] Giới hạn bitrate riêng cho luồng màn hình: 1080p chữ tĩnh khoảng 0.5 Mbps nhưng chiếu video có thể vọt lên 3 Mbps
 - [ ] Mỗi lúc chỉ một người chiếu; người sau muốn chiếu phải được nhường hoặc thay thế
-- [ ] Bắt sự kiện `track.onended` để đồng bộ khi người dùng bấm "Dừng chia sẻ" của **trình duyệt** thay vì nút trong app
-- [ ] Ghi nhận trong `call_participants` ai đã chiếu màn hình (phục vụ audit)
+- [x] Đồng bộ khi người dùng bấm "Dừng chia sẻ" của **trình duyệt** — trạng thái nút đọc từ PHÒNG chứ không từ state riêng, nên nó luôn nói đúng sự thật
+- [ ] Ghi nhận trong `call_participants` ai đã chiếu màn hình — **chưa làm, chờ webhook SFU** (xem bảng trạng thái)
 - [ ] Nói rõ trên giao diện: chia sẻ **tab trình duyệt** mới kèm được âm thanh, chia sẻ **toàn màn hình** thì không — giới hạn của trình duyệt, đừng để người dùng tưởng lỗi
 
 ### Ghi hình (tuỳ chọn — chỉ làm khi có nhu cầu thật)
@@ -1004,25 +1042,32 @@ Lệnh chạy:
 - [ ] Chính sách lưu trữ và tự xoá sau N ngày — video ăn dung lượng rất nhanh
 
 ### Frontend
-- [ ] Nút gọi trong khung chat: gọi thoại / gọi video, cho cả hội thoại 1-1 và nhóm
-- [ ] Giao diện đổ chuông: chấp nhận / từ chối, có âm thanh, hiện cả khi đang ở trang khác
-- [ ] Màn hình cuộc gọi: lưới video tự đổi bố cục theo số người, ghim người đang nói
-- [ ] Thanh điều khiển: tắt/bật mic, camera, chia sẻ màn hình, rời cuộc gọi
+- [x] Nút gọi trong khung chat: gọi thoại / gọi video, cho cả hội thoại 1-1 và nhóm; đổi thành "Tham gia cuộc gọi" khi hội thoại đang có cuộc gọi
+- [x] Giao diện đổ chuông: chấp nhận / từ chối, có âm thanh, hiện cả khi đang ở trang khác
+> Chuông dựng bằng WebAudio chứ không phải tệp mp3: một tệp chuông tử tế nặng
+> vài trăm KB và phải tải xong mới kêu được — cuộc gọi tới là đúng lúc không
+> được chờ tải gì cả. Màn hình đổ chuông **không bao giờ chỉ dựa vào tiếng**:
+> trình duyệt chặn phát âm thanh ở tab chưa được chạm vào.
+- [x] Màn hình cuộc gọi: lưới video tự đổi bố cục theo số người, viền sáng người đang nói, màn hình chia sẻ lên trước
+- [x] Thanh điều khiển: tắt/bật mic, camera, chia sẻ màn hình, rời cuộc gọi, kết thúc cho tất cả (chỉ người khởi tạo)
 - [ ] Màn hình kiểm tra thiết bị trước khi vào: chọn mic/camera/loa, xem trước hình, đo mức âm thanh
-- [ ] Xử lý khi người dùng **từ chối quyền** camera/mic: hướng dẫn bật lại, không để màn hình trắng
+- [x] Xử lý khi người dùng **từ chối quyền** camera/mic — mic và camera bật trong HAI khối try riêng, nên máy không có webcam không mất luôn cả micro
 - [ ] Hiện chất lượng kết nối (tốt / yếu / mất kết nối) dựa trên thống kê WebRTC
-- [ ] Cửa sổ nổi (picture-in-picture) khi rời khỏi trang cuộc gọi
-- [ ] Chặn mở cuộc gọi ở nhiều tab cùng lúc (dùng BroadcastChannel như Phase 5)
+- [x] Cửa sổ nổi (picture-in-picture), kèm nút thu gọn màn hình cuộc gọi thành một ô nhỏ
+- [x] Chặn mở cuộc gọi ở nhiều tab cùng lúc (BroadcastChannel)
+> Hai tab cùng vào một phòng là hai luồng tiếng của CÙNG một cái micro, và
+> tiếng vọng giữa chúng tạo ra tiếng hú. Backend KHÔNG giải được: với nó cả
+> hai tab đều là cùng một nhân viên có quyền hợp lệ.
 - [ ] Báo rõ khi trình duyệt không hỗ trợ (Safari cũ, trình duyệt nhúng trong app Facebook/Zalo)
 
 ### Hạ tầng & Docker — phần dễ sai nhất
 - [ ] **HTTPS trở thành bắt buộc, không còn là tuỳ chọn.** `getUserMedia` và `getDisplayMedia` chỉ chạy trong secure context. `localhost` được miễn, nhưng test qua IP LAN là hỏng ngay → **kéo phần TLS của Phase 6 lên làm trước phase này**
-- [ ] Media **không** đi qua nginx. Nginx chỉ còn proxy signaling (`/ws`) và REST — không cấu hình proxy cho cổng media
-- [ ] Dùng **UDP mux một cổng** của LiveKit (ví dụ `7881/udp`). **Không** map dải cổng UDP rộng trong Docker: `docker-proxy` sinh một tiến trình cho mỗi cổng, khởi động cực chậm hoặc treo luôn
-- [ ] Không dùng `network_mode: host` cho SFU — mất cách ly mạng, và **không chạy được trên Docker Desktop Windows**, tức là hỏng luôn môi trường dev
-- [ ] Bật `use_external_ip` cho SFU khi chạy sau NAT (VPS, cloud)
+- [x] Media **không** đi qua nginx — trình duyệt nối thẳng tới SFU bằng `media_url` trả về trong lời gọi mở cuộc gọi
+- [x] Dùng **UDP mux một cổng** (`7882/udp`), kèm TCP `7881` làm đường dự phòng khi mạng chặn UDP
+- [x] Không dùng `network_mode: host` cho SFU
+- [x] `use_external_ip` có trong cấu hình, đặt `false` cho dev và có chú thích phải bật khi chạy sau NAT
 - [ ] Mở UDP ở firewall / security group; nhiều nhà cung cấp chặn UDP mặc định
-- [ ] Đặt `deploy.resources.limits` riêng cho SFU — nó ăn CPU và băng thông khác hẳn `api`
+- [x] Đặt `deploy.resources.limits` riêng cho SFU (2 CPU, 1 GB)
 - [ ] Thêm SFU và TURN vào stack giám sát Phase 6: băng thông vào/ra, số phòng, số người, tỉ lệ relay
 
 ### Ước lượng băng thông — tính trước khi mở cho toàn công ty
@@ -1040,12 +1085,28 @@ Băng thông **gửi đi của server tăng theo bình phương** số người 
 Kết luận thực dụng: **simulcast không phải là tối ưu hoá, nó là điều kiện để chạy được.** Làm ngay từ đầu, đừng để dành.
 
 ### Nghiệm thu Phase 7
-- [ ] Gọi 1-1 giữa hai máy khác mạng (một WiFi, một 4G) — thông, hình và tiếng ổn định
+
+**Đã làm — đo trên stack Docker thật, qua nginx:**
+
+| Bộ | Kết quả | Kiểm điều gì |
+|---|---|---|
+| `scripts/smoke-call.sh` | **34/34** | Vòng đời, phân quyền, token, lịch sử, tin nhắn hệ thống |
+| `cmd/callsignal` | **14/14** | Đường signaling qua WebSocket, kể cả chống mạo danh `from` |
+| `e2e/call.spec.ts` | **2/2** | Hai trình duyệt thật, mic và camera giả |
+| Toàn bộ smoke | **320/320** | Bảy bộ, không hồi quy |
+| Toàn bộ Playwright | **10/10**, chạy liền hai lần | |
+
+**Chưa làm — cần máy và mạng thật, không dựng được trên một máy:**
+
+- [ ] Gọi 1-1 giữa hai máy khác mạng (một WiFi, một 4G)
 - [ ] Gọi nhóm 6 người qua SFU — không ai vỡ hình, CPU máy client không quá tải
-- [ ] Trình chiếu màn hình giữa lúc đang gọi — chữ trên màn hình đọc được rõ
-- [ ] Gọi được từ **mạng công ty chặn UDP** — chứng minh fallback TURN qua TCP/443 hoạt động
-- [ ] Đổi WiFi sang 4G giữa cuộc gọi — ICE restart chạy, cuộc gọi không rớt
+- [ ] Trình chiếu màn hình giữa lúc đang gọi — chữ đọc được rõ
+- [ ] Gọi được từ **mạng công ty chặn UDP**
+- [ ] Đổi WiFi sang 4G giữa cuộc gọi — cuộc gọi không rớt
 - [ ] `docker compose up -d --scale api=3` — signaling vẫn đúng khi hai người nối vào hai instance khác nhau
+
+> Một phép thử chưa chạy không được tính là đã đạt. Sáu dòng trên vẫn để trống
+> cho đến khi có người thật ngồi ở hai đầu mạng khác nhau và bấm gọi.
 
 ---
 

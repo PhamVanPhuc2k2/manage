@@ -12,7 +12,7 @@ runbook là hướng dẫn xử lý.
 
 | Service | Image | Cổng | Vai trò |
 |---|---|---|---|
-| `nginx` | nginx:1.27-alpine | 80, 443 | Container **duy nhất** mở cổng ra ngoài. TLS, giới hạn tốc độ, nâng cấp WebSocket |
+| `nginx` | nginx:1.27-alpine | 80, 443 | Cửa ra vào duy nhất của **lưu lượng HTTP**. TLS, giới hạn tốc độ, nâng cấp WebSocket. Media KHÔNG đi qua đây |
 | `api` | tự build | 8080 (nội bộ) | REST + WebSocket. Scale được nhiều replica |
 | `worker` | tự build | 8080 (nội bộ) | Job nền qua RabbitMQ + job định kỳ. Cổng 8080 chỉ phục vụ `/metrics` và `/health` |
 | `frontend` | tự build | 3000 (nội bộ) | Next.js |
@@ -20,6 +20,7 @@ runbook là hướng dẫn xử lý.
 | `redis` | redis:7-alpine | 6379 (nội bộ) | Phiên đăng nhập, presence, giới hạn tốc độ |
 | `rabbitmq` | rabbitmq:3.13-management-alpine | 5672, 15672, 15692 (nội bộ) | Hàng đợi job + fan-out realtime |
 | `migrate` | migrate/migrate:v4.18.1 | — | Chạy một lần rồi thoát |
+| `livekit` | livekit/livekit-server:v1.13.7 | 7880, 7881, 7882/udp, 3478/udp | Máy chủ media cho gọi thoại/video. **Mở cổng ra ngoài** — xem mục riêng bên dưới |
 | `mailhog` | mailhog/mailhog | 8025 | **Chỉ dev.** Hộp thư giả |
 | `adminer` | adminer | 8081 | **Chỉ dev.** Giao diện database |
 
@@ -178,6 +179,131 @@ for s in auth hr project attendance payroll chat; do
   ADMIN_PASS='...' bash scripts/smoke-$s.sh
 done
 ```
+
+## Máy chủ media (LiveKit)
+
+### Vì sao media không đi qua nginx
+
+nginx là proxy HTTP. Đẩy âm thanh và hình ảnh thời gian thực qua nó là thêm
+một chặng buffer vào đường mà mọi mili giây đều nghe thấy. Trình duyệt nối
+THẲNG tới LiveKit bằng địa chỉ `media_url` mà API trả về trong lời gọi mở
+cuộc gọi.
+
+Hệ quả vận hành: **bốn cổng dưới đây phải mở trên firewall**, không chỉ
+443 như phần còn lại của hệ thống.
+
+| Cổng | Giao thức | Dùng khi nào |
+|---|---|---|
+| 7880 | TCP | Signaling của LiveKit (WebSocket). Bắt buộc |
+| 7882 | **UDP** | Toàn bộ media, gồm chung một cổng (UDP mux). Đường chính |
+| 7881 | TCP | Media khi mạng chặn UDP. Chậm hơn hẳn nhưng vẫn gọi được |
+| 3478 | UDP | TURN tích hợp |
+
+> **Nhiều nhà cung cấp chặn UDP mặc định.** Không mở 7882/udp thì cuộc gọi
+> vẫn "kết nối được" — nó rơi về TCP 7881 — nhưng tiếng sẽ giật và không ai
+> hiểu vì sao. Kiểm cổng UDP trước khi kết luận là lỗi ứng dụng.
+
+### MỘT cổng UDP, không phải một dải
+
+Hướng dẫn WebRTC thông thường bảo map dải `50000-60000/udp`. **Đừng làm thế
+trong Docker.** Docker sinh một tiến trình `docker-proxy` cho MỖI cổng được
+publish: mười nghìn tiến trình, máy dev treo và máy chủ khởi động hàng phút.
+
+LiveKit gom toàn bộ media về một cổng UDP duy nhất và tách luồng bằng thông
+tin trong gói tin. Cấu hình ở `docker/livekit/livekit.yaml`, khoá `rtc.udp_port`.
+
+Cũng **không dùng `network_mode: host`**: mất cách ly mạng, và không chạy
+được trên Docker Desktop Windows — tức là hỏng luôn môi trường dev của cả
+đội.
+
+### Khoá API
+
+Hai biến trong `.env`:
+
+```
+LIVEKIT_API_KEY=APIdev...
+LIVEKIT_API_SECRET=...
+```
+
+Chúng đi vào container bằng biến môi trường `LIVEKIT_KEYS`, **không** nằm
+trong `docker/livekit/livekit.yaml` — tệp đó nằm trong kho mã.
+
+**Không dùng cặp mẫu `devkey/secret`** mà tài liệu LiveKit hay dẫn: ai cũng
+biết nó, và biết nó là tự ký được token vào MỌI phòng họp. Sinh bộ mới:
+
+```bash
+openssl rand -hex 32
+```
+
+Đổi khoá thì phải khởi động lại **cả livekit lẫn api**: api ký token bằng
+khoá cũ sẽ bị LiveKit từ chối.
+
+```bash
+docker compose up -d --force-recreate livekit api worker
+```
+
+### Chạy sau NAT (VPS, cloud)
+
+Mặc định `rtc.use_external_ip: false` — đúng cho dev, nơi mọi thứ là localhost.
+
+Trên VPS phải **bật lên**, nếu không LiveKit quảng bá IP nội bộ của container
+(`172.x.x.x`) cho trình duyệt, và không ai kết nối được.
+
+### HTTPS là BẮT BUỘC
+
+`getUserMedia` và `getDisplayMedia` chỉ chạy trong **secure context**. `localhost`
+được miễn, nên dev trên máy cá nhân chạy được. Nhưng:
+
+- thử qua IP LAN (`http://192.168.1.10`) là **hỏng ngay**, không xin được mic;
+- khi đó `LIVEKIT_PUBLIC_URL` cũng phải là `wss://`, không phải `ws://` —
+  trang https không mở được WebSocket không mã hoá.
+
+Triệu chứng khi thiếu HTTPS: giao diện báo "Không gọi được trên trình duyệt
+này" — câu đó có chủ đích, xem `frontend/src/features/call/support.ts`.
+
+### Kiểm tra nhanh
+
+```bash
+# LiveKit đã sẵn sàng chưa
+docker compose exec livekit wget -q -O- http://127.0.0.1:7880/
+
+# Chỉ số vận hành (cổng riêng, không publish ra host)
+docker compose exec livekit wget -q -O- http://127.0.0.1:6789/metrics | grep ^livekit_
+```
+
+Ba chỉ số đáng theo dõi nhất:
+
+| Chỉ số | Ý nghĩa |
+|---|---|
+| `livekit_room_total` | Số phòng đang mở. Tăng dần mà không giảm = phòng rác không được dọn |
+| `livekit_participant_total` | Số người đang trong cuộc gọi. Quyết định chi phí băng thông |
+| `livekit_node_packet_total{type="dropped"}` | Gói tin bị bỏ. Tăng nhanh = máy chủ quá tải hoặc đường truyền nghẽen |
+
+Prometheus đã có sẵn job `livekit` (xem `docker/monitoring/prometheus/prometheus.yml`).
+
+### Giới hạn đã đặt
+
+| Giới hạn | Giá trị | Ở đâu |
+|---|---|---|
+| Số người mỗi phòng | 16 | `docker/livekit/livekit.yaml`, `room.max_participants` |
+| Tự đóng phòng rỗng | 60 giây | `room.empty_timeout` |
+| CPU / RAM của SFU | 2 CPU, 1 GB | `docker-compose.yml`, `deploy.resources.limits` |
+| Bitrate luồng màn hình | 1.5 Mbps, 15 khung/giây | `frontend/src/features/call/CallScreen.tsx` |
+| Thời gian đổ chuông | 45 giây | `backend/internal/domain/call/entity.go` |
+| Hạn token vào phòng | 10 phút | cùng tệp |
+
+**Số người mỗi phòng là giới hạn quan trọng nhất.** Băng thông gửi đi của
+máy chủ tăng theo bình phương số người. Xem bảng ước lượng trong
+`doc/TASKS.md` trước khi nâng.
+
+### Chưa làm
+
+- **Webhook từ LiveKit về backend.** Ba cờ `had_audio/had_video/had_screen` và
+  cột `relay_ratio` trong `call_participants` hiện không bao giờ được ghi.
+- **TURN trên TCP cổng 443.** Đường dự phòng hiện tại là RTC qua TCP 7881.
+  Cổng 443 cần chứng chỉ thật nên đi cùng khối HTTPS.
+- **Nhiều instance LiveKit.** Cấu hình hiện tại không dùng Redis (lý do ghi
+  trong chính tệp cấu hình), nên **chỉ chạy ĐÚNG MỘT instance**.
 
 ## Scale
 
