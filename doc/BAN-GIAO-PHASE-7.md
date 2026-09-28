@@ -20,7 +20,7 @@ hình, cúp máy, và khung chat có dòng "Cuộc gọi video · 12 phút".
 | 7 bộ smoke (thêm `smoke-call.sh` 37 phép) | **323/323** |
 | `cmd/callsignal` — đường signaling qua WebSocket | **14/14** |
 | `cmd/callsignal` khi `--scale api=3` | **14/14**, hai người ở hai instance khác nhau |
-| Playwright, hai trình duyệt thật | **10/10** |
+| Playwright, hai trình duyệt thật | **11/11** |
 | Unit test `usecase/call` | 81.7% |
 | Unit test `repository/media` | 92.7% |
 | Integration test trên PostgreSQL thật | 14 phép cho module gọi |
@@ -66,9 +66,12 @@ TCP cổng 443 cũng cần chứng chỉ thật.
 
 ### Làm dở, nhỏ
 
-- **Bảng chọn thiết bị** (`DevicePanel.tsx`) đã viết xong, qua `tsc` và
-  `eslint`, nhưng **chưa mở ra trong trình duyệt thật lần nào**. Đây là thứ
-  đầu tiên nên kiểm khi quay lại.
+- ~~**Bảng chọn thiết bị**~~ — **xong ngày 28/09**, đã chạy trong Chromium thật
+  và có phép thử Playwright riêng. Lần mở đầu tiên lộ ba lỗi: select luôn
+  hiện dòng đầu thay vì thiết bị đang dùng; `switchActiveDevice` thất bại
+  thì im lặng (SDK trả `false`, không throw); và thanh đo micro đứng im vì
+  đọc `audioLevel` của SFU — giờ đo tại máy. Còn lại: **chỉnh hệ số của
+  thanh đo trên micro thật** (hiện mới đo với micro giả).
 - "Mỗi lúc chỉ một người chiếu màn hình" — chưa làm.
 - "Chỉ hiện người đang nói ở độ nét cao" — hiện đang dựa vào `adaptiveStream`
   và `dynacast` của LiveKit, chưa tự điều khiển.
@@ -170,7 +173,7 @@ cd frontend && E2E_ADMIN_PASSWORD='E2eSmoke#1790151133' pnpm e2e
 
 ## Việc tiếp theo, theo thứ tự đề xuất
 
-1. **Mở bảng chọn thiết bị trong trình duyệt** và sửa nốt nếu có gì lệch.
+1. ~~Mở bảng chọn thiết bị trong trình duyệt~~ — xong.
 2. **Merge nhánh vào `main`** — phần lõi đã nghiệm thu đầy đủ.
 3. **Làm khối HTTPS của Phase 6.** Nó chặn cả việc thử trong mạng LAN lẫn
    listener TURN trên 443, tức là chặn luôn năm mục nghiệm thu còn lại.

@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Room, type LocalParticipant } from "livekit-client";
+import {
+  ParticipantEvent,
+  Room,
+  RoomEvent,
+  Track,
+  createAudioAnalyser,
+  type LocalAudioTrack,
+  type LocalParticipant,
+} from "livekit-client";
 
 /**
  * Bảng chọn thiết bị, mở ngay TRONG cuộc gọi.
@@ -28,6 +36,20 @@ export function DevicePanel({
   const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Thiết bị ĐANG dùng, theo từng loại. Select phải hiện đúng cái này chứ
+  // không phải dòng đầu danh sách — không thì bảng nói "đang dùng micro A"
+  // trong khi thực ra là B, và chọn lại A cũng không bắn onChange.
+  const [active, setActive] = useState<
+    Partial<Record<MediaDeviceKind, string>>
+  >(() => readActive(room));
+  useEffect(() => {
+    const sync = () => setActive(readActive(room));
+    room.on(RoomEvent.ActiveDeviceChanged, sync);
+    return () => {
+      room.off(RoomEvent.ActiveDeviceChanged, sync);
+    };
+  }, [room]);
+
   // Tải danh sách MỘT lần khi mở, và tải lại khi người dùng cắm hay rút
   // thiết bị. Không có bước thứ hai thì cắm tai nghe giữa cuộc gọi xong
   // mở bảng này ra vẫn không thấy nó.
@@ -51,9 +73,12 @@ export function DevicePanel({
 
   const pick = async (kind: MediaDeviceKind, deviceId: string) => {
     try {
-      await room.switchActiveDevice(kind, deviceId);
-      setError(null);
+      // SDK báo thất bại bằng giá trị trả về chứ không chỉ bằng exception.
+      const ok = await room.switchActiveDevice(kind, deviceId);
+      setActive(readActive(room));
+      setError(ok ? null : "Không chuyển được sang thiết bị này");
     } catch {
+      setActive(readActive(room));
       setError("Không chuyển được sang thiết bị này");
     }
   };
@@ -79,13 +104,18 @@ export function DevicePanel({
       <DeviceSelect
         label="Micro"
         devices={mics}
+        value={active.audioinput}
         onPick={(id) => void pick("audioinput", id)}
       />
-      <MicLevel participant={room.localParticipant} />
+      <MicLevel
+        participant={room.localParticipant}
+        deviceId={active.audioinput}
+      />
 
       <DeviceSelect
         label="Camera"
         devices={cams}
+        value={active.videoinput}
         onPick={(id) => void pick("videoinput", id)}
       />
 
@@ -98,6 +128,7 @@ export function DevicePanel({
         <DeviceSelect
           label="Loa"
           devices={speakers}
+          value={active.audiooutput}
           onPick={(id) => void pick("audiooutput", id)}
         />
       )}
@@ -108,20 +139,32 @@ export function DevicePanel({
 function DeviceSelect({
   label,
   devices,
+  value,
   onPick,
 }: {
   label: string;
   devices: MediaDeviceInfo[];
+  value: string | undefined;
   onPick: (deviceId: string) => void;
 }) {
   return (
     <label className="mb-3 block">
       <span className="mb-1 block text-xs text-neutral-400">{label}</span>
       <select
+        // Chưa từng đổi thiết bị thì SDK chưa ghi nhận gì — lúc đó trình
+        // duyệt đang dùng thiết bị mặc định, tức dòng đầu danh sách.
+        value={
+          value && devices.some((d) => d.deviceId === value)
+            ? value
+            : (devices[0]?.deviceId ?? "")
+        }
+        disabled={devices.length === 0}
         onChange={(e) => onPick(e.target.value)}
         className="w-full rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-sm"
       >
-        {devices.length === 0 && <option>Không tìm thấy thiết bị</option>}
+        {devices.length === 0 && (
+          <option value="">Không tìm thấy thiết bị</option>
+        )}
         {devices.map((d, i) => (
           <option key={d.deviceId} value={d.deviceId}>
             {/*
@@ -137,35 +180,111 @@ function DeviceSelect({
   );
 }
 
+function readActive(room: Room): Partial<Record<MediaDeviceKind, string>> {
+  return {
+    audioinput: room.getActiveDevice("audioinput"),
+    videoinput: room.getActiveDevice("videoinput"),
+    audiooutput: room.getActiveDevice("audiooutput"),
+  };
+}
+
 /**
  * Thanh đo mức âm thanh của chính mình.
  *
- * Đọc audioLevel mà SDK đã tính sẵn thay vì tự dựng một AnalyserNode:
- * cùng con số mà SFU dùng để chọn người đang nói, nên thanh này nhảy đúng
- * lúc người khác thấy viền sáng quanh ô hình của mình.
+ * Đo NGAY TRÊN MÁY bằng một AnalyserNode gắn vào track micro, không đọc
+ * participant.audioLevel. Con số kia do SFU gửi về và chỉ khác 0 khi SFU coi
+ * mình là "người đang nói" — phải vượt ngưỡng và nói đủ lâu. Nó là đèn báo
+ * đang nói chứ không phải thanh đo: người nói nhỏ sẽ thấy thanh đứng im và
+ * kết luận micro hỏng, đúng tình huống bảng này sinh ra để gỡ. Đo tại chỗ
+ * thì thanh nhảy theo từng tiếng, kể cả tiếng nhỏ.
  */
-function MicLevel({ participant }: { participant: LocalParticipant }) {
+function MicLevel({
+  participant,
+  deviceId,
+}: {
+  participant: LocalParticipant;
+  // Đổi micro thì SDK thay mediaStreamTrack bên dưới — bộ đo gắn vào track
+  // cũ sẽ đo một track đã dừng. Truyền vào đây để dựng lại bộ đo.
+  deviceId: string | undefined;
+}) {
+  const [track, setTrack] = useState(() => micTrack(participant));
+  const [muted, setMuted] = useState(() => micMuted(participant));
   const [level, setLevel] = useState(0);
 
   useEffect(() => {
-    const t = setInterval(() => setLevel(participant.audioLevel), 100);
-    return () => clearInterval(t);
+    const sync = () => {
+      setTrack(micTrack(participant));
+      setMuted(micMuted(participant));
+    };
+    const events = [
+      ParticipantEvent.LocalTrackPublished,
+      ParticipantEvent.LocalTrackUnpublished,
+      ParticipantEvent.TrackMuted,
+      ParticipantEvent.TrackUnmuted,
+    ] as const;
+    events.forEach((e) => participant.on(e, sync));
+    return () => {
+      events.forEach((e) => participant.off(e, sync));
+    };
   }, [participant]);
+
+  useEffect(() => {
+    if (!track || muted) return;
+    let analyser: ReturnType<typeof createAudioAnalyser>;
+    try {
+      // Dải -100..-30 dB là mặc định của Web Audio. Mặc định của SDK
+      // (-100..-80) hẹp tới mức gần như mọi tiếng động đều đầy thanh, kể cả
+      // tiếng ồn nền — thanh luôn đầy thì cũng vô dụng như thanh đứng im.
+      analyser = createAudioAnalyser(track, {
+        minDecibels: -100,
+        maxDecibels: -30,
+      });
+    } catch {
+      return;
+    }
+    const t = setInterval(() => setLevel(analyser.calculateVolume()), 100);
+    return () => {
+      clearInterval(t);
+      void analyser.cleanup();
+    };
+  }, [track, muted, deviceId]);
+
+  // Mic tắt thì hiện 0 luôn, không giữ lại số đo cuối cùng trước khi tắt.
+  const live = track && !muted;
+  const shown = live ? level : 0;
 
   return (
     <div className="mb-3">
       <div className="mb-1 text-xs text-neutral-400">
-        Nói thử một câu — thanh dưới phải nhảy
+        {!live
+          ? "Mic đang tắt — bật mic để thử"
+          : "Nói thử một câu — thanh dưới phải nhảy"}
       </div>
-      <div className="h-2 overflow-hidden rounded bg-neutral-800">
+      <div
+        role="meter"
+        aria-label="Mức âm thanh micro"
+        aria-valuemin={0}
+        aria-valuemax={1}
+        aria-valuenow={shown}
+        className="h-2 overflow-hidden rounded bg-neutral-800"
+      >
         <div
           className="h-full bg-emerald-500 transition-[width] duration-100"
           // Nhân 3 vì tiếng nói bình thường chỉ quanh 0.1–0.3. Để nguyên
           // thì thanh gần như không nhúc nhích và người dùng kết luận là
-          // micro hỏng.
-          style={{ width: `${Math.min(100, level * 300)}%` }}
+          // micro hỏng. Hệ số này mới đo với micro GIẢ của Chromium (bíp
+          // liên tục, ~0.15–0.3) — cần chỉnh lại khi thử với micro thật.
+          style={{ width: `${Math.min(100, shown * 300)}%` }}
         />
       </div>
     </div>
   );
+}
+
+function micTrack(p: LocalParticipant): LocalAudioTrack | undefined {
+  return p.getTrackPublication(Track.Source.Microphone)?.audioTrack;
+}
+
+function micMuted(p: LocalParticipant): boolean {
+  return p.getTrackPublication(Track.Source.Microphone)?.isMuted ?? true;
 }

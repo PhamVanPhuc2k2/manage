@@ -1080,6 +1080,12 @@ Lệnh chạy:
 - [x] Màn hình cuộc gọi: lưới video tự đổi bố cục theo số người, viền sáng người đang nói, màn hình chia sẻ lên trước
 - [x] Thanh điều khiển: tắt/bật mic, camera, chia sẻ màn hình, rời cuộc gọi, kết thúc cho tất cả (chỉ người khởi tạo)
 - [ ] Màn hình kiểm tra thiết bị trước khi vào: chọn mic/camera/loa, xem trước hình, đo mức âm thanh
+- [x] Thay bằng **bảng chọn thiết bị mở ngay trong cuộc gọi** (nút "Thiết bị"): chọn mic/camera/loa, thanh đo mức micro. Chưa có xem trước hình — ô hình của chính mình đã là bản xem trước
+> Thanh đo đọc **tại máy** bằng AnalyserNode, không dùng `audioLevel` của
+> SFU: con số đó chỉ khác 0 khi SFU coi mình là người đang nói, nên người
+> nói nhỏ thấy thanh đứng im. Lỗi này lộ ra ngay lần đầu chạy trong trình
+> duyệt thật — phép thử lúc qua lúc hỏng. Hệ số khuếch đại của thanh mới
+> đo với micro giả, cần chỉnh lại trên micro thật.
 - [x] Xử lý khi người dùng **từ chối quyền** camera/mic — mic và camera bật trong HAI khối try riêng, nên máy không có webcam không mất luôn cả micro
 - [x] Hiện chất lượng kết nối, và **chỉ hiện khi đã yếu**
 > Một chỉ báo luôn hiện thì không ai nhìn. Chỉ hiện khi có chuyện thì nó trả
@@ -1132,9 +1138,9 @@ Kết luận thực dụng: **simulcast không phải là tối ưu hoá, nó l�
 |---|---|---|
 | `scripts/smoke-call.sh` | **34/34** | Vòng đời, phân quyền, token, lịch sử, tin nhắn hệ thống |
 | `cmd/callsignal` | **14/14** | Đường signaling qua WebSocket, kể cả chống mạo danh `from` |
-| `e2e/call.spec.ts` | **2/2** | Hai trình duyệt thật, mic và camera giả; kèm khẳng định SFU **thực sự nhận được** luồng mic và camera |
+| `e2e/call.spec.ts` | **3/3** | Hai trình duyệt thật, mic và camera giả; kèm khẳng định SFU **thực sự nhận được** luồng mic và camera, và bảng thiết bị hiện đúng thiết bị đang dùng, thanh đo micro nhảy |
 | Toàn bộ smoke | **320/320** | Bảy bộ, không hồi quy |
-| Toàn bộ Playwright | **10/10** | |
+| Toàn bộ Playwright | **11/11** | |
 | `callsignal` khi `--scale api=3` | **14/14** | Hai người nối vào HAI instance khác nhau — đã đối chiếu nhật ký: người gọi ở api-2, người nhận ở api-1. Bản tin phải đi vòng qua RabbitMQ mới tới nơi |
 
 **Chưa làm — cần máy và mạng thật, không dựng được trên một máy:**

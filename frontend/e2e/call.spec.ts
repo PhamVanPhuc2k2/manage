@@ -187,6 +187,72 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
     }
   });
 
+  test("bảng thiết bị: đúng thiết bị đang dùng, micro có tiếng, đổi được camera", async () => {
+    await calleePage.goto("/attendance");
+    await openConversation(callerPage, peer.fullName);
+    await callerPage.getByRole("button", { name: "Gọi video" }).click();
+    await expect(calleePage.getByText("Cuộc gọi video đến")).toBeVisible({
+      timeout: 20_000,
+    });
+    await calleePage.getByRole("button", { name: "Nghe" }).click();
+    await expect(
+      callerPage.getByRole("button", { name: "Rời cuộc gọi" }),
+    ).toBeVisible({ timeout: 20_000 });
+
+    await callerPage.getByRole("button", { name: "Thiết bị" }).click();
+
+    const mic = callerPage.getByRole("combobox", {
+      name: "Micro",
+      exact: true,
+    });
+    const cam = callerPage.getByRole("combobox", {
+      name: "Camera",
+      exact: true,
+    });
+
+    // Nhãn thật, không phải "Thiết bị 1": quyền đã cấp thì trình duyệt
+    // phải trả tên thiết bị. Nhãn rỗng nghĩa là danh sách được đọc trước
+    // khi có quyền.
+    await expect(mic.locator("option").first()).not.toHaveText(
+      /^Thiết bị \d+$/,
+    );
+    await expect(cam.locator("option").first()).not.toHaveText(
+      "Không tìm thấy thiết bị",
+    );
+
+    // Thanh đo phải nhảy. Micro giả của Chromium phát tiếng bíp mỗi giây,
+    // SFU báo mức âm thanh theo chu kỳ — chờ vài chu kỳ.
+    const meter = callerPage.getByRole("meter", { name: "Mức âm thanh micro" });
+    await expect
+      .poll(async () => Number(await meter.getAttribute("aria-valuenow")), {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(0);
+
+    // Đổi camera sang thiết bị khác (nếu máy có hơn một) và select phải
+    // giữ đúng lựa chọn, không nhảy về dòng đầu.
+    const camIds = await cam
+      .locator("option")
+      .evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+    if (camIds.length > 1) {
+      await cam.selectOption(camIds[1]);
+      await expect(cam).toHaveValue(camIds[1]);
+      await expect(
+        callerPage.getByText("Không chuyển được sang thiết bị này"),
+      ).toHaveCount(0);
+    }
+
+    await callerPage.getByRole("button", { name: "Đóng" }).click();
+    await expect(meter).toHaveCount(0);
+
+    await callerPage
+      .getByRole("button", { name: "Kết thúc cho tất cả" })
+      .click();
+    await expect(
+      calleePage.getByRole("button", { name: "Rời cuộc gọi" }),
+    ).toHaveCount(0, { timeout: 20_000 });
+  });
+
   test("từ chối cuộc gọi thì màn hình gọi đóng ở cả hai phía", async () => {
     await calleePage.goto("/attendance");
     await openConversation(callerPage, peer.fullName);
@@ -210,6 +276,5 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
     await expect(
       callerPage.getByRole("button", { name: "Rời cuộc gọi" }),
     ).toHaveCount(0, { timeout: 25_000 });
-
   });
 });
