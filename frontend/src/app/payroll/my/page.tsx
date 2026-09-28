@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { FormError } from "@/components/form";
+import { PayslipPdfButton } from "@/features/payroll/PayslipPdfButton";
 import { useMyPayslips, usePayslip } from "@/features/payroll/queries";
 import {
   COMPONENT_KIND_LABEL,
@@ -12,8 +13,6 @@ import {
   type Payslip,
 } from "@/features/payroll/types";
 import { ApiError } from "@/lib/api-client";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api/v1";
 
 function errMsg(e: unknown, fallback: string): string | null {
   if (!e) return null;
@@ -93,14 +92,13 @@ function PayslipDetail({ id }: { id: string }) {
     <div className="border-t border-neutral-200 px-4 py-3 dark:border-neutral-800">
       <Breakdown s={s} />
 
-      <a
-        href={`${API_BASE}/payroll/payslips/${s.id}/document`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-4 inline-block rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
-      >
-        Mở phiếu để in / lưu PDF
-      </a>
+      <div className="mt-4">
+        <PayslipPdfButton
+          payslipId={s.id}
+          label="Tải phiếu lương PDF"
+          className="rounded border border-neutral-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-neutral-700"
+        />
+      </div>
     </div>
   );
 }

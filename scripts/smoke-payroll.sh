@@ -292,6 +292,17 @@ check "Tài liệu hiển thị tiếng Việt có dấu" "yes" \
 check "Tài liệu giải thích cơ sở tính thuế" "yes" \
   "$(echo "$DOC" | grep -q 'CƠ SỞ TÍNH THUẾ' && echo yes || echo no)"
 
+# PDF dựng ở máy chủ, font tiếng Việt nhúng sẵn.
+PDF_HDR="$TMP/pdf-hdr.txt"
+check "Phiếu lương PDF → 200" 200 \
+  "$(curl -s -D "$PDF_HDR" -o "$TMP/slip.pdf" -w '%{http_code}' \
+     "$BASE/payroll/payslips/$SLIP_ID/pdf" -H "$AUTH")"
+check "…đúng là tệp PDF" "%PDF-" "$(head -c 5 "$TMP/slip.pdf")"
+check "…có nhúng font (dấu tiếng Việt không thành ô vuông)" "yes" \
+  "$(grep -qa 'FontFile2' "$TMP/slip.pdf" && echo yes || echo no)"
+check "…không cho lưu đệm" "yes" \
+  "$(grep -qi 'cache-control: no-store' "$PDF_HDR" && echo yes || echo no)"
+
 # ========================================== báo cáo
 echo
 echo "── Báo cáo chi phí nhân sự ──"
@@ -332,6 +343,8 @@ check "Token rác → 401" 401 \
   "$(code "$BASE/payroll/payslips" -H 'Authorization: Bearer rac')"
 check "Tài liệu phiếu lương không token → 401" 401 \
   "$(code "$BASE/payroll/payslips/$SLIP_ID/document")"
+check "Phiếu lương PDF không token → 401" 401 \
+  "$(code "$BASE/payroll/payslips/$SLIP_ID/pdf")"
 
 # --------------------------------------------------------------- dọn dẹp
 echo

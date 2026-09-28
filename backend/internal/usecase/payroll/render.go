@@ -37,18 +37,9 @@ func FormatVND(m domainpay.Money) string {
 
 // RenderPayslipHTML dựng phiếu lương thành một tài liệu HTML hoàn chỉnh.
 //
-// Vì sao HTML chứ không phải PDF sinh ở server:
-//
-// Sinh PDF có tiếng Việt cần NHÚNG một font TTF hỗ trợ Latin Extended
-// Additional (các ký tự ạ ả ấ ầ...). Bộ font lõi của PDF chỉ có Latin-1,
-// và mọi dấu tiếng Việt sẽ biến thành ô vuông — một phiếu lương không đọc
-// được thì tệ hơn là không có. Thêm một tệp font vào repo là quyết định về
-// giấy phép và dung lượng, nên nó phải là lựa chọn có ý thức của chủ dự án,
-// không phải thứ lẳng lặng kéo vào.
-//
-// Tài liệu này có sẵn CSS cho in ấn, nên "In / Lưu thành PDF" của trình
-// duyệt cho ra PDF đúng như nhìn thấy. Cùng một HTML dùng luôn làm nội dung
-// email — người nhận đọc được ngay trong hộp thư, không phải tải tệp về.
+// Dùng làm nội dung email — người nhận đọc được ngay trong hộp thư, không
+// phải mở tệp đính kèm. Bản tải về là PDF, dựng ở RenderPayslipPDF với cùng
+// nội dung và thứ tự; sửa bố cục một bên thì sửa cả bên kia.
 func RenderPayslipHTML(s *domainpay.Payslip, p *domainpay.Period) string {
 	var b strings.Builder
 

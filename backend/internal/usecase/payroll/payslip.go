@@ -289,31 +289,72 @@ func (u *Usecase) RenderPayslip(
 	actor *domainauth.Actor,
 	id uuid.UUID,
 ) (*PayslipDocument, error) {
+	s, p, err := u.payslipForDocument(ctx, actor, id, "document")
+	if err != nil {
+		return nil, err
+	}
+	return &PayslipDocument{
+		HTML:     RenderPayslipHTML(s, p),
+		FileName: payslipFileName(s, p) + ".html",
+	}, nil
+}
+
+// PayslipPDF là phiếu lương ở dạng PDF, dựng ở máy chủ.
+type PayslipPDF struct {
+	Data     []byte
+	FileName string
+}
+
+// RenderPayslipPDF dựng phiếu lương PDF. Cùng luật xem và cùng dấu vết
+// audit như bản HTML — chỉ khác định dạng ghi trong nhật ký.
+func (u *Usecase) RenderPayslipPDF(
+	ctx context.Context,
+	actor *domainauth.Actor,
+	id uuid.UUID,
+) (*PayslipPDF, error) {
+	s, p, err := u.payslipForDocument(ctx, actor, id, "pdf")
+	if err != nil {
+		return nil, err
+	}
+	data, err := RenderPayslipPDF(s, p)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	return &PayslipPDF{Data: data, FileName: payslipFileName(s, p) + ".pdf"}, nil
+}
+
+// payslipForDocument nạp phiếu và kỳ lương, kiểm quyền và ghi audit — phần
+// chung của mọi định dạng tài liệu.
+func (u *Usecase) payslipForDocument(
+	ctx context.Context,
+	actor *domainauth.Actor,
+	id uuid.UUID,
+	format string,
+) (*domainpay.Payslip, *domainpay.Period, error) {
 	s, err := u.payslips.GetByID(ctx, id)
 	if err != nil {
-		return nil, apperror.NotFound("phiếu lương")
+		return nil, nil, apperror.NotFound("phiếu lương")
 	}
 	if err := requireOwnOrAll(actor, s.EmployeeID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	p, err := u.periods.GetByID(ctx, s.PeriodID)
 	if err != nil {
-		return nil, apperror.NotFound("kỳ lương")
+		return nil, nil, apperror.NotFound("kỳ lương")
 	}
 
 	u.logAccess(ctx, actor, domainpay.AuditViewPayslip, "payslip", &id,
-		map[string]any{"format": "document"})
+		map[string]any{"format": format})
+	return s, p, nil
+}
 
+func payslipFileName(s *domainpay.Payslip, p *domainpay.Period) string {
 	name := strings.ReplaceAll(s.EmployeeCode, "/", "-")
 	if name == "" {
 		name = s.EmployeeID.String()[:8]
 	}
-
-	return &PayslipDocument{
-		HTML:     RenderPayslipHTML(s, p),
-		FileName: "phieu-luong-" + name + "-" + periodSlug(p) + ".html",
-	}, nil
+	return "phieu-luong-" + name + "-" + periodSlug(p)
 }
 
 func periodSlug(p *domainpay.Period) string {

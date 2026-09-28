@@ -3438,17 +3438,32 @@ paths:
       tags: [Lương]
       summary: Phiếu lương dạng tài liệu in được
       description: |
-        Trả về HTML hoàn chỉnh, in ra PDF được từ trình duyệt.
-
-        Chưa kết xuất PDF phía máy chủ: việc đó cần một font tiếng Việt nhúng
-        vào image, và đó là quyết định về giấy phép cùng dung lượng thuộc về
-        chủ hệ thống.
+        Trả về HTML hoàn chỉnh — cũng là nội dung email phiếu lương. Muốn tải
+        tệp thì dùng `/payroll/payslips/{id}/pdf`.
       responses:
         "200":
           description: OK
           content:
             text/html:
               schema: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /payroll/payslips/{id}/pdf:
+    parameters: [{ $ref: "#/components/parameters/PathID" }]
+    get:
+      tags: [Lương]
+      summary: Phiếu lương PDF, dựng ở máy chủ
+      description: |
+        Cùng nội dung và thứ tự với bản HTML. Font Be Vietnam Pro (SIL OFL)
+        nhúng dạng subset nên dấu tiếng Việt hiển thị đúng trên mọi máy.
+        Cùng luật xem và cùng ghi audit như bản HTML. Trả thẳng tệp, không
+        bọc JSON, kèm "Cache-Control: no-store".
+      responses:
+        "200":
+          description: Tệp PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /payroll/settings:

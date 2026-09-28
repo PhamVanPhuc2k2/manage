@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -389,6 +392,32 @@ func (h *PayrollHandler) Document(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, private")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(doc.HTML))
+}
+
+// PDF trả phiếu lương dạng PDF dựng ở máy chủ, để tải về.
+func (h *PayrollHandler) PDF(w http.ResponseWriter, r *http.Request) {
+	r = withAudit(r)
+	requestID := chimw.GetReqID(r.Context())
+
+	id, err := parseUUIDParam(r, "id")
+	if err != nil {
+		Error(w, err, requestID)
+		return
+	}
+
+	doc, err := h.uc.RenderPayslipPDF(r.Context(), appmw.ActorFrom(r.Context()), id)
+	if err != nil {
+		Error(w, err, requestID)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(
+		`attachment; filename="%s"; filename*=UTF-8''%s`, doc.FileName, url.PathEscape(doc.FileName)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(doc.Data)))
+	// Như bản HTML: dữ liệu lương cá nhân, không để proxy hay trình duyệt giữ.
+	w.Header().Set("Cache-Control", "no-store, private")
+	_, _ = w.Write(doc.Data)
 }
 
 type payslipUpdateRequest struct {

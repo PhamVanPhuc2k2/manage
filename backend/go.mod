@@ -18,6 +18,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/rs/zerolog v1.33.0
+	github.com/signintech/gopdf v0.38.1
 	github.com/spf13/viper v1.19.0
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
@@ -104,6 +105,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/petermattis/goid v0.0.0-20260820044319-269ab09b5261 // indirect
+	github.com/phpdave11/gofpdi v1.0.14-0.20211212211723-1f10f9844311 // indirect
 	github.com/pion/datachannel v1.6.2 // indirect
 	github.com/pion/dtls/v3 v3.1.5 // indirect
 	github.com/pion/ice/v4 v4.4.0 // indirect
@@ -120,6 +122,7 @@ require (
 	github.com/pion/transport/v4 v4.0.2 // indirect
 	github.com/pion/turn/v5 v5.0.12 // indirect
 	github.com/pion/webrtc/v4 v4.2.18 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.70.1 // indirect

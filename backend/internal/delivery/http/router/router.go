@@ -509,6 +509,8 @@ func New(d Deps) http.Handler {
 					Get("/payslips/{id}", d.Payroll.GetPayslip)
 				r.With(appmw.RequirePermission(domainauth.PermPayrollReadOwn)).
 					Get("/payslips/{id}/document", d.Payroll.Document)
+				r.With(appmw.RequirePermission(domainauth.PermPayrollReadOwn)).
+					Get("/payslips/{id}/pdf", d.Payroll.PDF)
 				r.With(appmw.RequirePermission(domainauth.PermPayrollManage)).
 					Put("/payslips/{id}", d.Payroll.UpdatePayslip)
 

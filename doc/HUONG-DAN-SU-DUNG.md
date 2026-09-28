@@ -472,9 +472,10 @@ nhân sự, kế toán và giám đốc mới xem được của người khác.
 Giảm trừ gia cảnh: **11 triệu** cho bản thân, **4,4 triệu** cho mỗi người phụ
 thuộc. Có người phụ thuộc chưa khai thì báo nhân sự.
 
-### In phiếu lương
+### Tải và in phiếu lương
 
-Mở phiếu → **In**. Trình duyệt sẽ in ra giấy hoặc lưu thành PDF.
+Mở phiếu → **Tải phiếu lương PDF**. Tệp PDF hiển thị đúng tiếng Việt trên mọi
+máy, và mở ra là in được ngay.
 
 ### Thấy sai
 

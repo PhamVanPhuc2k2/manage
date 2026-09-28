@@ -555,7 +555,16 @@ Lệnh chạy:
 - [x] Máy tính lương: chạy qua từng nhân viên, sinh `payslips` + `payslip_items`
 - [x] Chạy tính lương trong worker RabbitMQ (kỳ lương lớn không được chặn HTTP request)
 - [x] Vòng đời kỳ lương: `draft → locked → paid`; đã khoá thì không sửa được
-- [ ] Sinh phiếu lương PDF ở server (xem ghi chú trạng thái)
+- [x] Sinh phiếu lương PDF ở server
+> `GET /payroll/payslips/{id}/pdf`, dựng bằng `signintech/gopdf` với font
+> **Be Vietnam Pro** (SIL OFL 1.1, tệp giấy phép ở `usecase/payroll/fonts/`)
+> nhúng vào binary. Chủ dự án chọn cách này ngày 28/09/2026 thay vì thêm
+> container Chromium. Font được cắt gọn (subset): một phiếu khoảng 30 KB.
+> Cùng luật xem và cùng audit như bản HTML; bản HTML giữ làm nội dung email.
+>
+> Sửa kèm một lỗi có sẵn: nút "Mở phiếu để in" và link "Phiếu" trỏ thẳng
+> `<a href>` vào API nên tab mới không mang token và luôn nhận 401. Giờ tải
+> qua fetch có kèm token.
 - [x] Gửi phiếu lương qua email (hàng đợi worker)
 - [x] Kiểm soát truy cập nghiêm ngặt: chỉ HR, kế toán, giám đốc và chính chủ xem được
 - [x] Ghi `audit_logs` cho mọi thao tác xem/sửa dữ liệu lương
@@ -1239,6 +1248,6 @@ Việc còn làm được trên local, theo thứ tự:
 1. ~~Nhập nhân viên hàng loạt từ CSV/Excel (Phase 1)~~ — xong
 2. ~~Sơ đồ tổ chức dạng cây (Phase 1)~~ — xong
 3. ~~Xuất báo cáo chấm công ra Excel (Phase 3)~~ — xong
-4. Sinh phiếu lương PDF ở server (Phase 4)
+4. ~~Sinh phiếu lương PDF ở server (Phase 4)~~ — xong
 5. ~~Mỗi lúc chỉ một người chiếu màn hình (Phase 7)~~ — xong
 6. ~~Giới hạn số người mỗi phòng gọi (Phase 7)~~ — xong

@@ -20,6 +20,7 @@ import {
   monthLabel,
   type Payslip,
 } from "@/features/payroll/types";
+import { PayslipPdfButton } from "@/features/payroll/PayslipPdfButton";
 import { ApiError } from "@/lib/api-client";
 import { usePermission } from "@/lib/auth/useAuth";
 
@@ -27,8 +28,6 @@ function errMsg(e: unknown, fallback: string): string | null {
   if (!e) return null;
   return e instanceof ApiError ? e.message : fallback;
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api/v1";
 
 export default function PayrollPeriodPage({
   params,
@@ -251,14 +250,11 @@ export default function PayrollPeriodPage({
                 </td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex justify-end gap-2">
-                    <a
-                      href={`${API_BASE}/payroll/payslips/${s.id}/document`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs underline hover:no-underline"
-                    >
-                      Phiếu
-                    </a>
+                    <PayslipPdfButton
+                      payslipId={s.id}
+                      label="PDF"
+                      className="text-xs underline hover:no-underline disabled:opacity-50"
+                    />
                     {can("payroll:manage") && editable && (
                       <button
                         onClick={() => setEditing(s)}
