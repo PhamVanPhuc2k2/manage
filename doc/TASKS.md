@@ -1022,7 +1022,12 @@ Lệnh chạy:
 - [x] `POST /api/v1/calls/{id}/token` — kiểm tra thành viên rồi mới phát token; tên phòng **nhúng sẵn trong token** nên client không tự chọn được
 - [x] Đặt tên phòng theo `call_id`, không theo `conversation_id`
 - [x] Bật **simulcast** ngay từ đầu, kèm `adaptiveStream` và `dynacast`
-- [ ] Chỉ hiện người đang nói ở độ nét cao, phần còn lại hạ xuống 180p
+- [x] Chỉ hiện người đang nói ở độ nét cao, phần còn lại hạ xuống 180p
+> Làm bằng BỐ CỤC, không bằng lệnh đặt độ nét: với adaptiveStream, SDK chọn
+> lớp simulcast theo kích thước ô và bỏ qua setVideoQuality. Có màn hình
+> chiếu, hoặc từ 3 người, thì người đang nói (hay màn hình) lên ô lớn, còn
+> lại xuống dải ô rộng ~180px. Playwright đo độ phân giải THẬT đang giải mã
+> của camera người kia: ≥ 640 khi ở lưới, xuống 320 (lớp 180p) khi vào dải.
 - [x] Giới hạn số người mỗi phòng: **16**, đặt ở `docker/livekit/livekit.yaml`
 > Backend kiểm TRƯỚC khi phát token (bắt máy, vào cuộc gọi đang chạy, xin
 > lại token): người thứ 17 nhận 409 "Cuộc gọi đã đủ 16 người" thay vì một lỗi

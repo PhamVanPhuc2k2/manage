@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth/useAuth";
 
 import * as api from "./api";
 import { DevicePanel } from "./DevicePanel";
+import { spotlight } from "./spotlight";
 import {
   announceTakeover,
   currentPresenter,
@@ -50,6 +51,18 @@ function CallStage({ join: active }: { join: CallJoin }) {
 
   const kind = active.call.kind;
   const { room, phase, error, tiles } = useLiveKitRoom(active, kind);
+
+  // Người nói gần nhất (không tính mình), để ô lớn đứng yên khi cả phòng
+  // im lặng thay vì nhảy về người đầu danh sách.
+  const [lastSpeaker, setLastSpeaker] = useState<string>();
+  const speakingNow = tiles.find(
+    (t) => t.speaking && !t.isLocal && !t.isScreen,
+  )?.identity;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chỉ ghi nhớ, không suy ra được lúc render vì phải giữ qua lúc im lặng
+    if (speakingNow) setLastSpeaker(speakingNow);
+  }, [speakingNow]);
+  const layout = spotlight(tiles, lastSpeaker);
 
   useSinglePresenter(room, (byName) =>
     setNotice(
@@ -259,6 +272,34 @@ function CallStage({ join: active }: { join: CallJoin }) {
         {tiles.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-neutral-400">
             Đang chờ người khác vào phòng...
+          </div>
+        ) : layout ? (
+          <div className="flex h-full flex-col gap-3">
+            <section
+              aria-label="Người đang nói"
+              className="flex min-h-0 flex-1 items-center justify-center"
+            >
+              {/*
+                Co theo CHIỀU CAO còn trống rồi suy ra bề rộng — co theo
+                bề rộng thì trên màn hình thấp ô lớn cao hơn chỗ có và đè
+                lên dải ô nhỏ bên dưới.
+              */}
+              <div className="aspect-video h-full max-w-full">
+                <VideoTile tile={layout.main} fill />
+              </div>
+            </section>
+            <section
+              aria-label="Những người khác"
+              className="flex shrink-0 gap-2 overflow-x-auto pb-1"
+            >
+              {layout.strip.map((t) => (
+                // Bề rộng cố định ~180px: adaptiveStream thấy ô nhỏ và SFU
+                // chỉ gửi lớp 180p cho những người không nói.
+                <div key={t.key} className="w-44 shrink-0">
+                  <VideoTile tile={t} />
+                </div>
+              ))}
+            </section>
           </div>
         ) : (
           <div

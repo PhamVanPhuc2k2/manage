@@ -13,7 +13,14 @@ import type { Tile } from "./useLiveKitRoom";
  * người xem, và chính bộ đếm đó là thứ cho phép dynacast dừng gửi lớp độ
  * nét cao mà không ai xem.
  */
-export function VideoTile({ tile }: { tile: Tile }) {
+export function VideoTile({
+  tile,
+  fill = false,
+}: {
+  tile: Tile;
+  /** Lấp đầy khung chứa (ô lớn của bố cục người đang nói). */
+  fill?: boolean;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = tile.publication?.track;
 
@@ -30,7 +37,9 @@ export function VideoTile({ tile }: { tile: Tile }) {
 
   return (
     <div
-      className={`relative overflow-hidden rounded-lg bg-neutral-900 ${
+      data-tile={tile.isScreen ? "screen" : "camera"}
+      data-local={tile.isLocal ? "true" : "false"}
+      className={`relative overflow-hidden rounded-lg bg-neutral-900 ${fill ? "h-full w-full" : ""} ${
         tile.speaking ? "ring-2 ring-emerald-400" : ""
       }`}
     >

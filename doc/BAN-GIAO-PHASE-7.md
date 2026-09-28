@@ -73,8 +73,8 @@ TCP cổng 443 cũng cần chứng chỉ thật.
   đọc `audioLevel` của SFU — giờ đo tại máy. Còn lại: **chỉnh hệ số của
   thanh đo trên micro thật** (hiện mới đo với micro giả).
 - ~~"Mỗi lúc chỉ một người chiếu màn hình"~~ — xong ngày 28/09 (người sau chiếu thay, có xác nhận).
-- "Chỉ hiện người đang nói ở độ nét cao" — hiện đang dựa vào `adaptiveStream`
-  và `dynacast` của LiveKit, chưa tự điều khiển.
+- ~~"Chỉ hiện người đang nói ở độ nét cao"~~ — xong ngày 28/09: bố cục người
+  đang nói, dải ô nhỏ nhận lớp 180p.
 
 ---
 

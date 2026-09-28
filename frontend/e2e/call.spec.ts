@@ -376,6 +376,58 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
     ).toHaveCount(0, { timeout: 20_000 });
   });
 
+  test("người không nói hạ độ nét: có màn hình chiếu thì camera xuống dải ô nhỏ và nhận lớp 180p", async () => {
+    await calleePage.goto("/attendance");
+    await openConversation(callerPage, peer.fullName);
+    await callerPage.getByRole("button", { name: "Gọi video" }).click();
+    await expect(calleePage.getByText("Cuộc gọi video đến")).toBeVisible({
+      timeout: 20_000,
+    });
+    await calleePage.getByRole("button", { name: "Nghe" }).click();
+    await expect(
+      callerPage.getByRole("button", { name: "Rời cuộc gọi" }),
+    ).toBeVisible({ timeout: 20_000 });
+
+    // Camera của người gọi, nhìn từ phía người nghe.
+    const remoteCam = calleePage.locator(
+      '[data-tile="camera"][data-local="false"] video',
+    );
+    const decodedWidth = () =>
+      remoteCam.evaluate((v: HTMLVideoElement) => v.videoWidth);
+
+    // Gọi 1-1: lưới đều, ô camera to — nhận lớp độ nét cao.
+    await expect(
+      calleePage.getByRole("region", { name: "Người đang nói" }),
+    ).toHaveCount(0);
+    await expect
+      .poll(decodedWidth, { timeout: 20_000 })
+      .toBeGreaterThanOrEqual(640);
+
+    // Người gọi chiếu màn hình: màn hình lên ô lớn, camera xuống dải nhỏ.
+    await callerPage.getByRole("button", { name: "Chia sẻ màn hình" }).click();
+    const main = calleePage.getByRole("region", { name: "Người đang nói" });
+    await expect(main.locator('[data-tile="screen"]')).toBeVisible({
+      timeout: 15_000,
+    });
+    const strip = calleePage.getByRole("region", { name: "Những người khác" });
+    await expect(
+      strip.locator('[data-tile="camera"][data-local="false"]'),
+    ).toBeVisible();
+
+    // Độ phân giải THẬT đang giải mã, không chỉ kích thước ô: adaptiveStream
+    // phải xin SFU lớp thấp cho ô nhỏ. 320 là lớp 180p của simulcast.
+    await expect
+      .poll(decodedWidth, { timeout: 20_000 })
+      .toBeLessThanOrEqual(320);
+
+    await callerPage
+      .getByRole("button", { name: "Kết thúc cho tất cả" })
+      .click();
+    await expect(
+      calleePage.getByRole("button", { name: "Rời cuộc gọi" }),
+    ).toHaveCount(0, { timeout: 20_000 });
+  });
+
   test("từ chối cuộc gọi thì màn hình gọi đóng ở cả hai phía", async () => {
     await calleePage.goto("/attendance");
     await openConversation(callerPage, peer.fullName);
