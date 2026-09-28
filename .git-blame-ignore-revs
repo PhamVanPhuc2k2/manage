@@ -1,0 +1,5 @@
+# Commit chỉ định dạng lại, không đổi logic. GitHub tự bỏ qua trong blame;
+# ở máy: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Frontend: định dạng lại toàn bộ bằng Prettier
+cde11411987fbfe252aa4272bb1d548ee06f579b
