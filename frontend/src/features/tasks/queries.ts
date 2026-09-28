@@ -196,13 +196,18 @@ export function useMoveTask(projectId: string) {
           if (col.status !== status) return { ...col, tasks: without };
 
           const moved: Task = { ...moving, status };
-          if (afterTaskId === null) return { ...col, tasks: [moved, ...without] };
+          if (afterTaskId === null)
+            return { ...col, tasks: [moved, ...without] };
 
           const at = without.findIndex((t) => t.id === afterTaskId);
           if (at < 0) return { ...col, tasks: [...without, moved] };
           return {
             ...col,
-            tasks: [...without.slice(0, at + 1), moved, ...without.slice(at + 1)],
+            tasks: [
+              ...without.slice(0, at + 1),
+              moved,
+              ...without.slice(at + 1),
+            ],
           };
         }),
       };

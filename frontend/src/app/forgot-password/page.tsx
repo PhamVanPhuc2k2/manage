@@ -31,7 +31,9 @@ export default function ForgotPasswordPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 dark:bg-neutral-950">
       <div className="w-full max-w-sm">
-        <h1 className="mb-6 text-center text-xl font-semibold">Quên mật khẩu</h1>
+        <h1 className="mb-6 text-center text-xl font-semibold">
+          Quên mật khẩu
+        </h1>
 
         <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           {sent ? (
@@ -43,14 +45,20 @@ export default function ForgotPasswordPage() {
               <p className="text-neutral-500">
                 Liên kết có hiệu lực trong 30 phút và chỉ dùng được một lần.
               </p>
-              <Link href="/login" className="block text-center underline-offset-4 hover:underline">
+              <Link
+                href="/login"
+                className="block text-center underline-offset-4 hover:underline"
+              >
                 Quay lại đăng nhập
               </Link>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="email" className="mb-1 block text-sm font-medium">
+                <label
+                  htmlFor="email"
+                  className="mb-1 block text-sm font-medium"
+                >
                   Email
                 </label>
                 <input

@@ -67,7 +67,9 @@ export function GroupPanel({
               checked={c.is_pinned}
               disabled={busy}
               onChange={(e) =>
-                void run(() => api.setFlags(conversationId, { pinned: e.target.checked }))
+                void run(() =>
+                  api.setFlags(conversationId, { pinned: e.target.checked }),
+                )
               }
             />
             Ghim lên đầu danh sách
@@ -78,7 +80,9 @@ export function GroupPanel({
               checked={c.is_muted}
               disabled={busy}
               onChange={(e) =>
-                void run(() => api.setFlags(conversationId, { muted: e.target.checked }))
+                void run(() =>
+                  api.setFlags(conversationId, { muted: e.target.checked }),
+                )
               }
             />
             Tắt thông báo
@@ -88,8 +92,8 @@ export function GroupPanel({
         {c.managed && (
           <div className="mb-3 rounded bg-neutral-100 px-2 py-1.5 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
             Nhóm này do hệ thống dựng theo{" "}
-            {c.kind === "department" ? "phòng ban" : "dự án"} và tự đồng bộ thành
-            viên.
+            {c.kind === "department" ? "phòng ban" : "dự án"} và tự đồng bộ
+            thành viên.
           </div>
         )}
 
@@ -162,13 +166,17 @@ export function GroupPanel({
                 {m.employee_id === user?.employee_id && " (bạn)"}
               </span>
               {m.is_admin && (
-                <span className="text-[10px] uppercase text-neutral-400">QTV</span>
+                <span className="text-[10px] uppercase text-neutral-400">
+                  QTV
+                </span>
               )}
               {canManage && m.employee_id !== user?.employee_id && (
                 <button
                   disabled={busy}
                   onClick={() =>
-                    void run(() => api.removeMember(conversationId, m.employee_id))
+                    void run(() =>
+                      api.removeMember(conversationId, m.employee_id),
+                    )
                   }
                   title="Gỡ khỏi nhóm"
                   className="text-xs text-neutral-400 hover:text-red-600"
@@ -234,7 +242,9 @@ function AddMembers({
               checked={picked.includes(e.id)}
               onChange={(ev) =>
                 setPicked((prev) =>
-                  ev.target.checked ? [...prev, e.id] : prev.filter((x) => x !== e.id),
+                  ev.target.checked
+                    ? [...prev, e.id]
+                    : prev.filter((x) => x !== e.id),
                 )
               }
             />

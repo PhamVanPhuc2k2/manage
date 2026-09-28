@@ -28,7 +28,10 @@ export const employeeSchema = z
     phone: z
       .string()
       .trim()
-      .regex(/^0\d{9,10}$/, "Số điện thoại phải bắt đầu bằng 0 và có 10–11 chữ số")
+      .regex(
+        /^0\d{9,10}$/,
+        "Số điện thoại phải bắt đầu bằng 0 và có 10–11 chữ số",
+      )
       .or(z.literal("")),
 
     date_of_birth: z.string(),

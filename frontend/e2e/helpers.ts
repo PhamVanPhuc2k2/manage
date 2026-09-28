@@ -84,7 +84,9 @@ export async function login(
         .waitFor({ state: "visible", timeout: 20_000 })
         .then(() => "otp" as const),
       page
-        .waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 })
+        .waitForURL((u) => !u.pathname.startsWith("/login"), {
+          timeout: 20_000,
+        })
         .then(() => "vao-thang" as const),
     ]).catch(() => null);
 
@@ -127,7 +129,9 @@ export async function login(
       await page.getByRole("button", { name: /Xác minh|Đăng nhập/ }).click();
 
       const ok = await page
-        .waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 })
+        .waitForURL((u) => !u.pathname.startsWith("/login"), {
+          timeout: 20_000,
+        })
         .then(() => true)
         .catch(() => false);
 
@@ -320,7 +324,11 @@ export async function liveCall(
   token: string,
   conversationId: string,
 ): Promise<CallDetail | null> {
-  return (await call<CallDetail | null>(`/calls/live/${conversationId}`, { token })) ?? null;
+  return (
+    (await call<CallDetail | null>(`/calls/live/${conversationId}`, {
+      token,
+    })) ?? null
+  );
 }
 
 export async function callDetail(

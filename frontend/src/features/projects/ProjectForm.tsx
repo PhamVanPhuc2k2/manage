@@ -4,7 +4,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { Field, FormError, Modal, SubmitButton, inputProps } from "@/components/form";
+import {
+  Field,
+  FormError,
+  Modal,
+  SubmitButton,
+  inputProps,
+} from "@/components/form";
 import { useDepartments } from "@/features/departments/queries";
 import { useEmployees } from "@/features/employees/queries";
 import { ApiError } from "@/lib/api-client";
@@ -32,10 +38,10 @@ const schema = z
     start_date: z.string().optional(),
     due_date: z.string().optional(),
   })
-  .refine(
-    (v) => !v.start_date || !v.due_date || v.start_date <= v.due_date,
-    { message: "Hạn hoàn thành phải sau ngày bắt đầu", path: ["due_date"] },
-  );
+  .refine((v) => !v.start_date || !v.due_date || v.start_date <= v.due_date, {
+    message: "Hạn hoàn thành phải sau ngày bắt đầu",
+    path: ["due_date"],
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -111,7 +117,10 @@ export function ProjectForm({
           </Field>
           <div className="col-span-2">
             <Field label="Tên dự án" error={errors.name} required>
-              <input {...register("name")} {...inputProps(Boolean(errors.name))} />
+              <input
+                {...register("name")}
+                {...inputProps(Boolean(errors.name))}
+              />
             </Field>
           </div>
         </div>
@@ -126,7 +135,10 @@ export function ProjectForm({
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Chủ dự án" error={errors.owner_id} required>
-            <select {...register("owner_id")} {...inputProps(Boolean(errors.owner_id))}>
+            <select
+              {...register("owner_id")}
+              {...inputProps(Boolean(errors.owner_id))}
+            >
               <option value="">— Chọn —</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -137,7 +149,10 @@ export function ProjectForm({
           </Field>
 
           <Field label="Trạng thái" error={errors.status}>
-            <select {...register("status")} {...inputProps(Boolean(errors.status))}>
+            <select
+              {...register("status")}
+              {...inputProps(Boolean(errors.status))}
+            >
               {Object.entries(PROJECT_STATUS_LABEL).map(([v, label]) => (
                 <option key={v} value={v}>
                   {label}

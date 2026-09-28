@@ -35,7 +35,10 @@ export async function createProject(body: unknown): Promise<Project> {
   return data;
 }
 
-export async function updateProject(id: string, body: unknown): Promise<Project> {
+export async function updateProject(
+  id: string,
+  body: unknown,
+): Promise<Project> {
   const { data } = await api.put<Project>(`/projects/${id}`, body);
   return data;
 }
@@ -52,7 +55,9 @@ export async function getProjectProgress(id: string): Promise<ProjectProgress> {
 // ------------------------------------------------------------ thành viên
 
 export async function listMembers(projectId: string): Promise<ProjectMember[]> {
-  const { data } = await api.get<ProjectMember[]>(`/projects/${projectId}/members`);
+  const { data } = await api.get<ProjectMember[]>(
+    `/projects/${projectId}/members`,
+  );
   return data ?? [];
 }
 
@@ -61,10 +66,13 @@ export async function addMember(
   employeeId: string,
   role: ProjectRole,
 ): Promise<ProjectMember> {
-  const { data } = await api.post<ProjectMember>(`/projects/${projectId}/members`, {
-    employee_id: employeeId,
-    role,
-  });
+  const { data } = await api.post<ProjectMember>(
+    `/projects/${projectId}/members`,
+    {
+      employee_id: employeeId,
+      role,
+    },
+  );
   return data;
 }
 

@@ -1,9 +1,5 @@
 export type ProjectStatus =
-  | "planning"
-  | "active"
-  | "on_hold"
-  | "completed"
-  | "cancelled";
+  "planning" | "active" | "on_hold" | "completed" | "cancelled";
 
 /** Vai trò TRONG MỘT DỰ ÁN — khác hẳn vai trò hệ thống (admin, manager...). */
 export type ProjectRole = "owner" | "member" | "viewer";

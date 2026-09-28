@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { useMarkAllRead, useMarkRead, useNotifications, useUnreadCount } from "./queries";
+import {
+  useMarkAllRead,
+  useMarkRead,
+  useNotifications,
+  useUnreadCount,
+} from "./queries";
 import { relativeTime } from "./format";
 import type { Notification } from "./types";
 
@@ -32,7 +37,8 @@ export function NotificationBell() {
     if (!open) return;
 
     function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -99,9 +105,13 @@ export function NotificationBell() {
                     <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{n.title}</div>
+                    <div className="truncate text-sm font-medium">
+                      {n.title}
+                    </div>
                     {n.body && (
-                      <div className="truncate text-xs text-neutral-500">{n.body}</div>
+                      <div className="truncate text-xs text-neutral-500">
+                        {n.body}
+                      </div>
                     )}
                     <div className="mt-0.5 text-[11px] text-neutral-400">
                       {relativeTime(n.created_at, dataUpdatedAt)}

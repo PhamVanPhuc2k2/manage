@@ -158,8 +158,11 @@ async function request<T>(
       parsed = JSON.parse(raw) as Envelope<T>;
     } catch {
       if (res.ok) {
-        throw new ApiError(res.status, "BAD_RESPONSE",
-          "Máy chủ trả về dữ liệu không đọc được");
+        throw new ApiError(
+          res.status,
+          "BAD_RESPONSE",
+          "Máy chủ trả về dữ liệu không đọc được",
+        );
       }
     }
   }
@@ -184,7 +187,10 @@ async function request<T>(
  * access token (token nằm trong bộ nhớ, không phải cookie) và máy chủ trả
  * 401. Lỗi thì đọc thân JSON như mọi request khác để báo đúng câu.
  */
-export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+export async function downloadFile(
+  path: string,
+  fallbackName: string,
+): Promise<void> {
   const send = (token: string | null) =>
     fetch(`${API_BASE}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},

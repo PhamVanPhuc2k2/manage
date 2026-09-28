@@ -20,7 +20,8 @@ export const attendanceKeys = {
   adjustments: (status?: string) =>
     [...attendanceKeys.all, "adjustments", status ?? "all"] as const,
   schedules: () => [...attendanceKeys.all, "schedules"] as const,
-  holidays: (year: number) => [...attendanceKeys.all, "holidays", year] as const,
+  holidays: (year: number) =>
+    [...attendanceKeys.all, "holidays", year] as const,
 };
 
 export const leaveKeys = {
@@ -66,7 +67,11 @@ export function useAttendanceDay(date: string, employeeId?: string) {
   });
 }
 
-export function useMonthSummary(year: number, month: number, departmentId?: string) {
+export function useMonthSummary(
+  year: number,
+  month: number,
+  departmentId?: string,
+) {
   return useQuery({
     queryKey: attendanceKeys.summary(year, month, departmentId),
     queryFn: () => api.getMonthSummary(year, month, departmentId),

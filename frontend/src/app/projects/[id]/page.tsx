@@ -87,7 +87,9 @@ export default function ProjectDetailPage({
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-3">
-            <span className="font-mono text-sm text-neutral-500">{project.code}</span>
+            <span className="font-mono text-sm text-neutral-500">
+              {project.code}
+            </span>
             <span
               className={`rounded px-2 py-0.5 text-xs ${PROJECT_STATUS_CLASS[project.status]}`}
             >
@@ -101,7 +103,9 @@ export default function ProjectDetailPage({
           </div>
           <h1 className="text-xl font-semibold">{project.name}</h1>
           {project.description && (
-            <p className="mt-1 text-sm text-neutral-500">{project.description}</p>
+            <p className="mt-1 text-sm text-neutral-500">
+              {project.description}
+            </p>
           )}
         </div>
 
@@ -232,7 +236,8 @@ export default function ProjectDetailPage({
             Xoá dự án
           </h2>
           <p className="mb-3 text-xs text-neutral-500">
-            Dự án còn việc chưa xong thì phải chuyển sang tạm dừng hoặc huỷ trước.
+            Dự án còn việc chưa xong thì phải chuyển sang tạm dừng hoặc huỷ
+            trước.
           </p>
           <button
             onClick={() => {
@@ -291,7 +296,12 @@ function MembersPanel({
 }: {
   projectId: string;
   canManage: boolean;
-  members: { employee_id: string; employee_name: string; role: ProjectRole; position_name?: string }[];
+  members: {
+    employee_id: string;
+    employee_name: string;
+    role: ProjectRole;
+    position_name?: string;
+  }[];
   myEmployeeId?: string;
 }) {
   const add = useAddMember(projectId);
@@ -302,7 +312,9 @@ function MembersPanel({
   const { data: employeeData } = useEmployees({ page: 1, pageSize: 100 });
 
   const inProject = new Set(members.map((m) => m.employee_id));
-  const candidates = (employeeData?.items ?? []).filter((e) => !inProject.has(e.id));
+  const candidates = (employeeData?.items ?? []).filter(
+    (e) => !inProject.has(e.id),
+  );
 
   const mutationError =
     errMsg(add.error, "Không thêm được thành viên") ??
@@ -355,7 +367,9 @@ function MembersPanel({
             <div className="min-w-0">
               <div className="truncate">{m.employee_name}</div>
               {m.position_name && (
-                <div className="text-xs text-neutral-500">{m.position_name}</div>
+                <div className="text-xs text-neutral-500">
+                  {m.position_name}
+                </div>
               )}
             </div>
 
@@ -388,7 +402,11 @@ function MembersPanel({
                 <button
                   onClick={() => {
                     const self = m.employee_id === myEmployeeId;
-                    if (confirm(self ? "Rời dự án này?" : `Gỡ ${m.employee_name}?`)) {
+                    if (
+                      confirm(
+                        self ? "Rời dự án này?" : `Gỡ ${m.employee_name}?`,
+                      )
+                    ) {
                       removeMember.mutate(m.employee_id);
                     }
                   }}

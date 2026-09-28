@@ -62,15 +62,22 @@ export async function getPayslip(id: string): Promise<Payslip> {
   return data;
 }
 
-export async function updatePayslip(id: string, body: unknown): Promise<Payslip> {
+export async function updatePayslip(
+  id: string,
+  body: unknown,
+): Promise<Payslip> {
   const { data } = await api.put<Payslip>(`/payroll/payslips/${id}`, body);
   return data;
 }
 
 // ----------------------------------------------------- cấu hình lương
 
-export async function getStructure(employeeId: string): Promise<SalaryStructure> {
-  const { data } = await api.get<SalaryStructure>(`/employees/${employeeId}/salary`);
+export async function getStructure(
+  employeeId: string,
+): Promise<SalaryStructure> {
+  const { data } = await api.get<SalaryStructure>(
+    `/employees/${employeeId}/salary`,
+  );
   return data;
 }
 
@@ -106,7 +113,9 @@ export async function updateSettings(body: unknown): Promise<PayrollSettings> {
   return data;
 }
 
-export async function getCostByDepartment(periodId: string): Promise<CostRow[]> {
+export async function getCostByDepartment(
+  periodId: string,
+): Promise<CostRow[]> {
   const { data } = await api.get<CostRow[]>(
     `/payroll/periods/${periodId}/cost-by-department`,
   );
@@ -114,7 +123,9 @@ export async function getCostByDepartment(periodId: string): Promise<CostRow[]> 
 }
 
 export async function getCostByMonth(year: number): Promise<CostRow[]> {
-  const { data } = await api.get<CostRow[]>(`/payroll/cost-by-month?year=${year}`);
+  const { data } = await api.get<CostRow[]>(
+    `/payroll/cost-by-month?year=${year}`,
+  );
   return data ?? [];
 }
 

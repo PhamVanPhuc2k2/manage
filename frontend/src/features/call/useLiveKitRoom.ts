@@ -130,7 +130,9 @@ export function useLiveKitRoom(join: CallJoin, kind: CallKind) {
         try {
           await r.localParticipant.setMicrophoneEnabled(true);
         } catch {
-          setError("Không truy cập được micro. Kiểm tra quyền của trình duyệt.");
+          setError(
+            "Không truy cập được micro. Kiểm tra quyền của trình duyệt.",
+          );
         }
         if (kind === "video") {
           try {

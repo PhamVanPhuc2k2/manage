@@ -58,8 +58,11 @@ class WsClient {
 
   async connect(): Promise<void> {
     if (typeof window === "undefined") return;
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN ||
-                    this.ws.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
@@ -162,7 +165,10 @@ class WsClient {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.sendHeartbeat();
-    this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), this.heartbeatMs);
+    this.heartbeatTimer = setInterval(
+      () => this.sendHeartbeat(),
+      this.heartbeatMs,
+    );
   }
 
   private stopHeartbeat(): void {
@@ -235,7 +241,9 @@ class WsClient {
    */
   send(type: string, payload?: unknown): boolean {
     if (this.ws?.readyState !== WebSocket.OPEN) return false;
-    this.ws.send(JSON.stringify({ type, payload, ts: new Date().toISOString() }));
+    this.ws.send(
+      JSON.stringify({ type, payload, ts: new Date().toISOString() }),
+    );
     return true;
   }
 

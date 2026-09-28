@@ -92,6 +92,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - working-directory: frontend
         run: pnpm lint
+      # Hook pre-commit chỉ định dạng tệp được stage, và có thể bị bỏ qua
+      # (--no-verify). CI là chốt cuối: code lệch định dạng không vào được.
+      - working-directory: frontend
+        run: pnpm format:check
       - working-directory: frontend
         run: pnpm build
 

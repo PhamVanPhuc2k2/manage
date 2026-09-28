@@ -37,7 +37,10 @@ export async function createEmployee(body: unknown): Promise<Employee> {
   return data;
 }
 
-export async function updateEmployee(id: string, body: unknown): Promise<Employee> {
+export async function updateEmployee(
+  id: string,
+  body: unknown,
+): Promise<Employee> {
   const { data } = await api.put<Employee>(`/employees/${id}`, body);
   return data;
 }
@@ -55,8 +58,12 @@ export type AccountCreated = {
   temp_password: string;
 };
 
-export async function createAccount(employeeId: string): Promise<AccountCreated> {
-  const { data } = await api.post<AccountCreated>(`/employees/${employeeId}/account`);
+export async function createAccount(
+  employeeId: string,
+): Promise<AccountCreated> {
+  const { data } = await api.post<AccountCreated>(
+    `/employees/${employeeId}/account`,
+  );
   return data;
 }
 
@@ -73,8 +80,12 @@ export type EmployeeRoles = {
   roles: string[];
 };
 
-export async function getEmployeeRoles(employeeId: string): Promise<EmployeeRoles> {
-  const { data } = await api.get<EmployeeRoles>(`/employees/${employeeId}/roles`);
+export async function getEmployeeRoles(
+  employeeId: string,
+): Promise<EmployeeRoles> {
+  const { data } = await api.get<EmployeeRoles>(
+    `/employees/${employeeId}/roles`,
+  );
   return data;
 }
 
@@ -82,9 +93,12 @@ export async function setEmployeeRoles(
   employeeId: string,
   roles: string[],
 ): Promise<EmployeeRoles> {
-  const { data } = await api.put<EmployeeRoles>(`/employees/${employeeId}/roles`, {
-    roles,
-  });
+  const { data } = await api.put<EmployeeRoles>(
+    `/employees/${employeeId}/roles`,
+    {
+      roles,
+    },
+  );
   return data;
 }
 

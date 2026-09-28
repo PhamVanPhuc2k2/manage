@@ -118,7 +118,9 @@ export default function LeavesPage() {
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-left dark:bg-neutral-900">
             <tr>
-              {tab === "pending" && <th className="px-4 py-2 font-medium">Người gửi</th>}
+              {tab === "pending" && (
+                <th className="px-4 py-2 font-medium">Người gửi</th>
+              )}
               <th className="px-4 py-2 font-medium">Loại</th>
               <th className="px-4 py-2 font-medium">Từ</th>
               <th className="px-4 py-2 font-medium">Đến</th>
@@ -131,15 +133,23 @@ export default function LeavesPage() {
           <tbody>
             {isPending && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={8}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Đang tải...
                 </td>
               </tr>
             )}
             {!isPending && items.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-neutral-500">
-                  {tab === "mine" ? "Bạn chưa có đơn nào." : "Không có đơn chờ duyệt."}
+                <td
+                  colSpan={8}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
+                  {tab === "mine"
+                    ? "Bạn chưa có đơn nào."
+                    : "Không có đơn chờ duyệt."}
                 </td>
               </tr>
             )}
@@ -203,11 +213,15 @@ function LeaveRow({
         {l.reason || "—"}
       </td>
       <td className="px-4 py-2">
-        <span className={`rounded px-2 py-0.5 text-xs ${APPROVAL_CLASS[l.status]}`}>
+        <span
+          className={`rounded px-2 py-0.5 text-xs ${APPROVAL_CLASS[l.status]}`}
+        >
           {APPROVAL_LABEL[l.status]}
         </span>
         {l.decision_note && (
-          <div className="mt-0.5 text-xs text-neutral-500">{l.decision_note}</div>
+          <div className="mt-0.5 text-xs text-neutral-500">
+            {l.decision_note}
+          </div>
         )}
       </td>
       <td className="px-4 py-2 text-right">
@@ -266,7 +280,11 @@ function LeaveForm({ onClose }: { onClose: () => void }) {
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Tạo đơn nghỉ phép</h2>
-          <button onClick={onClose} aria-label="Đóng" className="text-neutral-400">
+          <button
+            onClick={onClose}
+            aria-label="Đóng"
+            className="text-neutral-400"
+          >
             ✕
           </button>
         </div>

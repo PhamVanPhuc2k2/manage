@@ -4,7 +4,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { Field, FormError, Modal, SubmitButton, inputProps } from "@/components/form";
+import {
+  Field,
+  FormError,
+  Modal,
+  SubmitButton,
+  inputProps,
+} from "@/components/form";
 import { ApiError } from "@/lib/api-client";
 import type { ProjectMember } from "../projects/types";
 import { useCreateTask, useUpdateTask } from "./queries";
@@ -107,7 +113,10 @@ export function TaskForm({
         className="space-y-4"
       >
         <Field label="Tiêu đề" error={errors.title} required>
-          <input {...register("title")} {...inputProps(Boolean(errors.title))} />
+          <input
+            {...register("title")}
+            {...inputProps(Boolean(errors.title))}
+          />
         </Field>
 
         <Field label="Mô tả" error={errors.description}>
@@ -120,7 +129,10 @@ export function TaskForm({
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Trạng thái" error={errors.status}>
-            <select {...register("status")} {...inputProps(Boolean(errors.status))}>
+            <select
+              {...register("status")}
+              {...inputProps(Boolean(errors.status))}
+            >
               {Object.entries(TASK_STATUS_LABEL).map(([v, label]) => (
                 <option key={v} value={v}>
                   {label}
@@ -130,7 +142,10 @@ export function TaskForm({
           </Field>
 
           <Field label="Độ ưu tiên" error={errors.priority}>
-            <select {...register("priority")} {...inputProps(Boolean(errors.priority))}>
+            <select
+              {...register("priority")}
+              {...inputProps(Boolean(errors.priority))}
+            >
               {Object.entries(TASK_PRIORITY_LABEL).map(([v, label]) => (
                 <option key={v} value={v}>
                   {label}

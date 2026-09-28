@@ -11,7 +11,10 @@ export async function createPosition(body: unknown): Promise<Position> {
   return data;
 }
 
-export async function updatePosition(id: string, body: unknown): Promise<Position> {
+export async function updatePosition(
+  id: string,
+  body: unknown,
+): Promise<Position> {
   const { data } = await api.put<Position>(`/positions/${id}`, body);
   return data;
 }

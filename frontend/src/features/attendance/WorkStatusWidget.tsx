@@ -48,7 +48,9 @@ export function WorkStatusWidget() {
         }`}
       />
 
-      <span className="tabular-nums">{formatDuration(data.online_minutes)}</span>
+      <span className="tabular-nums">
+        {formatDuration(data.online_minutes)}
+      </span>
 
       {data.expected_minutes > 0 && (
         <span className="hidden h-1 w-12 overflow-hidden rounded-full bg-neutral-200 sm:block dark:bg-neutral-700">

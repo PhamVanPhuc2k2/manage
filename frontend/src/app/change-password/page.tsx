@@ -88,9 +88,27 @@ export default function ChangePasswordPage() {
           )}
 
           {[
-            { id: "old", label: "Mật khẩu hiện tại", value: oldPassword, set: setOldPassword, ac: "current-password" },
-            { id: "new", label: "Mật khẩu mới", value: newPassword, set: setNewPassword, ac: "new-password" },
-            { id: "confirm", label: "Nhập lại mật khẩu mới", value: confirm, set: setConfirm, ac: "new-password" },
+            {
+              id: "old",
+              label: "Mật khẩu hiện tại",
+              value: oldPassword,
+              set: setOldPassword,
+              ac: "current-password",
+            },
+            {
+              id: "new",
+              label: "Mật khẩu mới",
+              value: newPassword,
+              set: setNewPassword,
+              ac: "new-password",
+            },
+            {
+              id: "confirm",
+              label: "Nhập lại mật khẩu mới",
+              value: confirm,
+              set: setConfirm,
+              ac: "new-password",
+            },
           ].map((f) => (
             <div key={f.id}>
               <label htmlFor={f.id} className="mb-1 block text-sm font-medium">

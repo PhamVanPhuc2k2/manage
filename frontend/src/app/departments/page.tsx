@@ -18,7 +18,10 @@ import { usePermission } from "@/lib/auth/useAuth";
  *
  * Bảng HTML không lồng được hàng, nên vẽ cây bằng cách thụt lề theo depth.
  */
-function flatten(nodes: Department[], depth = 0): { node: Department; depth: number }[] {
+function flatten(
+  nodes: Department[],
+  depth = 0,
+): { node: Department; depth: number }[] {
   return nodes.flatMap((n) => [
     { node: n, depth },
     ...flatten(n.children ?? [], depth + 1),
@@ -92,14 +95,20 @@ export default function DepartmentsPage() {
           <tbody>
             {isPending && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Đang tải...
                 </td>
               </tr>
             )}
             {!isPending && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Chưa có phòng ban nào
                 </td>
               </tr>
@@ -111,7 +120,9 @@ export default function DepartmentsPage() {
               >
                 <td className="px-4 py-2">
                   <span style={{ paddingLeft: depth * 20 }}>
-                    {depth > 0 && <span className="mr-2 text-neutral-400">└</span>}
+                    {depth > 0 && (
+                      <span className="mr-2 text-neutral-400">└</span>
+                    )}
                     {node.name}
                   </span>
                 </td>

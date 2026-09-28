@@ -26,7 +26,11 @@ function errMsg(e: unknown, fallback: string): string | null {
   return e instanceof ApiError ? e.message : fallback;
 }
 
-const ORDER: Record<PresenceStatus, number> = { online: 0, idle: 1, offline: 2 };
+const ORDER: Record<PresenceStatus, number> = {
+  online: 0,
+  idle: 1,
+  offline: 2,
+};
 
 export default function TeamAttendancePage() {
   const { can } = usePermission();
@@ -109,7 +113,9 @@ export default function TeamAttendancePage() {
                   : "border-neutral-300 dark:border-neutral-700"
               }`}
             >
-              <span className={`h-2 w-2 rounded-full ${PRESENCE_DOT[p.status]}`} />
+              <span
+                className={`h-2 w-2 rounded-full ${PRESENCE_DOT[p.status]}`}
+              />
               {nameOf.get(p.employee_id) ?? p.employee_id.slice(0, 8)}
             </span>
           ))}
@@ -126,7 +132,9 @@ export default function TeamAttendancePage() {
             Yêu cầu điều chỉnh chờ duyệt ({adjustments.length})
           </h2>
 
-          <FormError message={errMsg(decide.error, "Không xử lý được yêu cầu")} />
+          <FormError
+            message={errMsg(decide.error, "Không xử lý được yêu cầu")}
+          />
 
           <div className="divide-y divide-neutral-200 rounded border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
             {adjustments.map((a) => (
@@ -148,7 +156,9 @@ export default function TeamAttendancePage() {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => decide.mutate({ id: a.id, approve: true, note: "" })}
+                    onClick={() =>
+                      decide.mutate({ id: a.id, approve: true, note: "" })
+                    }
                     className="text-xs text-green-700 underline hover:no-underline dark:text-green-400"
                   >
                     Duyệt
@@ -216,14 +226,20 @@ export default function TeamAttendancePage() {
           <tbody>
             {isPending && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={8}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Đang tải...
                 </td>
               </tr>
             )}
             {!isPending && summary.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={8}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Chưa có dữ liệu cho tháng này.
                 </td>
               </tr>

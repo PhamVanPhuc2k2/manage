@@ -46,7 +46,9 @@ export default function BoardPage({
       <AppShell>
         <FormError
           message={
-            error instanceof ApiError ? error.message : "Không tải được bảng Kanban"
+            error instanceof ApiError
+              ? error.message
+              : "Không tải được bảng Kanban"
           }
         />
         <Link href="/projects" className="mt-3 inline-block text-sm underline">

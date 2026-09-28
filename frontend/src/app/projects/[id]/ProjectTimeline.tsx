@@ -93,9 +93,7 @@ export function ProjectTimeline({
   // là một con số ổn định, chỉ đổi khi dữ liệu thật sự được tải lại — và khi
   // đó vạch nhích theo là đúng. Nó bằng 0 ở lần render đầu, lúc ấy chưa có
   // gì để vẽ.
-  const nowPct = dataUpdatedAt
-    ? ((dataUpdatedAt - start) / span) * 100
-    : null;
+  const nowPct = dataUpdatedAt ? ((dataUpdatedAt - start) / span) * 100 : null;
 
   return (
     <div>
@@ -127,7 +125,9 @@ export function ProjectTimeline({
               return (
                 <div key={task.id} className="flex items-center gap-2 text-xs">
                   <div className="w-1/4 min-w-0 truncate" title={task.title}>
-                    <span className="font-mono text-neutral-500">{task.code}</span>{" "}
+                    <span className="font-mono text-neutral-500">
+                      {task.code}
+                    </span>{" "}
                     {task.title}
                   </div>
 
@@ -166,7 +166,8 @@ export function ProjectTimeline({
 
       {skipped > 0 && (
         <p className="mt-2 text-xs text-neutral-500">
-          {skipped} công việc chưa có hạn hoàn thành nên không hiện trên timeline.
+          {skipped} công việc chưa có hạn hoàn thành nên không hiện trên
+          timeline.
         </p>
       )}
     </div>

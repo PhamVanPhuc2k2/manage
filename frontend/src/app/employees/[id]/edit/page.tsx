@@ -3,10 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
-import {
-  EmployeeForm,
-  toFormValues,
-} from "@/features/employees/EmployeeForm";
+import { EmployeeForm, toFormValues } from "@/features/employees/EmployeeForm";
 import { useEmployee, useUpdateEmployee } from "@/features/employees/queries";
 import { toEmployeePayload } from "@/features/employees/schema";
 import { ApiError } from "@/lib/api-client";
@@ -30,7 +27,9 @@ export default function EditEmployeePage() {
     return (
       <AppShell>
         <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          {error instanceof ApiError ? error.message : "Không tìm thấy nhân viên"}
+          {error instanceof ApiError
+            ? error.message
+            : "Không tìm thấy nhân viên"}
         </div>
       </AppShell>
     );

@@ -112,11 +112,14 @@ export async function lockPeriod(
   to: string,
   locked: boolean,
 ): Promise<{ affected_days: number }> {
-  const { data } = await api.post<{ affected_days: number }>("/attendance/lock", {
-    from,
-    to,
-    locked,
-  });
+  const { data } = await api.post<{ affected_days: number }>(
+    "/attendance/lock",
+    {
+      from,
+      to,
+      locked,
+    },
+  );
   return data;
 }
 
@@ -167,7 +170,9 @@ export async function getBalance(
 }
 
 export async function listBalances(year: number): Promise<LeaveBalance[]> {
-  const { data } = await api.get<LeaveBalance[]>(`/leaves/balances?year=${year}`);
+  const { data } = await api.get<LeaveBalance[]>(
+    `/leaves/balances?year=${year}`,
+  );
   return data ?? [];
 }
 

@@ -29,17 +29,23 @@ export async function getSummary(): Promise<NotificationSummary> {
 }
 
 export async function markRead(ids: string[]): Promise<NotificationSummary> {
-  const { data } = await api.post<NotificationSummary>("/notifications/read", { ids });
+  const { data } = await api.post<NotificationSummary>("/notifications/read", {
+    ids,
+  });
   return data ?? { unread: 0 };
 }
 
 export async function markAllRead(): Promise<NotificationSummary> {
-  const { data } = await api.post<NotificationSummary>("/notifications/read-all");
+  const { data } = await api.post<NotificationSummary>(
+    "/notifications/read-all",
+  );
   return data ?? { unread: 0 };
 }
 
 export async function getPreferences(): Promise<NotificationPref[]> {
-  const { data } = await api.get<NotificationPref[]>("/notifications/preferences");
+  const { data } = await api.get<NotificationPref[]>(
+    "/notifications/preferences",
+  );
   return data ?? [];
 }
 

@@ -57,7 +57,9 @@ function ProjectCard({ p }: { p: Project }) {
 
       <h2 className="mb-1 font-medium">{p.name}</h2>
       {p.description && (
-        <p className="mb-3 line-clamp-2 text-sm text-neutral-500">{p.description}</p>
+        <p className="mb-3 line-clamp-2 text-sm text-neutral-500">
+          {p.description}
+        </p>
       )}
 
       <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
@@ -209,7 +211,10 @@ export default function ProjectsPage() {
                 >
                   <td className="px-4 py-2 font-mono text-xs">{p.code}</td>
                   <td className="px-4 py-2">
-                    <Link href={`/projects/${p.id}`} className="hover:underline">
+                    <Link
+                      href={`/projects/${p.id}`}
+                      className="hover:underline"
+                    >
                       {p.name}
                     </Link>
                   </td>
@@ -222,7 +227,9 @@ export default function ProjectsPage() {
                       <div className="w-20">
                         <ProgressBar value={p.progress} />
                       </div>
-                      <span className="text-xs text-neutral-500">{p.progress}%</span>
+                      <span className="text-xs text-neutral-500">
+                        {p.progress}%
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-2 text-neutral-500">

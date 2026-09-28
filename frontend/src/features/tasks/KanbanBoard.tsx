@@ -88,7 +88,9 @@ function TaskCard({
         )}
         {task.comment_count > 0 && <span>{task.comment_count} bình luận</span>}
         {task.attachment_count > 0 && <span>{task.attachment_count} tệp</span>}
-        {task.spent_minutes > 0 && <span>{formatMinutes(task.spent_minutes)}</span>}
+        {task.spent_minutes > 0 && (
+          <span>{formatMinutes(task.spent_minutes)}</span>
+        )}
       </div>
     </div>
   );
@@ -101,8 +103,14 @@ function SortableCard({
   task: Task;
   onOpen: (id: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: task.id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
 
   return (
     <div
@@ -215,12 +223,17 @@ export function KanbanBoard({
   // hiểu là bắt đầu kéo, và thẻ không mở ra được.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const columnOf = (id: string): TaskStatus | null => {
     if (BOARD_ORDER.includes(id as TaskStatus)) return id as TaskStatus;
-    return board.columns.find((c) => c.tasks.some((t) => t.id === id))?.status ?? null;
+    return (
+      board.columns.find((c) => c.tasks.some((t) => t.id === id))?.status ??
+      null
+    );
   };
 
   function handleDragStart(e: DragStartEvent) {
@@ -281,7 +294,11 @@ export function KanbanBoard({
       { taskId: activeId, status: to, afterTaskId },
       {
         onError: (err) =>
-          onError(err instanceof Error ? err.message : "Không di chuyển được công việc"),
+          onError(
+            err instanceof Error
+              ? err.message
+              : "Không di chuyển được công việc",
+          ),
       },
     );
   }

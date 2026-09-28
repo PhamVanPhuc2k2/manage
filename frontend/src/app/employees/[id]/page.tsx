@@ -16,10 +16,7 @@ import {
   useSetEmployeeRoles,
   useUploadAvatar,
 } from "@/features/employees/queries";
-import {
-  STATUS_LABEL,
-  WORK_MODE_LABEL,
-} from "@/features/employees/types";
+import { STATUS_LABEL, WORK_MODE_LABEL } from "@/features/employees/types";
 import { useRoles } from "@/features/roles/queries";
 import { SCOPE_LABEL } from "@/features/roles/types";
 import { ApiError } from "@/lib/api-client";
@@ -49,7 +46,10 @@ export default function EmployeeDetailPage() {
     return (
       <AppShell>
         <FormError
-          message={errMsg(error, "Không tìm thấy nhân viên") ?? "Không tìm thấy nhân viên"}
+          message={
+            errMsg(error, "Không tìm thấy nhân viên") ??
+            "Không tìm thấy nhân viên"
+          }
         />
         <Link href="/employees" className="mt-4 inline-block text-sm underline">
           Quay lại danh sách
@@ -100,11 +100,16 @@ export default function EmployeeDetailPage() {
             <dl className="grid gap-y-2 text-sm sm:grid-cols-2">
               <Row label="Email" value={employee.email} />
               <Row label="Điện thoại" value={employee.phone || "—"} />
-              <Row label="Ngày sinh" value={formatDate(employee.date_of_birth)} />
+              <Row
+                label="Ngày sinh"
+                value={formatDate(employee.date_of_birth)}
+              />
               <Row
                 label="Giới tính"
                 value={
-                  { nam: "Nam", nu: "Nữ", khac: "Khác" }[employee.gender ?? ""] ?? "—"
+                  { nam: "Nam", nu: "Nữ", khac: "Khác" }[
+                    employee.gender ?? ""
+                  ] ?? "—"
                 }
               />
               <Row label="Địa chỉ" value={employee.address || "—"} wide />
@@ -121,7 +126,10 @@ export default function EmployeeDetailPage() {
                 label="Hình thức"
                 value={WORK_MODE_LABEL[employee.work_mode]}
               />
-              <Row label="Ngày vào làm" value={formatDate(employee.joined_at)} />
+              <Row
+                label="Ngày vào làm"
+                value={formatDate(employee.joined_at)}
+              />
               <Row label="Ngày nghỉ" value={formatDate(employee.resigned_at)} />
             </dl>
           </section>
@@ -296,7 +304,9 @@ function AccountSection({
           Nhân viên này chưa có tài khoản để đăng nhập hệ thống.
         </p>
 
-        <FormError message={errMsg(createAccount.error, "Không tạo được tài khoản")} />
+        <FormError
+          message={errMsg(createAccount.error, "Không tạo được tài khoản")}
+        />
 
         {tempPassword ? (
           <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950">
@@ -310,8 +320,8 @@ function AccountSection({
             {/* Cảnh báo này quan trọng: mật khẩu không lưu ở đâu khác, đóng
                 trang là mất. Mail cũng đã gửi nhưng có thể vào hộp thư rác. */}
             <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
-              Mật khẩu chỉ hiện MỘT LẦN. Chép lại ngay nếu cần đưa tay.
-              Hệ thống cũng đã gửi mail tới {email}.
+              Mật khẩu chỉ hiện MỘT LẦN. Chép lại ngay nếu cần đưa tay. Hệ thống
+              cũng đã gửi mail tới {email}.
             </p>
           </div>
         ) : (
@@ -326,7 +336,9 @@ function AccountSection({
               }
               className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
             >
-              {createAccount.isPending ? "Đang tạo..." : "Tạo tài khoản đăng nhập"}
+              {createAccount.isPending
+                ? "Đang tạo..."
+                : "Tạo tài khoản đăng nhập"}
             </button>
           )
         )}
@@ -339,7 +351,9 @@ function AccountSection({
       <h2 className="mb-3 font-medium">Tài khoản đăng nhập</h2>
       <p className="mb-4 text-sm text-neutral-500">Email đăng nhập: {email}</p>
 
-      <FormError message={errMsg(setActive.error, "Không đổi được trạng thái")} />
+      <FormError
+        message={errMsg(setActive.error, "Không đổi được trạng thái")}
+      />
 
       {canAssignRoles && <RoleEditor employeeId={employeeId} />}
 
@@ -354,8 +368,8 @@ function AccountSection({
             Vô hiệu hoá tài khoản
           </button>
           <p className="mt-1 text-xs text-neutral-500">
-            Người này sẽ bị đăng xuất ngay và không đăng nhập lại được.
-            Hồ sơ nhân viên vẫn giữ nguyên.
+            Người này sẽ bị đăng xuất ngay và không đăng nhập lại được. Hồ sơ
+            nhân viên vẫn giữ nguyên.
           </p>
         </div>
       )}
@@ -422,7 +436,9 @@ function RoleEditor({ employeeId }: { employeeId: string }) {
           <button
             type="button"
             disabled={setRoles.isPending || selected.length === 0}
-            onClick={() => setRoles.mutate(selected, { onSuccess: () => setDraft(null) })}
+            onClick={() =>
+              setRoles.mutate(selected, { onSuccess: () => setDraft(null) })
+            }
             className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
           >
             {setRoles.isPending ? "Đang lưu..." : "Lưu vai trò"}

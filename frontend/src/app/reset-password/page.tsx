@@ -35,9 +35,7 @@ function ResetForm() {
       router.push("/login?reset=1");
     } catch (err) {
       setError(
-        err instanceof ApiError
-          ? err.message
-          : "Không đặt lại được mật khẩu",
+        err instanceof ApiError ? err.message : "Không đặt lại được mật khẩu",
       );
     } finally {
       setSubmitting(false);
@@ -50,7 +48,10 @@ function ResetForm() {
         <p className="text-red-700 dark:text-red-300">
           Liên kết không hợp lệ — thiếu mã xác nhận.
         </p>
-        <Link href="/forgot-password" className="underline-offset-4 hover:underline">
+        <Link
+          href="/forgot-password"
+          className="underline-offset-4 hover:underline"
+        >
           Yêu cầu liên kết mới
         </Link>
       </div>
@@ -122,7 +123,9 @@ export default function ResetPasswordPage() {
 
         <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           {/* useSearchParams bắt buộc phải nằm trong Suspense ở App Router. */}
-          <Suspense fallback={<p className="text-sm text-neutral-500">Đang tải...</p>}>
+          <Suspense
+            fallback={<p className="text-sm text-neutral-500">Đang tải...</p>}
+          >
             <ResetForm />
           </Suspense>
         </div>

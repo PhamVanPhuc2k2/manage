@@ -37,7 +37,9 @@ export function NewConversationDialog({
 
   // Chọn đúng một người thì đó là hội thoại 1-1; từ hai người trở lên là nhóm.
   const isGroup = picked.length > 1;
-  const candidates = (data?.items ?? []).filter((e) => e.id !== user?.employee_id);
+  const candidates = (data?.items ?? []).filter(
+    (e) => e.id !== user?.employee_id,
+  );
 
   async function onCreate() {
     setError(null);
@@ -51,7 +53,9 @@ export function NewConversationDialog({
       onCreated(c.id);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không tạo được cuộc trò chuyện");
+      setError(
+        err instanceof Error ? err.message : "Không tạo được cuộc trò chuyện",
+      );
     } finally {
       setBusy(false);
     }
@@ -96,12 +100,16 @@ export function NewConversationDialog({
                 checked={picked.includes(e.id)}
                 onChange={(ev) =>
                   setPicked((prev) =>
-                    ev.target.checked ? [...prev, e.id] : prev.filter((x) => x !== e.id),
+                    ev.target.checked
+                      ? [...prev, e.id]
+                      : prev.filter((x) => x !== e.id),
                   )
                 }
               />
               <span className="min-w-0 flex-1 truncate">{e.full_name}</span>
-              <span className="text-xs text-neutral-400">{e.employee_code}</span>
+              <span className="text-xs text-neutral-400">
+                {e.employee_code}
+              </span>
             </label>
           ))}
         </div>

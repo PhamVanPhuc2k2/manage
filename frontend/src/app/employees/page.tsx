@@ -96,7 +96,9 @@ export default function EmployeesPage() {
 
       {error && (
         <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          {error instanceof ApiError ? error.message : "Không tải được danh sách"}
+          {error instanceof ApiError
+            ? error.message
+            : "Không tải được danh sách"}
         </div>
       )}
 
@@ -119,14 +121,20 @@ export default function EmployeesPage() {
                 không nháy về rỗng. */}
             {isPending && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Đang tải...
                 </td>
               </tr>
             )}
             {!isPending && items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Không có nhân viên nào
                 </td>
               </tr>
@@ -136,7 +144,9 @@ export default function EmployeesPage() {
                 key={e.id}
                 className="border-t border-neutral-200 dark:border-neutral-800"
               >
-                <td className="px-4 py-2 font-mono text-xs">{e.employee_code}</td>
+                <td className="px-4 py-2 font-mono text-xs">
+                  {e.employee_code}
+                </td>
                 <td className="px-4 py-2">
                   <Link
                     href={`/employees/${e.id}`}

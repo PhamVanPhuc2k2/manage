@@ -26,7 +26,10 @@ function TaskRow({ t }: { t: Task }) {
       <td className="px-4 py-2">
         {/* Mở ở bảng Kanban của dự án: đó là nơi công việc có ngữ cảnh đầy
             đủ (cột, việc xung quanh), thay vì một trang chi tiết đứng một mình. */}
-        <Link href={`/projects/${t.project_id}/board`} className="hover:underline">
+        <Link
+          href={`/projects/${t.project_id}/board`}
+          className="hover:underline"
+        >
           {t.title}
         </Link>
         {t.parent_task_id && (
@@ -197,14 +200,20 @@ export default function TasksPage() {
           <tbody>
             {active.isPending && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Đang tải...
                 </td>
               </tr>
             )}
             {!active.isPending && items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   {tab === "mine"
                     ? "Bạn chưa được giao việc nào."
                     : "Không có công việc nào khớp bộ lọc."}

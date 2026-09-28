@@ -134,7 +134,11 @@ function Breakdown({ s }: { s: Payslip }) {
           value={formatVND(s.insurance_employee)}
           indent
         />
-        <Row label="Thuế thu nhập cá nhân" value={formatVND(s.income_tax)} indent />
+        <Row
+          label="Thuế thu nhập cá nhân"
+          value={formatVND(s.income_tax)}
+          indent
+        />
         {deductions.map((i) => (
           <Row
             key={i.code}
@@ -145,7 +149,11 @@ function Breakdown({ s }: { s: Payslip }) {
         ))}
 
         <Section title="CƠ SỞ TÍNH THUẾ" />
-        <Row label="Thu nhập chịu thuế" value={formatVND(s.taxable_income)} indent />
+        <Row
+          label="Thu nhập chịu thuế"
+          value={formatVND(s.taxable_income)}
+          indent
+        />
         <Row
           label="Giảm trừ bản thân"
           value={`-${formatVND(s.personal_deduction)}`}
@@ -208,7 +216,9 @@ function Row({
       >
         {label}
       </td>
-      <td className={`py-1 text-right tabular-nums ${bold ? "font-medium" : ""}`}>
+      <td
+        className={`py-1 text-right tabular-nums ${bold ? "font-medium" : ""}`}
+      >
         {value}
       </td>
     </tr>

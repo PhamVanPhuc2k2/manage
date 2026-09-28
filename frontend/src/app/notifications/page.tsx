@@ -20,8 +20,14 @@ export default function NotificationsPage() {
   const [showPrefs, setShowPrefs] = useState(false);
   const router = useRouter();
 
-  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage, dataUpdatedAt } =
-    useNotifications(unreadOnly);
+  const {
+    data,
+    isLoading,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    dataUpdatedAt,
+  } = useNotifications(unreadOnly);
   const { data: summary } = useUnreadCount();
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
@@ -83,7 +89,9 @@ export default function NotificationsPage() {
           )}
           {!isLoading && items.length === 0 && (
             <div className="px-4 py-8 text-center text-sm text-neutral-500">
-              {unreadOnly ? "Không còn thông báo chưa đọc" : "Chưa có thông báo nào"}
+              {unreadOnly
+                ? "Không còn thông báo chưa đọc"
+                : "Chưa có thông báo nào"}
             </div>
           )}
 

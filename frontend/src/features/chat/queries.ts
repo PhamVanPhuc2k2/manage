@@ -25,7 +25,8 @@ export const chatKeys = {
   all: ["chat"] as const,
   conversations: (q: string) => [...chatKeys.all, "conversations", q] as const,
   conversation: (id: string) => [...chatKeys.all, "conversation", id] as const,
-  messages: (id: string, q: string) => [...chatKeys.all, "messages", id, q] as const,
+  messages: (id: string, q: string) =>
+    [...chatKeys.all, "messages", id, q] as const,
   unread: () => [...chatKeys.all, "unread"] as const,
 };
 
@@ -65,7 +66,9 @@ export function useMessages(id: string | null, search = "") {
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) =>
-      last.items.length < PAGE_SIZE ? undefined : (last.next_before ?? undefined),
+      last.items.length < PAGE_SIZE
+        ? undefined
+        : (last.next_before ?? undefined),
     enabled: !!id,
   });
 }
@@ -158,8 +161,7 @@ export function useMarkConversationRead() {
       // cả danh sách: người dùng mở một hội thoại là chuyện xảy ra liên tục.
       qc.setQueriesData<Conversation[]>(
         { queryKey: [...chatKeys.all, "conversations"] },
-        (old) =>
-          old?.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)),
+        (old) => old?.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)),
       );
 
       broadcastRead(id);
@@ -272,7 +274,8 @@ export function useChatRealtime() {
 
   const onDeleted = useCallback(
     (e: Envelope) => {
-      const p = e.payload as { id: string; conversation_id: string } | undefined;
+      const p = e.payload as
+        { id: string; conversation_id: string } | undefined;
       if (!p?.id) return;
 
       qc.setQueriesData<{ pages: MessagePage[] }>(
@@ -295,7 +298,8 @@ export function useChatRealtime() {
   const onBadge = useCallback(
     (e: Envelope) => {
       const p = e.payload as { unread?: number } | undefined;
-      if (typeof p?.unread === "number") qc.setQueryData(chatKeys.unread(), p.unread);
+      if (typeof p?.unread === "number")
+        qc.setQueryData(chatKeys.unread(), p.unread);
     },
     [qc],
   );

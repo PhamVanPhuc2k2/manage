@@ -2,7 +2,9 @@ import { api } from "@/lib/api-client";
 
 import type { ChatMember, Conversation, Message, MessagePage } from "./types";
 
-export async function listConversations(search?: string): Promise<Conversation[]> {
+export async function listConversations(
+  search?: string,
+): Promise<Conversation[]> {
   const q = search ? `?q=${encodeURIComponent(search)}` : "";
   const { data } = await api.get<Conversation[]>(`/chat/conversations${q}`);
   return data ?? [];
@@ -11,9 +13,10 @@ export async function listConversations(search?: string): Promise<Conversation[]
 export async function getConversation(
   id: string,
 ): Promise<{ conversation: Conversation; members: ChatMember[] }> {
-  const { data } = await api.get<{ conversation: Conversation; members: ChatMember[] }>(
-    `/chat/conversations/${id}`,
-  );
+  const { data } = await api.get<{
+    conversation: Conversation;
+    members: ChatMember[];
+  }>(`/chat/conversations/${id}`);
   return data;
 }
 
@@ -41,15 +44,25 @@ export async function renameConversation(
   id: string,
   name: string,
 ): Promise<Conversation> {
-  const { data } = await api.put<Conversation>(`/chat/conversations/${id}`, { name });
+  const { data } = await api.put<Conversation>(`/chat/conversations/${id}`, {
+    name,
+  });
   return data;
 }
 
-export async function addMembers(id: string, memberIds: string[]): Promise<void> {
-  await api.post(`/chat/conversations/${id}/members`, { member_ids: memberIds });
+export async function addMembers(
+  id: string,
+  memberIds: string[],
+): Promise<void> {
+  await api.post(`/chat/conversations/${id}/members`, {
+    member_ids: memberIds,
+  });
 }
 
-export async function removeMember(id: string, employeeId: string): Promise<void> {
+export async function removeMember(
+  id: string,
+  employeeId: string,
+): Promise<void> {
   await api.delete(`/chat/conversations/${id}/members/${employeeId}`);
 }
 
@@ -106,12 +119,20 @@ export async function sendMessage(
     attachments?: unknown[];
   },
 ): Promise<Message> {
-  const { data } = await api.post<Message>(`/chat/conversations/${id}/messages`, body);
+  const { data } = await api.post<Message>(
+    `/chat/conversations/${id}/messages`,
+    body,
+  );
   return data;
 }
 
-export async function editMessage(messageId: string, content: string): Promise<Message> {
-  const { data } = await api.put<Message>(`/chat/messages/${messageId}`, { content });
+export async function editMessage(
+  messageId: string,
+  content: string,
+): Promise<Message> {
+  const { data } = await api.put<Message>(`/chat/messages/${messageId}`, {
+    content,
+  });
   return data;
 }
 

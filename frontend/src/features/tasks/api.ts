@@ -125,8 +125,12 @@ export async function deleteComment(commentId: string): Promise<void> {
 
 // -------------------------------------------------------- tệp đính kèm
 
-export async function listAttachments(taskId: string): Promise<TaskAttachment[]> {
-  const { data } = await api.get<TaskAttachment[]>(`/tasks/${taskId}/attachments`);
+export async function listAttachments(
+  taskId: string,
+): Promise<TaskAttachment[]> {
+  const { data } = await api.get<TaskAttachment[]>(
+    `/tasks/${taskId}/attachments`,
+  );
   return data ?? [];
 }
 

@@ -110,7 +110,13 @@ function DayTimeline({ date }: { date: string }) {
   );
 }
 
-function DayRow({ d, onPick }: { d: AttendanceDay; onPick: (s: string) => void }) {
+function DayRow({
+  d,
+  onPick,
+}: {
+  d: AttendanceDay;
+  onPick: (s: string) => void;
+}) {
   return (
     <tr className="border-t border-neutral-200 dark:border-neutral-800">
       <td className="px-4 py-2">
@@ -119,11 +125,15 @@ function DayRow({ d, onPick }: { d: AttendanceDay; onPick: (s: string) => void }
         </button>
       </td>
       <td className="px-4 py-2">
-        <span className={`rounded px-2 py-0.5 text-xs ${DAY_STATUS_CLASS[d.status]}`}>
+        <span
+          className={`rounded px-2 py-0.5 text-xs ${DAY_STATUS_CLASS[d.status]}`}
+        >
           {DAY_STATUS_LABEL[d.status]}
         </span>
       </td>
-      <td className="px-4 py-2 tabular-nums">{formatDuration(d.online_minutes)}</td>
+      <td className="px-4 py-2 tabular-nums">
+        {formatDuration(d.online_minutes)}
+      </td>
       <td className="px-4 py-2 tabular-nums text-neutral-500">
         {formatDuration(d.active_minutes)}
       </td>
@@ -270,14 +280,20 @@ export default function AttendancePage() {
           <tbody>
             {isPending && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={8}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Đang tải...
                 </td>
               </tr>
             )}
             {!isPending && days.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={8}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Chưa có dữ liệu chấm công trong khoảng này.
                 </td>
               </tr>
@@ -336,11 +352,15 @@ function ManualEntry() {
     };
 
     if (mode === "check-in") {
-      checkIn.mutate({ startedAt: startISO, endedAt: endISO, note: reason },
-        { onSuccess: reset });
+      checkIn.mutate(
+        { startedAt: startISO, endedAt: endISO, note: reason },
+        { onSuccess: reset },
+      );
     } else {
-      adjust.mutate({ startedAt: startISO, endedAt: endISO, reason },
-        { onSuccess: reset });
+      adjust.mutate(
+        { startedAt: startISO, endedAt: endISO, reason },
+        { onSuccess: reset },
+      );
     }
   }
 
@@ -413,7 +433,9 @@ function ManualEntry() {
         <FormError message={error} />
         {done && !error && (
           <p className="text-sm text-green-700 dark:text-green-400">
-            {mode === "check-in" ? "Đã ghi nhận." : "Đã gửi yêu cầu, chờ duyệt."}
+            {mode === "check-in"
+              ? "Đã ghi nhận."
+              : "Đã gửi yêu cầu, chờ duyệt."}
           </p>
         )}
 
@@ -422,7 +444,11 @@ function ManualEntry() {
           disabled={pending}
           className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
         >
-          {pending ? "Đang gửi..." : mode === "check-in" ? "Ghi nhận" : "Gửi yêu cầu"}
+          {pending
+            ? "Đang gửi..."
+            : mode === "check-in"
+              ? "Ghi nhận"
+              : "Gửi yêu cầu"}
         </button>
       </form>
     </div>

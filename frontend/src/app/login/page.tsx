@@ -83,7 +83,10 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      const { mustChangePassword } = await verifyOtp(challenge.challengeId, code);
+      const { mustChangePassword } = await verifyOtp(
+        challenge.challengeId,
+        code,
+      );
       router.push(mustChangePassword ? "/change-password" : "/employees");
     } catch (err) {
       setError(describe(err));
@@ -144,7 +147,10 @@ export default function LoginPage() {
           {!challenge && (
             <>
               <div>
-                <label htmlFor="email" className="mb-1 block text-sm font-medium">
+                <label
+                  htmlFor="email"
+                  className="mb-1 block text-sm font-medium"
+                >
                   Email
                 </label>
                 <input
@@ -176,7 +182,11 @@ export default function LoginPage() {
                 />
               </div>
 
-              <button type="submit" disabled={submitting} className={buttonClass}>
+              <button
+                type="submit"
+                disabled={submitting}
+                className={buttonClass}
+              >
                 {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
               </button>
 
@@ -200,7 +210,10 @@ export default function LoginPage() {
               </p>
 
               <div>
-                <label htmlFor="code" className="mb-1 block text-sm font-medium">
+                <label
+                  htmlFor="code"
+                  className="mb-1 block text-sm font-medium"
+                >
                   Mã xác minh
                 </label>
                 <input

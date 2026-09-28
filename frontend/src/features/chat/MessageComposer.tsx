@@ -19,7 +19,11 @@ type Props = {
   onCancelReply: () => void;
 };
 
-export function MessageComposer({ conversationId, replyTo, onCancelReply }: Props) {
+export function MessageComposer({
+  conversationId,
+  replyTo,
+  onCancelReply,
+}: Props) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -172,7 +176,11 @@ export function MessageComposer({ conversationId, replyTo, onCancelReply }: Prop
             <div className="font-medium">Trả lời {replyTo.sender_name}</div>
             <div className="truncate text-neutral-500">{replyTo.content}</div>
           </div>
-          <button type="button" onClick={onCancelReply} className="text-neutral-500">
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="text-neutral-500"
+          >
             ✕
           </button>
         </div>
@@ -188,7 +196,9 @@ export function MessageComposer({ conversationId, replyTo, onCancelReply }: Prop
               {f.name}
               <button
                 type="button"
-                onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                onClick={() =>
+                  setFiles((prev) => prev.filter((_, j) => j !== i))
+                }
                 className="text-neutral-500"
               >
                 ✕

@@ -70,7 +70,10 @@ export default function SalarySettingsPage() {
       </div>
 
       {employeeId ? (
-        <EmployeeSalary employeeId={employeeId} canEdit={can("salary:manage")} />
+        <EmployeeSalary
+          employeeId={employeeId}
+          canEdit={can("salary:manage")}
+        />
       ) : (
         <p className="rounded border border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500 dark:border-neutral-800">
           Chọn một nhân viên để xem và sửa cấu hình lương.
@@ -86,7 +89,9 @@ function TaxSettings() {
 
   if (isPending) return <p className="text-sm text-neutral-500">Đang tải...</p>;
   if (error || !s) {
-    return <FormError message={errMsg(error, "Không tải được tham số tính lương")} />;
+    return (
+      <FormError message={errMsg(error, "Không tải được tham số tính lương")} />
+    );
   }
 
   return (
@@ -94,12 +99,18 @@ function TaxSettings() {
       <h2 className="mb-3 text-sm font-medium">Tham số tính lương</h2>
 
       <div className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-        <Field label="Giảm trừ bản thân" value={formatVND(s.personal_deduction)} />
+        <Field
+          label="Giảm trừ bản thân"
+          value={formatVND(s.personal_deduction)}
+        />
         <Field
           label="Giảm trừ mỗi người phụ thuộc"
           value={formatVND(s.dependent_deduction)}
         />
-        <Field label="Ngày công chuẩn / tháng" value={String(s.standard_workdays)} />
+        <Field
+          label="Ngày công chuẩn / tháng"
+          value={String(s.standard_workdays)}
+        />
         <Field
           label="Bảo hiểm nhân viên đóng"
           value={formatPercent(
@@ -131,7 +142,10 @@ function TaxSettings() {
           </thead>
           <tbody>
             {s.tax_brackets.map((b) => (
-              <tr key={b.ordinal} className="border-t border-neutral-200 dark:border-neutral-800">
+              <tr
+                key={b.ordinal}
+                className="border-t border-neutral-200 dark:border-neutral-800"
+              >
                 <td className="py-1">{b.ordinal}</td>
                 <td className="py-1 tabular-nums">
                   {formatVND(b.from_amount)}
@@ -176,8 +190,7 @@ function EmployeeSalary({
 
   const [open, setOpen] = useState(false);
 
-  const notConfigured =
-    error instanceof ApiError && error.status === 404;
+  const notConfigured = error instanceof ApiError && error.status === 404;
 
   return (
     <div className="space-y-4">
@@ -195,8 +208,10 @@ function EmployeeSalary({
                 {formatVND(current.base_salary)}
               </div>
               <div className="text-xs text-neutral-500">
-                Hiệu lực từ {new Date(current.effective_from).toLocaleDateString("vi-VN")}
-                {current.dependents > 0 && ` · ${current.dependents} người phụ thuộc`}
+                Hiệu lực từ{" "}
+                {new Date(current.effective_from).toLocaleDateString("vi-VN")}
+                {current.dependents > 0 &&
+                  ` · ${current.dependents} người phụ thuộc`}
               </div>
             </div>
             {canEdit && (
@@ -219,7 +234,10 @@ function EmployeeSalary({
             <table className="mt-3 w-full text-sm">
               <tbody>
                 {current.components.map((c) => (
-                  <tr key={c.code} className="border-t border-neutral-200 dark:border-neutral-800">
+                  <tr
+                    key={c.code}
+                    className="border-t border-neutral-200 dark:border-neutral-800"
+                  >
                     <td className="py-1">
                       {c.name}
                       <span className="ml-2 text-xs text-neutral-500">
@@ -257,13 +275,18 @@ function EmployeeSalary({
                 <tr>
                   <th className="px-4 py-2 font-medium">Từ ngày</th>
                   <th className="px-4 py-2 font-medium">Đến ngày</th>
-                  <th className="px-4 py-2 text-right font-medium">Lương cơ bản</th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Lương cơ bản
+                  </th>
                   <th className="px-4 py-2 font-medium">Ghi chú</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((h) => (
-                  <tr key={h.id} className="border-t border-neutral-200 dark:border-neutral-800">
+                  <tr
+                    key={h.id}
+                    className="border-t border-neutral-200 dark:border-neutral-800"
+                  >
                     <td className="px-4 py-2">
                       {new Date(h.effective_from).toLocaleDateString("vi-VN")}
                     </td>
@@ -275,7 +298,9 @@ function EmployeeSalary({
                     <td className="px-4 py-2 text-right tabular-nums">
                       {formatVND(h.base_salary)}
                     </td>
-                    <td className="px-4 py-2 text-neutral-500">{h.note || "—"}</td>
+                    <td className="px-4 py-2 text-neutral-500">
+                      {h.note || "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -302,12 +327,18 @@ function SalaryDialog({
   save,
 }: {
   employeeId: string;
-  current?: { base_salary: number; dependents: number; components: SalaryComponent[] };
+  current?: {
+    base_salary: number;
+    dependents: number;
+    components: SalaryComponent[];
+  };
   onClose: () => void;
   save: ReturnType<typeof useSetStructure>;
 }) {
   const [base, setBase] = useState(String(current?.base_salary ?? ""));
-  const [dependents, setDependents] = useState(String(current?.dependents ?? 0));
+  const [dependents, setDependents] = useState(
+    String(current?.dependents ?? 0),
+  );
   const [effectiveFrom, setEffectiveFrom] = useState(
     new Date().toISOString().slice(0, 10),
   );
@@ -319,7 +350,14 @@ function SalaryDialog({
   function addComponent() {
     setComponents((c) => [
       ...c,
-      { kind: "allowance", code: "", name: "", amount: 0, taxable: true, prorated: false },
+      {
+        kind: "allowance",
+        code: "",
+        name: "",
+        amount: 0,
+        taxable: true,
+        prorated: false,
+      },
     ]);
   }
 
@@ -393,7 +431,9 @@ function SalaryDialog({
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium">Phụ cấp, thưởng, khấu trừ</span>
+              <span className="text-sm font-medium">
+                Phụ cấp, thưởng, khấu trừ
+              </span>
               <button
                 type="button"
                 onClick={addComponent}
@@ -408,7 +448,9 @@ function SalaryDialog({
                 <div key={i} className="grid grid-cols-12 gap-1 text-xs">
                   <select
                     value={c.kind}
-                    onChange={(e) => update(i, { kind: e.target.value as ComponentKind })}
+                    onChange={(e) =>
+                      update(i, { kind: e.target.value as ComponentKind })
+                    }
                     className="col-span-3 rounded border border-neutral-300 px-1 py-1 dark:border-neutral-700 dark:bg-neutral-950"
                   >
                     {Object.entries(COMPONENT_KIND_LABEL).map(([v, label]) => (
@@ -419,7 +461,9 @@ function SalaryDialog({
                   </select>
                   <input
                     value={c.code}
-                    onChange={(e) => update(i, { code: e.target.value.toUpperCase() })}
+                    onChange={(e) =>
+                      update(i, { code: e.target.value.toUpperCase() })
+                    }
                     placeholder="MÃ"
                     className="col-span-2 rounded border border-neutral-300 px-1 py-1 dark:border-neutral-700 dark:bg-neutral-950"
                   />
@@ -432,7 +476,9 @@ function SalaryDialog({
                   <input
                     type="number"
                     value={c.amount}
-                    onChange={(e) => update(i, { amount: Number(e.target.value) })}
+                    onChange={(e) =>
+                      update(i, { amount: Number(e.target.value) })
+                    }
                     className="col-span-3 rounded border border-neutral-300 px-1 py-1 tabular-nums dark:border-neutral-700 dark:bg-neutral-950"
                   />
 
@@ -448,13 +494,17 @@ function SalaryDialog({
                     <input
                       type="checkbox"
                       checked={c.prorated}
-                      onChange={(e) => update(i, { prorated: e.target.checked })}
+                      onChange={(e) =>
+                        update(i, { prorated: e.target.checked })
+                      }
                     />
                     chia theo công
                   </label>
                   <button
                     type="button"
-                    onClick={() => setComponents((x) => x.filter((_, j) => j !== i))}
+                    onClick={() =>
+                      setComponents((x) => x.filter((_, j) => j !== i))
+                    }
                     className="col-span-2 text-neutral-400 hover:text-red-600"
                   >
                     Xoá
@@ -479,7 +529,9 @@ function SalaryDialog({
             cũ.
           </p>
 
-          <FormError message={errMsg(save.error, "Không lưu được cấu hình lương")} />
+          <FormError
+            message={errMsg(save.error, "Không lưu được cấu hình lương")}
+          />
 
           <div className="flex justify-end gap-2">
             <button

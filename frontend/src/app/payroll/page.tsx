@@ -55,7 +55,10 @@ function CostChart({ year }: { year: number }) {
         {rows.map((r) => {
           const pct = (r.total_cost / max) * 100;
           return (
-            <div key={r.key} className="flex flex-1 flex-col items-center gap-1">
+            <div
+              key={r.key}
+              className="flex flex-1 flex-col items-center gap-1"
+            >
               <span className="text-[11px] text-neutral-500">
                 {formatVNDShort(r.total_cost)}
               </span>
@@ -74,8 +77,8 @@ function CostChart({ year }: { year: number }) {
 
       <p className="mt-3 border-t border-neutral-200 pt-2 text-xs text-neutral-500 dark:border-neutral-800">
         Chi phí thật của công ty — gồm cả phần bảo hiểm công ty đóng, khoản
-        không xuất hiện trên phiếu lương của ai nhưng vẫn ra khỏi tài khoản
-        mỗi tháng.
+        không xuất hiện trên phiếu lương của ai nhưng vẫn ra khỏi tài khoản mỗi
+        tháng.
       </p>
     </div>
   );
@@ -141,13 +144,15 @@ export default function PayrollPage() {
             onChange={(e) => setYear(Number(e.target.value))}
             className="rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950"
           >
-            {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map(
-              (y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ),
-            )}
+            {[
+              now.getFullYear(),
+              now.getFullYear() - 1,
+              now.getFullYear() - 2,
+            ].map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
           </select>
         </div>
         <CostChart year={year} />
@@ -162,21 +167,29 @@ export default function PayrollPage() {
               <th className="px-4 py-2 font-medium">Trạng thái</th>
               <th className="px-4 py-2 font-medium">Số người</th>
               <th className="px-4 py-2 text-right font-medium">Tổng gộp</th>
-              <th className="px-4 py-2 text-right font-medium">Tổng thực nhận</th>
+              <th className="px-4 py-2 text-right font-medium">
+                Tổng thực nhận
+              </th>
               <th className="px-4 py-2 text-right font-medium">Thuế TNCN</th>
             </tr>
           </thead>
           <tbody>
             {isPending && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={6}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Đang tải...
                 </td>
               </tr>
             )}
             {!isPending && periods.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={6}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Chưa có kỳ lương nào.
                 </td>
               </tr>
@@ -274,7 +287,9 @@ export default function PayrollPage() {
                 đang chạy còn thay đổi mỗi ngày.
               </p>
 
-              <FormError message={errMsg(create.error, "Không tạo được kỳ lương")} />
+              <FormError
+                message={errMsg(create.error, "Không tạo được kỳ lương")}
+              />
 
               <div className="flex justify-end gap-2">
                 <button

@@ -16,7 +16,10 @@ export async function createDepartment(body: unknown): Promise<Department> {
   return data;
 }
 
-export async function updateDepartment(id: string, body: unknown): Promise<Department> {
+export async function updateDepartment(
+  id: string,
+  body: unknown,
+): Promise<Department> {
   const { data } = await api.put<Department>(`/departments/${id}`, body);
   return data;
 }

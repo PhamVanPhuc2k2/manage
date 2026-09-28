@@ -14,7 +14,11 @@ import {
 import { useEmployees } from "@/features/employees/queries";
 import { ApiError } from "@/lib/api-client";
 
-import { useCreateDepartment, useDepartments, useUpdateDepartment } from "./queries";
+import {
+  useCreateDepartment,
+  useDepartments,
+  useUpdateDepartment,
+} from "./queries";
 import type { Department } from "./types";
 
 const schema = z.object({
@@ -82,7 +86,10 @@ export function DepartmentForm({
   }
 
   return (
-    <Modal title={isEdit ? "Sửa phòng ban" : "Thêm phòng ban"} onClose={onClose}>
+    <Modal
+      title={isEdit ? "Sửa phòng ban" : "Thêm phòng ban"}
+      onClose={onClose}
+    >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <FormError message={message} />
 
@@ -103,7 +110,10 @@ export function DepartmentForm({
         </Field>
 
         <Field label="Trực thuộc" error={errors.parent_id}>
-          <select {...register("parent_id")} {...inputProps(!!errors.parent_id)}>
+          <select
+            {...register("parent_id")}
+            {...inputProps(!!errors.parent_id)}
+          >
             <option value="">— Phòng ban cấp cao nhất —</option>
             {parentOptions.map((d) => (
               <option key={d.id} value={d.id}>
@@ -114,7 +124,10 @@ export function DepartmentForm({
         </Field>
 
         <Field label="Trưởng phòng" error={errors.manager_id}>
-          <select {...register("manager_id")} {...inputProps(!!errors.manager_id)}>
+          <select
+            {...register("manager_id")}
+            {...inputProps(!!errors.manager_id)}
+          >
             <option value="">— Chưa có —</option>
             {(employeeList?.items ?? [])
               .filter((e) => e.status !== "resigned")

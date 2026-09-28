@@ -101,7 +101,10 @@ export default function ProfilePage() {
             <tbody>
               {isPending && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-neutral-500">
+                  <td
+                    colSpan={4}
+                    className="px-4 py-8 text-center text-neutral-500"
+                  >
                     Đang tải...
                   </td>
                 </tr>

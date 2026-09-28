@@ -154,7 +154,8 @@ export function MessagePane({ conversationId }: { conversationId: string }) {
 
           {messages.map((m, i) => {
             const prev = messages[i - 1];
-            const newDay = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
+            const newDay =
+              !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
 
             return (
               <div key={m.id}>
@@ -167,7 +168,10 @@ export function MessagePane({ conversationId }: { conversationId: string }) {
                   message={m}
                   own={m.sender_id === user?.employee_id}
                   groupedWithPrev={
-                    !newDay && !!prev && prev.sender_id === m.sender_id && !prev.deleted
+                    !newDay &&
+                    !!prev &&
+                    prev.sender_id === m.sender_id &&
+                    !prev.deleted
                   }
                   onReply={() => setReplyTo(m)}
                 />
@@ -217,7 +221,9 @@ function MessageRow({
   // Tin hệ thống nằm giữa, không có bong bóng: nó không thuộc về ai.
   if (m.kind === "system") {
     return (
-      <div className="my-2 text-center text-xs text-neutral-500">{m.content}</div>
+      <div className="my-2 text-center text-xs text-neutral-500">
+        {m.content}
+      </div>
     );
   }
 
@@ -250,10 +256,14 @@ function MessageRow({
           {m.reply_to_id && !m.deleted && (
             <div
               className={`mb-1 border-l-2 pl-2 text-xs ${
-                own ? "border-white/50 text-white/80" : "border-neutral-400 text-neutral-500"
+                own
+                  ? "border-white/50 text-white/80"
+                  : "border-neutral-400 text-neutral-500"
               }`}
             >
-              <div className="font-medium">{m.reply_to_sender || "Tin nhắn"}</div>
+              <div className="font-medium">
+                {m.reply_to_sender || "Tin nhắn"}
+              </div>
               <div className="truncate">{m.reply_to_content}</div>
             </div>
           )}
@@ -264,7 +274,8 @@ function MessageRow({
             <span className="whitespace-pre-wrap break-words">{m.content}</span>
           )}
 
-          {!m.deleted && m.attachments?.map((a) => <AttachmentView key={a.id} a={a} />)}
+          {!m.deleted &&
+            m.attachments?.map((a) => <AttachmentView key={a.id} a={a} />)}
 
           <div
             className={`mt-0.5 text-[10px] ${own ? "text-white/70" : "text-neutral-400"}`}
@@ -278,7 +289,10 @@ function MessageRow({
 
         {!m.deleted && !m.pending && (
           <div className="mt-0.5 flex gap-2 opacity-0 transition group-hover:opacity-100">
-            <button onClick={onReply} className="text-[11px] text-neutral-500 hover:underline">
+            <button
+              onClick={onReply}
+              className="text-[11px] text-neutral-500 hover:underline"
+            >
               Trả lời
             </button>
             {own && (
@@ -297,12 +311,26 @@ function MessageRow({
   );
 }
 
-function AttachmentView({ a }: { a: { file_name: string; content_type: string; size_bytes: number; url?: string } }) {
+function AttachmentView({
+  a,
+}: {
+  a: {
+    file_name: string;
+    content_type: string;
+    size_bytes: number;
+    url?: string;
+  };
+}) {
   const isImage = a.content_type.startsWith("image/");
 
   if (isImage && a.url) {
     return (
-      <a href={a.url} target="_blank" rel="noopener noreferrer" className="mt-1 block">
+      <a
+        href={a.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1 block"
+      >
         {/* Thẻ img thường chứ không phải next/image: URL đã ký từ R2 có chữ ký
             trong query string và hết hạn, nên tối ưu hoá phía máy chủ của
             Next không dùng được. */}

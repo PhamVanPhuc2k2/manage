@@ -70,7 +70,9 @@ export default function PositionsPage() {
             <tr>
               <th className="px-4 py-2 font-medium">Mã</th>
               <th className="px-4 py-2 font-medium">Tên chức vụ</th>
-              <th className="px-4 py-2 text-right font-medium">Lương tối thiểu</th>
+              <th className="px-4 py-2 text-right font-medium">
+                Lương tối thiểu
+              </th>
               <th className="px-4 py-2 text-right font-medium">Lương tối đa</th>
               <th className="px-4 py-2" />
             </tr>
@@ -78,14 +80,20 @@ export default function PositionsPage() {
           <tbody>
             {isPending && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Đang tải...
                 </td>
               </tr>
             )}
             {!isPending && items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   Chưa có chức vụ nào
                 </td>
               </tr>
@@ -97,8 +105,12 @@ export default function PositionsPage() {
               >
                 <td className="px-4 py-2 font-mono text-xs">{p.code}</td>
                 <td className="px-4 py-2">{p.name}</td>
-                <td className="px-4 py-2 text-right">{formatVND(p.salary_min)}</td>
-                <td className="px-4 py-2 text-right">{formatVND(p.salary_max)}</td>
+                <td className="px-4 py-2 text-right">
+                  {formatVND(p.salary_min)}
+                </td>
+                <td className="px-4 py-2 text-right">
+                  {formatVND(p.salary_max)}
+                </td>
                 <td className="px-4 py-2 text-right whitespace-nowrap">
                   {can("position:manage") && (
                     <>

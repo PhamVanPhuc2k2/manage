@@ -87,7 +87,10 @@ function CommentComposer({
   function insertMention(m: ProjectMember) {
     // Nhúng sẵn id vào nội dung. Backend chỉ đọc id ra, không phải đoán xem
     // "@Hà" là ai — tên trùng nhau là chuyện thường trong công ty.
-    setText((t) => t.replace(/@(\S*)$/, "") + `@[${m.employee_name}](${m.employee_id}) `);
+    setText(
+      (t) =>
+        t.replace(/@(\S*)$/, "") + `@[${m.employee_name}](${m.employee_id}) `,
+    );
     setPicking(false);
     ref.current?.focus();
   }
@@ -209,7 +212,9 @@ export function TaskDetailPanel({
     <aside className="flex w-[420px] shrink-0 flex-col overflow-y-auto border-l border-neutral-200 dark:border-neutral-800">
       <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
         <div className="mb-2 flex items-start justify-between gap-2">
-          <span className="font-mono text-xs text-neutral-500">{task.code}</span>
+          <span className="font-mono text-xs text-neutral-500">
+            {task.code}
+          </span>
           <button
             onClick={onClose}
             aria-label="Đóng"
@@ -249,7 +254,9 @@ export function TaskDetailPanel({
             <select
               value={task.priority}
               disabled={!canWrite || update.isPending}
-              onChange={(e) => patch({ priority: e.target.value as TaskPriority })}
+              onChange={(e) =>
+                patch({ priority: e.target.value as TaskPriority })
+              }
               className="w-full rounded border border-neutral-300 px-2 py-1 text-sm disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950"
             >
               {Object.entries(TASK_PRIORITY_LABEL).map(([v, label]) => (
@@ -265,7 +272,9 @@ export function TaskDetailPanel({
             <select
               value={task.assignee_id ?? ""}
               disabled={!canWrite || update.isPending}
-              onChange={(e) => patch({ assignee_id: e.target.value || undefined })}
+              onChange={(e) =>
+                patch({ assignee_id: e.target.value || undefined })
+              }
               className="w-full rounded border border-neutral-300 px-2 py-1 text-sm disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950"
             >
               <option value="">Chưa giao</option>
@@ -281,7 +290,9 @@ export function TaskDetailPanel({
           <dd className="py-1">{task.reporter_name || "—"}</dd>
 
           <dt className="text-neutral-500">Hạn</dt>
-          <dd className={`py-1 ${task.overdue ? "font-medium text-red-600" : ""}`}>
+          <dd
+            className={`py-1 ${task.overdue ? "font-medium text-red-600" : ""}`}
+          >
             {task.due_date
               ? new Date(task.due_date).toLocaleDateString("vi-VN")
               : "—"}
@@ -300,7 +311,9 @@ export function TaskDetailPanel({
           </dd>
         </dl>
 
-        <FormError message={errMsg(update.error, "Không cập nhật được công việc")} />
+        <FormError
+          message={errMsg(update.error, "Không cập nhật được công việc")}
+        />
       </div>
 
       {/* --- Việc con --- */}
@@ -340,7 +353,11 @@ export function TaskDetailPanel({
                     s.status === "done" ? "bg-green-500" : "bg-neutral-300"
                   }`}
                 />
-                <span className={s.status === "done" ? "text-neutral-400 line-through" : ""}>
+                <span
+                  className={
+                    s.status === "done" ? "text-neutral-400 line-through" : ""
+                  }
+                >
                   {s.title}
                 </span>
               </li>
@@ -461,7 +478,10 @@ function AttachmentsTab({
       {isPending && <p className="text-sm text-neutral-500">Đang tải...</p>}
 
       {files.map((f) => (
-        <div key={f.id} className="flex items-center justify-between gap-2 text-sm">
+        <div
+          key={f.id}
+          className="flex items-center justify-between gap-2 text-sm"
+        >
           <div className="min-w-0">
             {f.download_url ? (
               <a
@@ -473,7 +493,9 @@ function AttachmentsTab({
                 {f.file_name}
               </a>
             ) : (
-              <span className="block truncate text-neutral-500">{f.file_name}</span>
+              <span className="block truncate text-neutral-500">
+                {f.file_name}
+              </span>
             )}
             <span className="text-xs text-neutral-500">
               {formatBytes(f.size_bytes)}
@@ -544,14 +566,22 @@ function TimelogsTab({
       )}
 
       {logs.map((l) => (
-        <div key={l.id} className="flex items-start justify-between gap-2 text-sm">
+        <div
+          key={l.id}
+          className="flex items-start justify-between gap-2 text-sm"
+        >
           <div>
-            <span className="font-medium">{formatMinutes(l.spent_minutes)}</span>
+            <span className="font-medium">
+              {formatMinutes(l.spent_minutes)}
+            </span>
             <span className="ml-2 text-xs text-neutral-500">
-              {l.employee_name} · {new Date(l.logged_on).toLocaleDateString("vi-VN")}
+              {l.employee_name} ·{" "}
+              {new Date(l.logged_on).toLocaleDateString("vi-VN")}
             </span>
             {l.note && (
-              <p className="text-xs text-neutral-600 dark:text-neutral-400">{l.note}</p>
+              <p className="text-xs text-neutral-600 dark:text-neutral-400">
+                {l.note}
+              </p>
             )}
           </div>
           {l.employee_id === myEmployeeId && (
@@ -579,7 +609,12 @@ function TimelogsTab({
             // lưu trữ — "1.5 giờ" nhập tay dễ thành 1.05, 90 phút thì không.
             log.mutate(
               { spentMinutes: Math.round(h * 60), note },
-              { onSuccess: () => { setHours(""); setNote(""); } },
+              {
+                onSuccess: () => {
+                  setHours("");
+                  setNote("");
+                },
+              },
             );
           }}
           className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800"
@@ -648,7 +683,10 @@ function HistoryTab({ taskId }: { taskId: string }) {
             </span>
           )}
           {a.action === "time_logged" && a.new_value && (
-            <span className="text-neutral-600 dark:text-neutral-400"> {a.new_value}</span>
+            <span className="text-neutral-600 dark:text-neutral-400">
+              {" "}
+              {a.new_value}
+            </span>
           )}
           <div className="text-xs text-neutral-500">
             {new Date(a.created_at).toLocaleString("vi-VN")}

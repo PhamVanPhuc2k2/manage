@@ -29,7 +29,10 @@ const schema = z
       !v.salary_min ||
       !v.salary_max ||
       Number(v.salary_min) <= Number(v.salary_max),
-    { message: "Lương tối thiểu không được lớn hơn lương tối đa", path: ["salary_max"] },
+    {
+      message: "Lương tối thiểu không được lớn hơn lương tối đa",
+      path: ["salary_max"],
+    },
   )
   .refine((v) => !v.salary_min || Number(v.salary_min) >= 0, {
     message: "Lương không được âm",

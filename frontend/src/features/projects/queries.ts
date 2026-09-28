@@ -28,7 +28,8 @@ export const projectKeys = {
   detail: (id: string) => [...projectKeys.details(), id] as const,
   members: (id: string) => [...projectKeys.detail(id), "members"] as const,
   progress: (id: string) => [...projectKeys.detail(id), "progress"] as const,
-  workload: (id?: string) => [...projectKeys.all, "workload", id ?? "all"] as const,
+  workload: (id?: string) =>
+    [...projectKeys.all, "workload", id ?? "all"] as const,
 };
 
 export function useProjects(filters: ProjectFilters) {

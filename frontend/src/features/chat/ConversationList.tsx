@@ -87,11 +87,15 @@ function ConversationRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
           {c.is_pinned && <span title="Đã ghim">📌</span>}
-          <span className="truncate text-sm font-medium">{c.name || "(chưa đặt tên)"}</span>
+          <span className="truncate text-sm font-medium">
+            {c.name || "(chưa đặt tên)"}
+          </span>
           {c.kind === "direct" && <StatusDot status={c.peer_status} />}
         </div>
         <div className="text-xs text-neutral-500">
-          {c.kind === "direct" ? "Tin nhắn riêng" : `${c.member_count} thành viên`}
+          {c.kind === "direct"
+            ? "Tin nhắn riêng"
+            : `${c.member_count} thành viên`}
           {c.is_muted && " · đã tắt thông báo"}
         </div>
       </div>

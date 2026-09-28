@@ -273,7 +273,9 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
 
     // Người nghe bấm chiếu: phải được hỏi trước, chưa chiếu ngay.
     await calleePage.getByRole("button", { name: "Chia sẻ màn hình" }).click();
-    const ask = calleePage.getByRole("alertdialog", { name: "Thay người đang chiếu" });
+    const ask = calleePage.getByRole("alertdialog", {
+      name: "Thay người đang chiếu",
+    });
     await expect(ask).toBeVisible({ timeout: 10_000 });
     await expect(
       callerPage.getByRole("button", { name: "Dừng chia sẻ" }),
@@ -288,7 +290,9 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
     await expect(
       callerPage.getByRole("button", { name: "Chia sẻ màn hình" }),
     ).toBeVisible({ timeout: 15_000 });
-    await expect(callerPage.getByText(/đã bắt đầu chiếu màn hình/)).toBeVisible();
+    await expect(
+      callerPage.getByText(/đã bắt đầu chiếu màn hình/),
+    ).toBeVisible();
 
     await callerPage
       .getByRole("button", { name: "Kết thúc cho tất cả" })

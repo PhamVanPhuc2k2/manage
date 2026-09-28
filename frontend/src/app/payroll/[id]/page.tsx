@@ -75,7 +75,10 @@ export default function PayrollPeriodPage({
     <AppShell>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/payroll" className="text-xs text-neutral-500 hover:underline">
+          <Link
+            href="/payroll"
+            className="text-xs text-neutral-500 hover:underline"
+          >
             ← Kỳ lương
           </Link>
           <h1 className="mt-1 flex items-center gap-3 text-xl font-semibold">
@@ -119,7 +122,11 @@ export default function PayrollPeriodPage({
               </button>
               <button
                 onClick={() => {
-                  if (confirm("Xác nhận đã trả lương kỳ này? Sau đó không sửa lại được."))
+                  if (
+                    confirm(
+                      "Xác nhận đã trả lương kỳ này? Sau đó không sửa lại được.",
+                    )
+                  )
                     changeStatus.mutate({ id, status: "paid" });
                 }}
                 className="rounded bg-green-700 px-4 py-2 text-sm font-medium text-white"
@@ -142,8 +149,8 @@ export default function PayrollPeriodPage({
 
       {period.status === "paid" && (
         <div className="mb-4 rounded border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
-          Kỳ lương đã chốt và đã trả. Mọi điều chỉnh sau thời điểm này phải
-          thực hiện ở kỳ kế tiếp.
+          Kỳ lương đã chốt và đã trả. Mọi điều chỉnh sau thời điểm này phải thực
+          hiện ở kỳ kế tiếp.
         </div>
       )}
 
@@ -151,7 +158,11 @@ export default function PayrollPeriodPage({
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Số người" value={String(period.employee_count)} />
         <Stat label="Tổng lương gộp" value={formatVND(period.total_gross)} />
-        <Stat label="Tổng thực nhận" value={formatVND(period.total_net)} strong />
+        <Stat
+          label="Tổng thực nhận"
+          value={formatVND(period.total_net)}
+          strong
+        />
         <Stat label="Thuế TNCN" value={formatVND(period.total_tax)} />
       </div>
 
@@ -165,9 +176,15 @@ export default function PayrollPeriodPage({
                 <tr>
                   <th className="px-4 py-2 font-medium">Phòng ban</th>
                   <th className="px-4 py-2 font-medium">Số người</th>
-                  <th className="px-4 py-2 text-right font-medium">Lương gộp</th>
-                  <th className="px-4 py-2 text-right font-medium">BH công ty đóng</th>
-                  <th className="px-4 py-2 text-right font-medium">Chi phí thật</th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Lương gộp
+                  </th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    BH công ty đóng
+                  </th>
+                  <th className="px-4 py-2 text-right font-medium">
+                    Chi phí thật
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -177,7 +194,9 @@ export default function PayrollPeriodPage({
                     className="border-t border-neutral-200 dark:border-neutral-800"
                   >
                     <td className="px-4 py-2">{c.label}</td>
-                    <td className="px-4 py-2 tabular-nums">{c.employee_count}</td>
+                    <td className="px-4 py-2 tabular-nums">
+                      {c.employee_count}
+                    </td>
                     <td className="px-4 py-2 text-right tabular-nums">
                       {formatVND(c.total_gross)}
                     </td>
@@ -214,7 +233,10 @@ export default function PayrollPeriodPage({
           <tbody>
             {slips.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                <td
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-neutral-500"
+                >
                   {calculating
                     ? "Đang tính..."
                     : "Chưa có phiếu lương. Bấm “Chạy tính lương” để bắt đầu."}
@@ -384,7 +406,9 @@ function EditPayslipDialog({
             />
           </label>
 
-          <FormError message={errMsg(update.error, "Không sửa được phiếu lương")} />
+          <FormError
+            message={errMsg(update.error, "Không sửa được phiếu lương")}
+          />
 
           <div className="flex justify-end gap-2">
             <button

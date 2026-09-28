@@ -52,7 +52,9 @@ function CallStage({ join: active }: { join: CallJoin }) {
   const { room, phase, error, tiles } = useLiveKitRoom(active, kind);
 
   useSinglePresenter(room, (byName) =>
-    setNotice(`${byName} đã bắt đầu chiếu màn hình — phần chiếu của bạn đã dừng.`),
+    setNotice(
+      `${byName} đã bắt đầu chiếu màn hình — phần chiếu của bạn đã dừng.`,
+    ),
   );
 
   // Trạng thái nút lấy từ PHÒNG chứ không phải từ state riêng.
@@ -78,7 +80,8 @@ function CallStage({ join: active }: { join: CallJoin }) {
   useEffect(() => {
     if (!startedAt || outgoing) return;
     const base = new Date(startedAt).getTime();
-    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - base) / 1000)));
+    const tick = () =>
+      setElapsed(Math.max(0, Math.floor((Date.now() - base) / 1000)));
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);

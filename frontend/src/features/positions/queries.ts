@@ -21,7 +21,9 @@ export function usePositions() {
   });
 }
 
-function usePositionMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+function usePositionMutation<TArgs, TResult>(
+  fn: (args: TArgs) => Promise<TResult>,
+) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,

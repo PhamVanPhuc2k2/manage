@@ -12,7 +12,11 @@ import { useWsMessage } from "@/lib/ws/useWebSocket";
 import type { Envelope } from "@/lib/ws/client";
 
 import * as api from "./api";
-import type { Notification, NotificationSummary, NotificationType } from "./types";
+import type {
+  Notification,
+  NotificationSummary,
+  NotificationType,
+} from "./types";
 
 export const notificationKeys = {
   all: ["notifications"] as const,
@@ -95,8 +99,13 @@ export function useSetPreference() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ type, enabled }: { type: NotificationType; enabled: boolean }) =>
-      api.setPreference(type, enabled),
+    mutationFn: ({
+      type,
+      enabled,
+    }: {
+      type: NotificationType;
+      enabled: boolean;
+    }) => api.setPreference(type, enabled),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: notificationKeys.preferences() }),
   });
@@ -126,7 +135,10 @@ export function useNotificationRealtime() {
           // Chống trùng: cùng một thông báo có thể tới hai lần khi client vừa
           // nối lại và server phát lại cho chắc.
           if (first.items.some((x) => x.id === n.id)) return old;
-          return { ...old, pages: [{ ...first, items: [n, ...first.items] }, ...rest] };
+          return {
+            ...old,
+            pages: [{ ...first, items: [n, ...first.items] }, ...rest],
+          };
         },
       );
     },
