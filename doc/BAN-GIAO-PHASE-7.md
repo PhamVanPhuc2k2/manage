@@ -72,7 +72,7 @@ TCP cổng 443 cũng cần chứng chỉ thật.
   thì im lặng (SDK trả `false`, không throw); và thanh đo micro đứng im vì
   đọc `audioLevel` của SFU — giờ đo tại máy. Còn lại: **chỉnh hệ số của
   thanh đo trên micro thật** (hiện mới đo với micro giả).
-- "Mỗi lúc chỉ một người chiếu màn hình" — chưa làm.
+- ~~"Mỗi lúc chỉ một người chiếu màn hình"~~ — xong ngày 28/09 (người sau chiếu thay, có xác nhận).
 - "Chỉ hiện người đang nói ở độ nét cao" — hiện đang dựa vào `adaptiveStream`
   và `dynacast` của LiveKit, chưa tự điều khiển.
 

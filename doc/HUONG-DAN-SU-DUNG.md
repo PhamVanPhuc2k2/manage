@@ -391,6 +391,10 @@ người vẫn thấy mặt bạn trong lúc đọc slide.
 Dừng chia sẻ bằng nút **Dừng chia sẻ** trong hệ thống, hoặc bằng thanh
 "Bạn đang chia sẻ màn hình" của chính trình duyệt — cả hai đều được.
 
+**Mỗi lúc chỉ một người chiếu.** Khi đang có người chiếu mà bạn bấm **Chia sẻ
+màn hình**, hệ thống sẽ hỏi lại trước. Nếu bạn bấm **Chiếu thay**, phần chiếu
+của người kia dừng lại và họ nhận thông báo rằng bạn đã thay.
+
 ### Sau cuộc gọi
 
 Khung chat có thêm một dòng: *"Cuộc gọi video · 12 phút"*, hoặc *"Cuộc gọi

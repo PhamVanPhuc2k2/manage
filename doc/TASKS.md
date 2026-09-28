@@ -1059,7 +1059,14 @@ Lệnh chạy:
 > sẻ. Chưa tự chuyển sang `motion` khi chiếu video — sẽ cần người dùng nói ra
 > họ đang chiếu gì, và đó là một nút nữa trên thanh điều khiển.
 - [x] Giới hạn bitrate riêng cho luồng màn hình: **1.5 Mbps, 15 khung/giây**
-- [ ] Mỗi lúc chỉ một người chiếu; người sau muốn chiếu phải được nhường hoặc thay thế
+- [x] Mỗi lúc chỉ một người chiếu; người sau muốn chiếu phải được nhường hoặc thay thế
+> Chọn **thay thế** (có xác nhận), không chờ nhường. Luật giữ ở từng máy:
+> người bấm "Chiếu thay" gửi bản tin tiếp quản qua kênh dữ liệu của phòng,
+> người đang chiếu nhận được thì dừng ngay. Hai người cùng bấm khi chưa ai
+> chiếu thì phân xử theo identity để đúng MỘT người dừng. Chỉ dựa vào sự
+> kiện "có luồng màn hình mới" là không đủ — Playwright bắt được cảnh cả hai
+> cùng chiếu khi bấm "Chiếu thay" ngay sau người kia. Không chặn ở SFU:
+> đủ cho hệ thống nội bộ, không chống người cố tình sửa mã trình duyệt.
 - [x] Đồng bộ khi người dùng bấm "Dừng chia sẻ" của **trình duyệt** — trạng thái nút đọc từ PHÒNG chứ không từ state riêng, nên nó luôn nói đúng sự thật
 - [x] Ghi nhận trong `call_participants` ai đã chiếu màn hình (phục vụ audit)
 > **Không lấy từ webhook `track_published`** — đã bật webhook và đếm sự kiện
@@ -1229,5 +1236,5 @@ Việc còn làm được trên local, theo thứ tự:
 2. ~~Sơ đồ tổ chức dạng cây (Phase 1)~~ — xong
 3. ~~Xuất báo cáo chấm công ra Excel (Phase 3)~~ — xong
 4. Sinh phiếu lương PDF ở server (Phase 4)
-5. Mỗi lúc chỉ một người chiếu màn hình (Phase 7)
+5. ~~Mỗi lúc chỉ một người chiếu màn hình (Phase 7)~~ — xong
 6. Giới hạn số người mỗi phòng gọi (Phase 7)

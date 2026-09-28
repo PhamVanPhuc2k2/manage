@@ -6,6 +6,11 @@ import { useAuth } from "@/lib/auth/useAuth";
 
 import * as api from "./api";
 import { DevicePanel } from "./DevicePanel";
+import {
+  announceTakeover,
+  currentPresenter,
+  useSinglePresenter,
+} from "./presenter";
 import { useCallStore } from "./store";
 import type { CallJoin } from "./types";
 import { useLiveKitRoom } from "./useLiveKitRoom";
@@ -39,10 +44,16 @@ function CallStage({ join: active }: { join: CallJoin }) {
   const [camOn, setCamOn] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
+  // Tên người đang chiếu, khi mình bấm chiếu đè lên họ — chờ xác nhận.
+  const [replacing, setReplacing] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
   const kind = active.call.kind;
   const { room, phase, error, tiles } = useLiveKitRoom(active, kind);
+
+  useSinglePresenter(room, (byName) =>
+    setNotice(`${byName} đã bắt đầu chiếu màn hình — phần chiếu của bạn đã dừng.`),
+  );
 
   // Trạng thái nút lấy từ PHÒNG chứ không phải từ state riêng.
   //
@@ -101,7 +112,18 @@ function CallStage({ join: active }: { join: CallJoin }) {
       await room.localParticipant.setCameraEnabled(!camOn);
     });
 
-  const toggleShare = () =>
+  const toggleShare = () => {
+    // Đang có người chiếu thì hỏi trước: bấm chiếu sẽ thay họ. Không hỏi
+    // thì một cú bấm nhầm cắt ngang phần trình bày của người khác.
+    const presenter = !sharing ? currentPresenter(room) : undefined;
+    if (presenter) {
+      setReplacing(presenter.name || presenter.identity);
+      return;
+    }
+    return startOrStopShare();
+  };
+
+  const startOrStopShare = () =>
     guard(async () => {
       if (!room) return;
       // Người dùng bấm "Huỷ" trên hộp chọn màn hình của trình duyệt thì
@@ -195,6 +217,34 @@ function CallStage({ join: active }: { join: CallJoin }) {
           Thu gọn
         </button>
       </header>
+
+      {replacing && (
+        <div
+          role="alertdialog"
+          aria-label="Thay người đang chiếu"
+          className="mx-4 mb-2 flex flex-wrap items-center gap-3 rounded bg-sky-500/15 px-3 py-2 text-sm text-sky-100"
+        >
+          <span className="flex-1">
+            {replacing} đang chiếu màn hình. Chiếu của bạn sẽ thay thế và phần
+            chiếu của họ sẽ dừng.
+          </span>
+          <button
+            onClick={() => {
+              setReplacing(null);
+              void startOrStopShare().then(() => announceTakeover(room));
+            }}
+            className="rounded bg-sky-600 px-3 py-1 font-medium transition hover:bg-sky-700"
+          >
+            Chiếu thay
+          </button>
+          <button
+            onClick={() => setReplacing(null)}
+            className="rounded border border-neutral-600 px-3 py-1 transition hover:bg-neutral-800"
+          >
+            Thôi
+          </button>
+        </div>
+      )}
 
       {(error || notice) && (
         <div className="mx-4 mb-2 rounded bg-amber-500/15 px-3 py-2 text-sm text-amber-200">

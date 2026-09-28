@@ -253,6 +253,51 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
     ).toHaveCount(0, { timeout: 20_000 });
   });
 
+  test("mỗi lúc một người chiếu: người sau chiếu thay, người trước tự dừng và được báo", async () => {
+    await calleePage.goto("/attendance");
+    await openConversation(callerPage, peer.fullName);
+    await callerPage.getByRole("button", { name: "Gọi video" }).click();
+    await expect(calleePage.getByText("Cuộc gọi video đến")).toBeVisible({
+      timeout: 20_000,
+    });
+    await calleePage.getByRole("button", { name: "Nghe" }).click();
+    await expect(
+      callerPage.getByRole("button", { name: "Rời cuộc gọi" }),
+    ).toBeVisible({ timeout: 20_000 });
+
+    // Người gọi chiếu trước.
+    await callerPage.getByRole("button", { name: "Chia sẻ màn hình" }).click();
+    await expect(
+      callerPage.getByRole("button", { name: "Dừng chia sẻ" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Người nghe bấm chiếu: phải được hỏi trước, chưa chiếu ngay.
+    await calleePage.getByRole("button", { name: "Chia sẻ màn hình" }).click();
+    const ask = calleePage.getByRole("alertdialog", { name: "Thay người đang chiếu" });
+    await expect(ask).toBeVisible({ timeout: 10_000 });
+    await expect(
+      callerPage.getByRole("button", { name: "Dừng chia sẻ" }),
+    ).toBeVisible();
+
+    await ask.getByRole("button", { name: "Chiếu thay" }).click();
+
+    // Người nghe chiếu; máy người gọi tự dừng và nói rõ ai đã thay.
+    await expect(
+      calleePage.getByRole("button", { name: "Dừng chia sẻ" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      callerPage.getByRole("button", { name: "Chia sẻ màn hình" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(callerPage.getByText(/đã bắt đầu chiếu màn hình/)).toBeVisible();
+
+    await callerPage
+      .getByRole("button", { name: "Kết thúc cho tất cả" })
+      .click();
+    await expect(
+      calleePage.getByRole("button", { name: "Rời cuộc gọi" }),
+    ).toHaveCount(0, { timeout: 20_000 });
+  });
+
   test("từ chối cuộc gọi thì màn hình gọi đóng ở cả hai phía", async () => {
     await calleePage.goto("/attendance");
     await openConversation(callerPage, peer.fullName);
