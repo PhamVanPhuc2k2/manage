@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
+import { useCrumbLabel } from "@/components/Breadcrumb";
 import { IMPORT_STATUS_LABEL, useImport } from "@/features/employees/imports";
 import { ApiError } from "@/lib/api-client";
 
 export default function EmployeeImportResultPage() {
   const { id } = useParams<{ id: string }>();
   const { data: imp, isPending, error } = useImport(id);
+  useCrumbLabel(`/employees/imports/${id}`, imp?.file_name);
 
   // Mặc định chỉ hiện dòng cần xử lý: người nhập 300 dòng mà có 4 dòng lỗi
   // cần thấy ngay 4 dòng đó, không phải cuộn qua 296 dòng xanh.

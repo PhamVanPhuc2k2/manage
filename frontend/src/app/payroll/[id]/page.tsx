@@ -4,6 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
+import { useCrumbLabel } from "@/components/Breadcrumb";
 import { FormError } from "@/components/form";
 import {
   useChangePeriodStatus,
@@ -38,6 +39,7 @@ export default function PayrollPeriodPage({
   const { can } = usePermission();
 
   const { data: period, isPending, error } = usePeriod(id);
+  useCrumbLabel(`/payroll/${id}`, period?.name);
   const { data: slipData } = usePayslips(id);
   const { data: costRows = [] } = useCostByDepartment(id);
 

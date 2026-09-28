@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
+import { useCrumbLabel } from "@/components/Breadcrumb";
 import { FormError } from "@/components/form";
 import { ProjectForm } from "@/features/projects/ProjectForm";
 import {
@@ -50,6 +51,7 @@ export default function ProjectDetailPage({
   const router = useRouter();
 
   const { data: project, isPending, error } = useProject(id);
+  useCrumbLabel(`/projects/${id}`, project?.name);
   const { data: progress } = useProjectProgress(id);
   const { data: members = [] } = useProjectMembers(id);
   // 10 việc mới nhất. Bảng Kanban là nơi xem đầy đủ, ở đây chỉ cần ảnh chụp

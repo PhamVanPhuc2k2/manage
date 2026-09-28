@@ -4,6 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
+import { useCrumbLabel } from "@/components/Breadcrumb";
 import { FormError } from "@/components/form";
 import { useProjectMembers } from "@/features/projects/queries";
 import { KanbanBoard } from "@/features/tasks/KanbanBoard";
@@ -25,6 +26,7 @@ export default function BoardPage({
   const myEmployeeId = useAuthStore((s) => s.user?.employee_id);
 
   const { data: board, isPending, error } = useBoard(id);
+  useCrumbLabel(`/projects/${id}`, board?.project.name);
   const { data: members = [] } = useProjectMembers(id);
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);

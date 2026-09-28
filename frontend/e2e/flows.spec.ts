@@ -323,6 +323,34 @@ test.describe("Giao diện sáng / tối", () => {
   });
 });
 
+test.describe("Điều hướng: menu và breadcrumb", () => {
+  test("menu chỉ sáng một mục; breadcrumb ghi tên thật và bấm quay lại được", async () => {
+    const nav = shared.getByRole("complementary");
+    const crumbs = shared.getByRole("navigation", { name: "Đường dẫn" });
+
+    // /attendance/team nằm dưới /attendance: trước đây cả hai mục cùng sáng.
+    await shared.goto("/attendance/team");
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
+    await expect(nav.locator('[aria-current="page"]')).toHaveText(
+      "Công phòng ban",
+    );
+    await expect(crumbs).toHaveText("Công phòng ban");
+
+    // Trang có id: breadcrumb hiện TÊN nhân viên, không phải chuỗi UUID.
+    await shared.goto("/employees");
+    const first = shared.locator("tbody tr a").first();
+    const name = (await first.textContent())!.trim();
+    await first.click();
+    await expect(crumbs).toContainText(`Nhân viên›${name}`, {
+      timeout: 15_000,
+    });
+    await expect(crumbs).not.toContainText("…");
+
+    await crumbs.getByRole("link", { name: "Nhân viên" }).click();
+    await expect(shared).toHaveURL(/\/employees$/);
+  });
+});
+
 test.describe("Luồng 4 — Dự án và công việc", () => {
   test("tạo dự án rồi thêm một công việc vào bảng", async () => {
     const id = suffix();

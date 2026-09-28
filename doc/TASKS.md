@@ -332,8 +332,8 @@ Lệnh chạy:
 - [x] `create-next-app` với TypeScript, Tailwind, App Router
 - [ ] Cài shadcn/ui, dựng theme (light/dark) — *theme xong (28/09/2026): chọn Sáng / Tối / Theo máy ở thanh trên, nhớ lựa chọn, không nháy trắng khi tải. shadcn/ui chưa cài: app đã có bộ component tự viết bằng Tailwind*
 - [x] API client bọc `fetch`: tự gắn token, tự refresh khi 401, xử lý lỗi tập trung
-- [ ] Layout khung: sidebar, topbar, breadcrumb, khu vực thông báo — *có sidebar và topbar (AppShell), thông báo ở chuông; chưa có breadcrumb*
-- [ ] ESLint + Prettier + husky pre-commit — *có ESLint; chưa có cấu hình Prettier và husky*
+- [x] Layout khung: sidebar, topbar, breadcrumb, khu vực thông báo — *breadcrumb thêm ngày 28/09/2026: ghi tên thật cho đoạn id, bắt đầu từ mục menu chứa trang*
+- [x] ESLint + Prettier + husky pre-commit — *Prettier 3.9.9 cấu hình mặc định, lint-staged, hook kiểm cả gofmt; CI chạy format:check*
 
 ### CI
 - [x] GitHub Actions: lint + test + build cho cả backend và frontend

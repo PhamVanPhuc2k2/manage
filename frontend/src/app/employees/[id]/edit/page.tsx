@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
+import { useCrumbLabel } from "@/components/Breadcrumb";
 import { EmployeeForm, toFormValues } from "@/features/employees/EmployeeForm";
 import { useEmployee, useUpdateEmployee } from "@/features/employees/queries";
 import { toEmployeePayload } from "@/features/employees/schema";
@@ -13,6 +14,7 @@ export default function EditEmployeePage() {
   const router = useRouter();
 
   const { data: employee, isPending, error } = useEmployee(id);
+  useCrumbLabel(`/employees/${id}`, employee?.full_name);
   const update = useUpdateEmployee(id);
 
   if (isPending) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { Breadcrumb, matchRoot } from "@/components/Breadcrumb";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { WorkStatusWidget } from "@/features/attendance/WorkStatusWidget";
 import { CallHost } from "@/features/call/CallHost";
@@ -74,6 +75,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   const visibleNav = NAV.filter((item) => can(item.permission));
+  const activeRoot = matchRoot(
+    pathname,
+    visibleNav.map((n) => n.href),
+  );
 
   return (
     <div className="flex min-h-screen">
@@ -84,11 +89,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav className="p-2">
           {visibleNav.map((item) => {
-            const active = pathname.startsWith(item.href);
+            const active = item.href === activeRoot;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? "page" : undefined}
                 className={`block rounded px-3 py-2 text-sm transition ${
                   active
                     ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
@@ -104,9 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-3 dark:border-neutral-800">
-          <div className="text-sm text-neutral-500">
-            {user.roles.join(", ")}
-          </div>
+          <Breadcrumb roots={visibleNav.map((n) => n.href)} />
           <div className="flex items-center gap-4">
             {can("attendance:read") && <WorkStatusWidget />}
             <ThemeToggle />

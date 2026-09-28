@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
+import { useCrumbLabel } from "@/components/Breadcrumb";
 import { FormError } from "@/components/form";
 import {
   useCreateAccount,
@@ -34,6 +35,7 @@ export default function EmployeeDetailPage() {
   const { can } = usePermission();
 
   const { data: employee, isPending, error } = useEmployee(id);
+  useCrumbLabel(`/employees/${id}`, employee?.full_name);
 
   if (isPending) {
     return (
