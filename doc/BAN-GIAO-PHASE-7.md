@@ -25,8 +25,8 @@ hình, cúp máy, và khung chat có dòng "Cuộc gọi video · 12 phút".
 | Unit test `repository/media` | 92.7% |
 | Integration test trên PostgreSQL thật | 14 phép cho module gọi |
 
-Nhánh `phase-7-goi-video`, 14 commit, đã đẩy lên GitHub. **Chưa merge vào
-`main`** — `main` vẫn đang ở Phase 6.
+Nhánh `phase-7-goi-video` **đã merge vào `main` ngày 28/09** (fast-forward,
+không có merge commit — giữ `main` thẳng như các phase trước).
 
 ---
 
@@ -174,7 +174,7 @@ cd frontend && E2E_ADMIN_PASSWORD='E2eSmoke#1790151133' pnpm e2e
 ## Việc tiếp theo, theo thứ tự đề xuất
 
 1. ~~Mở bảng chọn thiết bị trong trình duyệt~~ — xong.
-2. **Merge nhánh vào `main`** — phần lõi đã nghiệm thu đầy đủ.
+2. ~~Merge nhánh vào `main`~~ — xong.
 3. **Làm khối HTTPS của Phase 6.** Nó chặn cả việc thử trong mạng LAN lẫn
    listener TURN trên 443, tức là chặn luôn năm mục nghiệm thu còn lại.
 4. Thử trên **mạng công ty thật** — mục rủi ro nhất của cả phase.
