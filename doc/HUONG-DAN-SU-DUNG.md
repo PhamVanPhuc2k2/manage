@@ -603,6 +603,14 @@ Hệ thống chặn hai việc:
 
 Cần xoá thì chuyển hết người và phòng con đi trước.
 
+Muốn xem toàn bộ cây dạng hình thì mở **Sơ đồ tổ chức**. Mọi người đều xem
+được trang này. Mỗi ô là một phòng, ghi tên trưởng phòng và số người. Nếu
+phòng có phòng con, ô ghi thêm tổng số người **cả khối**.
+
+- Bấm **+** hoặc **−** dưới một ô để mở hoặc thu gọn nhánh đó.
+- Bấm vào ô để xem danh sách người trong phòng. Danh sách này theo quyền
+  của bạn: nhân viên thường chỉ thấy chính mình.
+
 ### Khung giờ làm việc
 
 Ba mức, mức hẹp hơn thắng:

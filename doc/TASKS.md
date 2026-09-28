@@ -352,8 +352,8 @@ Lệnh chạy:
 > **Trạng thái: đã xong.** Kiểm chứng bằng hai script trong `scripts/`:
 > `smoke-auth.sh` (34 mục bảo mật) và `smoke-hr.sh` (31 mục nghiệp vụ), đều đạt toàn bộ.
 >
-> Hai việc còn để lại có chủ ý: nhập nhân viên từ Excel (cần hạ tầng báo tiến
-> độ của Phase 5) và sơ đồ tổ chức dạng đồ hoạ (API cây đã có, chỉ thiếu phần vẽ).
+> Hai việc để lại lúc đó — nhập nhân viên từ Excel và sơ đồ tổ chức dạng đồ
+> hoạ — đã làm xong ngày 28/09/2026.
 
 ### Domain & migration
 - [x] Migration: `companies`, `departments`, `positions`, `employees`, `users`
@@ -394,7 +394,7 @@ Lệnh chạy:
 > thì làm tiếp từ dòng chưa xong chứ không tạo trùng. Nhận tiêu đề tiếng Việt
 > có dấu, CSV dấu chấm phẩy của Excel vùng Việt Nam, và ô ngày của Excel.
 > Kiểm chứng: `scripts/smoke-import.sh` 17/17, Playwright luồng 3b.
-- [ ] Xem sơ đồ tổ chức (org chart) dạng cây
+- [x] Xem sơ đồ tổ chức (org chart) dạng cây — trang `/org-chart`: ô phòng ban nối bằng đường kẻ, thu gọn/mở từng nhánh, bấm vào phòng xem người của phòng
 
 ### Frontend Phase 1
 - [x] Trang đăng nhập + xử lý refresh token ngầm
@@ -1222,7 +1222,7 @@ các mục nghiệm thu trên mạng thật của Phase 7 được hoãn có ch�
 Việc còn làm được trên local, theo thứ tự:
 
 1. ~~Nhập nhân viên hàng loạt từ CSV/Excel (Phase 1)~~ — xong
-2. Sơ đồ tổ chức dạng cây (Phase 1)
+2. ~~Sơ đồ tổ chức dạng cây (Phase 1)~~ — xong
 3. Xuất báo cáo chấm công ra Excel (Phase 3)
 4. Sinh phiếu lương PDF ở server (Phase 4)
 5. Mỗi lúc chỉ một người chiếu màn hình (Phase 7)

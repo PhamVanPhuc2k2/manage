@@ -1,0 +1,103 @@
+/*
+ * Đường nối của sơ đồ tổ chức, vẽ bằng CSS thuần trên danh sách lồng nhau.
+ *
+ * Mỗi <li> vẽ nửa đường ngang bên trái (::before) và nửa bên phải kèm
+ * đoạn dọc xuống ô của nó (::after). Con đầu và con cuối xoá nửa phía
+ * ngoài, nên các nửa ghép lại thành đúng một thanh ngang nối anh em.
+ * Không dùng SVG: ô tự co giãn theo tên phòng dài ngắn, và đường nối tự đi
+ * theo mà không phải đo toạ độ.
+ */
+
+.tree {
+  --line: #d4d4d4;
+  --gap: 20px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tree {
+    --line: #404040;
+  }
+}
+
+.tree ul {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: var(--gap);
+  margin: 0;
+}
+
+/* Cấp trên cùng không có đường nào đi vào. Công ty có nhiều phòng gốc thì
+   chúng đứng cạnh nhau — không vẽ thanh ngang nối chúng lên một cha không
+   tồn tại. */
+.tree > ul {
+  padding-top: 0;
+}
+
+.tree li {
+  position: relative;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--gap) 6px 0;
+}
+
+.tree li::before,
+.tree li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: var(--gap);
+  border-top: 1px solid var(--line);
+}
+
+.tree li::after {
+  right: auto;
+  left: 50%;
+  border-left: 1px solid var(--line);
+}
+
+.tree li:only-child::before,
+.tree li:only-child::after {
+  display: none;
+}
+
+.tree li:only-child {
+  padding-top: 0;
+}
+
+.tree li:first-child::before,
+.tree li:last-child::after {
+  border: 0 none;
+}
+
+.tree li:last-child::before {
+  border-right: 1px solid var(--line);
+  border-radius: 0 6px 0 0;
+}
+
+.tree li:first-child::after {
+  border-radius: 6px 0 0 0;
+}
+
+/* Đoạn dọc từ ô cha xuống thanh ngang của các con. */
+.tree ul ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: var(--gap);
+  border-left: 1px solid var(--line);
+}
+
+.tree > ul > li {
+  padding-top: 0;
+}
+
+.tree > ul > li::before,
+.tree > ul > li::after {
+  display: none;
+}

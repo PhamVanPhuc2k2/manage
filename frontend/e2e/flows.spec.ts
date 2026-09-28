@@ -1,6 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { login, suffix } from "./helpers";
+import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  apiLogin,
+  createDepartmentApi,
+  deleteDepartmentApi,
+  login,
+  suffix,
+} from "./helpers";
 
 /**
  * Năm luồng quan trọng nhất, chạy trên trình duyệt thật.
@@ -163,6 +171,82 @@ test.describe("Luồng 3b — Nhập nhân viên từ tệp", () => {
     await shared.getByLabel("Chỉ hiện dòng lỗi hoặc cảnh báo").uncheck();
     await shared.getByRole("link", { name: `E2E Nhập Một ${id}` }).click();
     await expect(shared.getByText(`E2E Nhập Một ${id}`).first()).toBeVisible();
+  });
+});
+
+test.describe("Luồng 3c — Sơ đồ tổ chức", () => {
+  // Cây dựng qua API: một khối, hai phòng con, một tổ dưới phòng thứ nhất.
+  // Xoá từ lá lên gốc ở cuối — máy chủ không cho xoá phòng còn phòng con.
+  let token: string;
+  const ids: string[] = [];
+  const tag = suffix();
+  const name = (s: string) => `E2E ${s} ${tag}`;
+
+  test.beforeAll(async () => {
+    token = await apiLogin(ADMIN_EMAIL, ADMIN_PASSWORD);
+    const root = await createDepartmentApi(token, {
+      code: `K${tag}`,
+      name: name("Khối"),
+    });
+    const a = await createDepartmentApi(token, {
+      code: `A${tag}`,
+      name: name("Phòng A"),
+      parent_id: root,
+    });
+    const b = await createDepartmentApi(token, {
+      code: `B${tag}`,
+      name: name("Phòng B"),
+      parent_id: root,
+    });
+    const team = await createDepartmentApi(token, {
+      code: `T${tag}`,
+      name: name("Tổ A1"),
+      parent_id: a,
+    });
+    ids.push(team, b, a, root);
+  });
+
+  test.afterAll(async () => {
+    for (const id of ids) await deleteDepartmentApi(token, id);
+  });
+
+  test("vẽ cây phòng ban, thu gọn được, bấm vào phòng thì hiện người của phòng", async () => {
+    await shared.goto("/employees");
+    await shared.getByRole("link", { name: "Sơ đồ tổ chức" }).click();
+    await expect(
+      shared.getByRole("heading", { name: "Sơ đồ tổ chức" }),
+    ).toBeVisible();
+
+    const card = (s: string) =>
+      shared.getByRole("button", { name: new RegExp(`^${name(s)}`) });
+
+    // Hai cấp đầu mở sẵn: thấy khối và hai phòng. Tổ ở cấp ba bị gọn lại
+    // sau nút "+1" của Phòng A.
+    await expect(card("Khối")).toBeVisible();
+    await expect(card("Phòng A")).toBeVisible();
+    await expect(card("Phòng B")).toBeVisible();
+    await expect(card("Tổ A1")).toHaveCount(0);
+
+    await shared
+      .getByRole("button", { name: `Mở các phòng con của ${name("Phòng A")}` })
+      .click();
+    await expect(card("Tổ A1")).toBeVisible();
+
+    // Phòng con phải nằm DƯỚI phòng cha — kiểm đúng hình dạng cây, không
+    // chỉ kiểm có chữ trên trang.
+    const rootBox = (await card("Khối").boundingBox())!;
+    const aBox = (await card("Phòng A").boundingBox())!;
+    const teamBox = (await card("Tổ A1").boundingBox())!;
+    expect(aBox.y).toBeGreaterThan(rootBox.y + rootBox.height);
+    expect(teamBox.y).toBeGreaterThan(aBox.y + aBox.height);
+
+    await card("Phòng B").click();
+    await expect(
+      shared.getByRole("heading", { name: name("Phòng B") }),
+    ).toBeVisible();
+    await expect(
+      shared.getByText("Không có nhân viên nào bạn được xem"),
+    ).toBeVisible();
   });
 });
 

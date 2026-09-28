@@ -329,3 +329,28 @@ export async function callDetail(
 ): Promise<CallDetail> {
   return call<CallDetail>(`/calls/${callId}`, { token });
 }
+
+/**
+ * Dựng phòng ban qua API cho phép thử sơ đồ tổ chức. Cây được dựng sẵn để
+ * phép thử chỉ kiểm phần VẼ — phần tạo phòng ban đã có bộ smoke riêng.
+ */
+export async function createDepartmentApi(
+  token: string,
+  body: { code: string; name: string; parent_id?: string },
+): Promise<string> {
+  const d = await call<{ id: string }>("/departments", {
+    method: "POST",
+    token,
+    body: JSON.stringify(body),
+  });
+  return d.id;
+}
+
+export async function deleteDepartmentApi(
+  token: string,
+  id: string,
+): Promise<void> {
+  await call<unknown>(`/departments/${id}`, { method: "DELETE", token }).catch(
+    () => undefined,
+  );
+}

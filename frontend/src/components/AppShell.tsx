@@ -25,6 +25,7 @@ const NAV = [
   { href: "/payroll/settings", label: "Cấu hình lương", permission: "salary:read" },
   { href: "/employees", label: "Nhân viên", permission: "employee:read" },
   { href: "/departments", label: "Phòng ban", permission: "department:read" },
+  { href: "/org-chart", label: "Sơ đồ tổ chức", permission: "department:read" },
   { href: "/positions", label: "Chức vụ", permission: "position:read" },
 ];
 
