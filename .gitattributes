@@ -27,6 +27,8 @@ Makefile        text eol=lf
 *.ico           binary
 *.woff          binary
 *.woff2         binary
+*.ttf           binary
+*.xlsx          binary
 *.pdf           binary
 
 # Lockfile: đánh dấu là file sinh tự động để GitHub thu gọn khi xem diff.
