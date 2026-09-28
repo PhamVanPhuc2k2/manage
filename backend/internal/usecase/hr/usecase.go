@@ -41,6 +41,11 @@ type Usecase struct {
 	// thuộc auth (auth đã phụ thuộc repository của hr), import ngược sẽ
 	// tạo vòng. Composition root nối dây hai bên với nhau.
 	onEmployeeDeactivated func(ctx context.Context, userID uuid.UUID)
+
+	// Nhập hàng loạt. Cả ba có thể nil — xem import.go.
+	imports        domainhr.EmployeeImportRepository
+	importJobs     ImportJobPublisher
+	importNotifier ImportNotifier
 }
 
 // SetOnEmployeeDeactivated nối module hr với module auth. Gọi ở cmd/api.

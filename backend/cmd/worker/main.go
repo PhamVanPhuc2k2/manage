@@ -18,11 +18,13 @@ import (
 	// giấc sẽ âm thầm chạy theo UTC.
 	_ "time/tzdata"
 
+	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/consumer"
 	"github.com/PhamVanPhuc2k2/manage/internal/delivery/scheduler"
 	domaincall "github.com/PhamVanPhuc2k2/manage/internal/domain/call"
+	domainnotif "github.com/PhamVanPhuc2k2/manage/internal/domain/notification"
 	domainproject "github.com/PhamVanPhuc2k2/manage/internal/domain/project"
 	domainsystem "github.com/PhamVanPhuc2k2/manage/internal/domain/system"
 	repomedia "github.com/PhamVanPhuc2k2/manage/internal/repository/media"
@@ -147,6 +149,10 @@ func run() error {
 	// người mất vài chục giây, quá lâu cho một request HTTP.
 	payrollConsumer := consumer.NewPayrollConsumer(buildPayrollUsecase(db, mqClient))
 
+	// Nhập nhân viên hàng loạt: vài trăm dòng, mỗi dòng vài truy vấn và có
+	// thể kèm tạo tài khoản (băm mật khẩu) — quá lâu cho một request HTTP.
+	hrConsumer := consumer.NewHRConsumer(buildImportUsecase(db, mqClient, notifUC))
+
 	// Đăng ký handler cho từng loại job.
 	// Phase sau chỉ cần thêm dòng vào đây.
 	jobs := map[string]consumer.HandlerFunc{
@@ -161,6 +167,9 @@ func run() error {
 		// Tính lương. Job này chịu được chạy lại: ReplaceForPeriod xoá sạch
 		// phiếu cũ rồi ghi bộ mới trong một giao dịch.
 		repomq.JobCalculatePayroll: payrollConsumer.HandleCalculate,
+
+		// Nhập nhân viên. Chạy lại an toàn: làm tiếp từ dòng chưa có kết quả.
+		repomq.JobImportEmployees: hrConsumer.HandleImport,
 
 		// Sự kiện module dự án, từ Phase 5 sinh thông báo thật. Cả bốn dùng
 		// chung một handler vì payload của chúng giống hệt nhau.
@@ -360,6 +369,39 @@ func workerMux() http.Handler {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 	return mux
+}
+
+// buildImportUsecase dựng module nhân sự cho việc nhập hàng loạt.
+//
+// Khác với các chỗ khác trong worker dùng hrUC chỉ để tra công ty, ở đây nó
+// TẠO nhân viên và tài khoản — nên cần mailer (gửi mật khẩu tạm) và cần
+// đường báo kết quả về cho người bấm nhập.
+func buildImportUsecase(db *postgres.DB, mqClient *rabbitmq.Client, notifUC *ucnotif.Usecase) *uchr.Usecase {
+	hrUC := uchr.NewUsecase(
+		repopg.NewCompanyRepository(db),
+		repopg.NewDepartmentRepository(db),
+		repopg.NewPositionRepository(db),
+		repopg.NewEmployeeRepository(db),
+		repopg.NewUserRepository(db),
+		repopg.NewRoleRepository(db),
+		nil,
+	)
+	hrUC.SetWelcomeMailer(repomq.NewMailer(mqClient))
+	hrUC.SetImports(repopg.NewEmployeeImportRepository(db))
+	// Không SetImportJobs: worker không tự xếp việc cho chính mình.
+	hrUC.SetImportNotifier(func(ctx context.Context, to uuid.UUID, title, body, link string) error {
+		return notifUC.Create(ctx, domainnotif.Request{
+			Recipients: []uuid.UUID{to},
+			Type:       domainnotif.TypeSystem,
+			Title:      title,
+			Body:       body,
+			Link:       link,
+			// ActorID để trống: người nhận CHÍNH LÀ người bấm nhập, mà
+			// usecase thông báo lọc bỏ actor khỏi danh sách người nhận.
+			Resource: "employee_import",
+		})
+	})
+	return hrUC
 }
 
 // buildAttendanceUsecase lắp ráp module chấm công cho worker.

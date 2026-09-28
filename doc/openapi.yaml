@@ -260,6 +260,36 @@ components:
                   ok: { type: boolean }
 
   schemas:
+    EmployeeImport:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        file_name: { type: string }
+        status: { type: string, enum: [queued, processing, done, failed] }
+        create_accounts: { type: boolean }
+        total_rows: { type: integer }
+        processed: { type: integer }
+        succeeded: { type: integer }
+        failed: { type: integer }
+        creator_name: { type: string }
+        error: { type: string, description: Lỗi của cả lượt (không phải của một dòng) }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        results:
+          type: array
+          description: Chỉ có ở API chi tiết
+          items:
+            type: object
+            properties:
+              line: { type: integer, description: Số dòng trong bảng tính }
+              employee_code: { type: string }
+              full_name: { type: string }
+              employee_id: { type: string, format: uuid }
+              error: { type: string, description: Có nghĩa là dòng này KHÔNG tạo được }
+              warning: { type: string, description: Đã tạo hồ sơ nhưng phần phụ (tài khoản) chưa xong }
+              account_created: { type: boolean }
+
     Call:
       type: object
       properties:
@@ -1510,6 +1540,87 @@ paths:
                     properties:
                       roles: { type: array, items: { type: string } }
         "403": { $ref: "#/components/responses/Forbidden" }
+
+  /employees/imports:
+    post:
+      tags: [Nhân viên]
+      summary: Nhập nhân viên hàng loạt từ CSV/Excel
+      description: |
+        Nhận tệp `.csv` (UTF-8, dấu phẩy hoặc chấm phẩy) hoặc `.xlsx` (trang
+        tính đầu tiên), tối đa 5 MB và 1000 dòng. Dòng đầu tiên không rỗng là
+        tiêu đề; tiêu đề tiếng Việt có dấu được chấp nhận ("Mã nhân viên").
+
+        Lỗi của CẢ TỆP (sai định dạng, thiếu cột bắt buộc, cột lạ) trả về 422
+        ngay. Nhân viên được tạo ở worker; lỗi của TỪNG DÒNG xem ở
+        `GET /employees/imports/{importID}`. Xong thì người nhập nhận một
+        thông báo có đường dẫn tới trang kết quả.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                create_accounts:
+                  type: string
+                  enum: ["true", "false"]
+                  description: Tạo luôn tài khoản đăng nhập và gửi mail mật khẩu tạm
+      responses:
+        "202":
+          description: Đã nhận tệp, worker đang tạo nhân viên
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/EmployeeImport" }
+        "422": { description: Tệp không đọc được hoặc thiếu cột bắt buộc }
+    get:
+      tags: [Nhân viên]
+      summary: Các lượt nhập gần nhất
+      description: |
+        20 lượt gần nhất. Người có phạm vi toàn công ty thấy mọi lượt, người
+        khác chỉ thấy lượt của mình. `meta` mô tả tệp mẫu — frontend sinh tệp
+        mẫu từ đây để không lệch với bộ đọc.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/EmployeeImport" }
+                  meta:
+                    type: object
+                    properties:
+                      columns: { type: array, items: { type: string } }
+                      required_columns: { type: array, items: { type: string } }
+                      max_rows: { type: integer }
+
+  /employees/imports/{importID}:
+    parameters:
+      - name: importID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Nhân viên]
+      summary: Kết quả một lượt nhập, từng dòng
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/EmployeeImport" }
+        "404": { description: Không có, hoặc không phải lượt nhập của mình }
 
   /employees/{id}/account:
     parameters: [{ $ref: "#/components/parameters/PathID" }]

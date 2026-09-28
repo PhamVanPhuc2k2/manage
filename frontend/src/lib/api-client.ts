@@ -117,14 +117,19 @@ async function request<T>(
 
   const send = async (token: string | null): Promise<Response> => {
     const h = new Headers(headers);
-    h.set("Content-Type", "application/json");
+    // FormData (tải tệp lên) thì KHÔNG đặt Content-Type: trình duyệt tự đặt
+    // multipart/form-data kèm boundary. Đặt tay là thiếu boundary và máy
+    // chủ không tách được các trường.
+    const isForm = body instanceof FormData;
+    if (!isForm) h.set("Content-Type", "application/json");
     if (token) h.set("Authorization", `Bearer ${token}`);
 
     return fetch(`${API_BASE}${path}`, {
       ...rest,
       headers: h,
       credentials: "include",
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body:
+        body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
   };
 

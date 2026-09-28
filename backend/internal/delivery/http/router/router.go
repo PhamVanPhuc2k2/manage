@@ -40,6 +40,7 @@ type Deps struct {
 	PingUC     handler.PingUsecase
 	Auth       *handler.AuthHandler
 	Employee   *handler.EmployeeHandler
+	EmpImport  *handler.EmployeeImportHandler
 	Department *handler.DepartmentHandler
 	Position   *handler.PositionHandler
 	Role       *handler.RoleHandler
@@ -232,6 +233,17 @@ func New(d Deps) http.Handler {
 					Post("/{id}/account", d.Employee.CreateAccount)
 				r.With(appmw.RequirePermission(domainauth.PermEmployeeCreate)).
 					Put("/{id}/account/active", d.Employee.SetAccountActive)
+
+				// --- Nhập hàng loạt từ CSV/Excel ---
+				//
+				// employee:create như tạo từng người — nhập hàng loạt chỉ là
+				// tạo nhiều người một lúc, và có thể kèm tạo tài khoản.
+				r.With(appmw.RequirePermission(domainauth.PermEmployeeCreate)).
+					Post("/imports", d.EmpImport.Create)
+				r.With(appmw.RequirePermission(domainauth.PermEmployeeCreate)).
+					Get("/imports", d.EmpImport.List)
+				r.With(appmw.RequirePermission(domainauth.PermEmployeeCreate)).
+					Get("/imports/{importID}", d.EmpImport.Get)
 
 				// --- Vai trò của nhân viên ---
 				r.With(appmw.RequirePermission(domainauth.PermRoleRead)).

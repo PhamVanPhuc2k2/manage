@@ -52,6 +52,8 @@ type EmployeeRepository interface {
 
 	ListAncestorIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
 	ExistsCode(ctx context.Context, companyID uuid.UUID, code string, excludeID *uuid.UUID) (bool, error)
+	// FindByCode tra theo mã nhân viên, không phân biệt hoa thường.
+	FindByCode(ctx context.Context, companyID uuid.UUID, code string) (*Employee, error)
 	ExistsEmail(ctx context.Context, email string, excludeID *uuid.UUID) (bool, error)
 	UpdateAvatarKey(ctx context.Context, id uuid.UUID, key string) error
 }

@@ -73,7 +73,6 @@ test.describe("Luồng 1 — Đăng nhập", () => {
 
 test.describe("Luồng 2 — Chấm công", () => {
   test("màn hình chấm công hiện số liệu của hôm nay", async () => {
-
     await shared.goto("/attendance");
     await expect(
       shared.getByRole("heading", { name: "Chấm công của tôi" }),
@@ -93,7 +92,6 @@ test.describe("Luồng 2 — Chấm công", () => {
 
 test.describe("Luồng 3 — Thêm nhân viên", () => {
   test("tạo nhân viên mới và thấy ngay trang hồ sơ", async () => {
-
     const id = suffix();
     const name = `E2E Nguyễn ${id}`;
 
@@ -126,9 +124,50 @@ test.describe("Luồng 3 — Thêm nhân viên", () => {
   });
 });
 
+test.describe("Luồng 3b — Nhập nhân viên từ tệp", () => {
+  test("tải CSV lên, worker nhập xong, trang kết quả chỉ ra đúng dòng lỗi", async () => {
+    const id = suffix();
+    // Tiêu đề tiếng Việt có dấu và BOM — đúng thứ Excel lưu ra khi chọn
+    // "CSV UTF-8". Dòng 3 cố ý sai ngày (31/02) để trang kết quả có lỗi.
+    const csv =
+      "\ufeffMã nhân viên,Họ tên,Email,Ngày vào làm\n" +
+      `IMP${id}A,E2E Nhập Một ${id},imp${id.toLowerCase()}a@test.local,15/01/2024\n` +
+      `IMP${id}B,E2E Nhập Hai ${id},imp${id.toLowerCase()}b@test.local,31/02/2024\n`;
+
+    await shared.goto("/employees");
+    await shared.getByRole("link", { name: "Nhập từ tệp" }).click();
+    await expect(
+      shared.getByRole("heading", { name: "Nhập nhân viên từ tệp" }),
+    ).toBeVisible();
+
+    await shared.locator('input[type="file"]').setInputFiles({
+      name: "e2e.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv, "utf-8"),
+    });
+    await shared.getByRole("button", { name: "Nhập", exact: true }).click();
+
+    // Sang trang kết quả, và worker chạy xong trong lúc trang tự hỏi lại.
+    await expect(shared).toHaveURL(/\/employees\/imports\/[0-9a-f-]{36}/);
+    await expect(shared.getByText("Xong", { exact: true })).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // Mặc định chỉ hiện dòng có vấn đề: đúng dòng 3, đúng lý do.
+    const rows = shared.locator("tbody tr");
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText(`IMP${id}B`);
+    await expect(rows.first()).toContainText("ngày vào làm");
+
+    // Bỏ lọc thì thấy cả người đã tạo, bấm được sang hồ sơ.
+    await shared.getByLabel("Chỉ hiện dòng lỗi hoặc cảnh báo").uncheck();
+    await shared.getByRole("link", { name: `E2E Nhập Một ${id}` }).click();
+    await expect(shared.getByText(`E2E Nhập Một ${id}`).first()).toBeVisible();
+  });
+});
+
 test.describe("Luồng 4 — Dự án và công việc", () => {
   test("tạo dự án rồi thêm một công việc vào bảng", async () => {
-
     const id = suffix();
 
     await shared.goto("/projects");
@@ -162,7 +201,6 @@ test.describe("Luồng 4 — Dự án và công việc", () => {
   });
 
   test('màn hình "Việc của tôi" mở được', async () => {
-
     await shared.goto("/tasks");
     // Trang này là nơi người dùng bắt đầu mỗi sáng. Chỉ cần nó mở ra và
     // không phải trang lỗi.
@@ -175,7 +213,6 @@ test.describe("Luồng 4 — Dự án và công việc", () => {
 
 test.describe("Luồng 5 — Chat realtime", () => {
   test("gửi tin nhắn và thấy nó hiện ra trong khung chat", async () => {
-
     await shared.goto("/chat");
 
     // Bong bóng chat có mặt ở mọi trang; trang /chat mở sẵn khung đầy đủ.

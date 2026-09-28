@@ -304,6 +304,16 @@ func (r *EmployeeRepository) ExistsCode(
 	return exists, err
 }
 
+func (r *EmployeeRepository) FindByCode(
+	ctx context.Context,
+	companyID uuid.UUID,
+	code string,
+) (*domainhr.Employee, error) {
+	q := selectEmployee + ` WHERE e.company_id = $1 AND lower(e.employee_code) = lower($2)
+	                          AND e.deleted_at IS NULL`
+	return scanEmployeeRow(r.db.QueryRow(ctx, q, companyID, strings.TrimSpace(code)))
+}
+
 func (r *EmployeeRepository) ExistsEmail(
 	ctx context.Context,
 	email string,

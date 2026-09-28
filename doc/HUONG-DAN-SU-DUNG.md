@@ -554,6 +554,33 @@ và tính lương mà không cần đăng nhập.
 **3. Gán vai trò** — mở hồ sơ → **Vai trò**. Không gán thì họ đăng nhập được
 nhưng không thấy gì.
 
+### Nhập nhiều nhân viên cùng lúc
+
+Nhân viên → **Nhập từ tệp**. Nhận tệp Excel (**.xlsx**) hoặc **CSV UTF-8**,
+tối đa 1000 dòng.
+
+1. Bấm **Tải tệp mẫu**, điền mỗi người một dòng. Bắt buộc có mã nhân viên, họ
+   tên, email và ngày vào làm.
+2. Chọn tệp. Muốn mỗi người nhận luôn email kèm mật khẩu tạm thì tích **Tạo
+   luôn tài khoản đăng nhập**.
+3. Bấm **Nhập**. Hệ thống tạo nhân viên ở chế độ nền. Bạn có thể rời trang:
+   khi xong sẽ có **thông báo**, bấm vào để xem kết quả.
+
+Mẹo điền tệp:
+
+- Ngày viết **15/01/2024** (ngày trước, tháng sau).
+- Phòng ban và chức vụ ghi mã hoặc tên đều được, có dấu hay không dấu cũng
+  được. Nếu hai phòng trùng tên, hãy ghi **mã phòng**.
+- **Mã cấp trên** phải là người đã có trong hệ thống, hoặc nằm ở **dòng phía
+  trên** trong cùng tệp. Vì vậy hãy đặt trưởng phòng trước nhân viên.
+- Lưu từ Excel thì chọn **.xlsx** hoặc **CSV UTF-8**. Chọn "CSV" thường sẽ
+  làm hỏng tiếng Việt, và hệ thống sẽ từ chối tệp đó.
+
+**Khi có dòng lỗi.** Các dòng khác vẫn được nhập bình thường. Trang kết quả
+chỉ ra **số dòng trong bảng tính** và lý do lỗi. Sửa những dòng đó, **xoá các
+dòng đã nhập thành công**, rồi nhập lại. Nếu giữ lại các dòng đã thành công,
+chúng sẽ bị báo trùng mã.
+
 ### Cho nghỉ việc
 
 Mở hồ sơ → **Cho nghỉ việc**.

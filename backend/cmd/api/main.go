@@ -267,6 +267,10 @@ func run() error {
 	// hai module.
 	hrUC.SetWelcomeMailer(mailer)
 
+	// Nhập hàng loạt: API chỉ đọc tệp và xếp hàng, worker mới tạo nhân viên.
+	hrUC.SetImports(repopg.NewEmployeeImportRepository(db))
+	hrUC.SetImportJobs(repomq.NewHRJobs(mqClient))
+
 	hrUC.SetOnEmployeeDeactivated(func(ctx context.Context, userID uuid.UUID) {
 		if err := authUC.LogoutAll(ctx, userID); err != nil {
 			log.Error().Err(err).Str("user_id", userID.String()).
@@ -407,6 +411,7 @@ func run() error {
 			PingUC:     pingUC,
 			Auth:       handler.NewAuthHandler(authUC, secureCookie),
 			Employee:   handler.NewEmployeeHandler(hrUC),
+			EmpImport:  handler.NewEmployeeImportHandler(hrUC),
 			Department: handler.NewDepartmentHandler(hrUC),
 			Position:   handler.NewPositionHandler(hrUC),
 			Role:       handler.NewRoleHandler(hrUC),

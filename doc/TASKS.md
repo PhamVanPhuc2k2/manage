@@ -387,7 +387,13 @@ Lệnh chạy:
 - [x] Tìm kiếm + lọc nhân viên: theo phòng ban, chức vụ, trạng thái, hình thức làm việc
 - [x] Phân trang chuẩn (cursor hoặc offset) áp dụng cho mọi API danh sách
 - [x] Tải lên avatar, lưu Cloudflare R2, trả về presigned URL
-- [ ] Nhập nhân viên hàng loạt từ CSV/Excel (xử lý nền qua RabbitMQ, báo kết quả qua thông báo)
+- [x] Nhập nhân viên hàng loạt từ CSV/Excel (xử lý nền qua RabbitMQ, báo kết quả qua thông báo)
+> Tệp được đọc ngay trong request: lỗi của CẢ TỆP (thiếu cột, cột lạ, CSV
+> không phải UTF-8) trả về lúc tải lên. Nhân viên được tạo ở worker; kết quả
+> ghi **sau từng dòng** vào bảng `employee_imports`, nên message bị giao lại
+> thì làm tiếp từ dòng chưa xong chứ không tạo trùng. Nhận tiêu đề tiếng Việt
+> có dấu, CSV dấu chấm phẩy của Excel vùng Việt Nam, và ô ngày của Excel.
+> Kiểm chứng: `scripts/smoke-import.sh` 17/17, Playwright luồng 3b.
 - [ ] Xem sơ đồ tổ chức (org chart) dạng cây
 
 ### Frontend Phase 1
@@ -1215,7 +1221,7 @@ các mục nghiệm thu trên mạng thật của Phase 7 được hoãn có ch�
 
 Việc còn làm được trên local, theo thứ tự:
 
-1. Nhập nhân viên hàng loạt từ CSV/Excel (Phase 1)
+1. ~~Nhập nhân viên hàng loạt từ CSV/Excel (Phase 1)~~ — xong
 2. Sơ đồ tổ chức dạng cây (Phase 1)
 3. Xuất báo cáo chấm công ra Excel (Phase 3)
 4. Sinh phiếu lương PDF ở server (Phase 4)

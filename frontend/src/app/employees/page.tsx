@@ -51,12 +51,20 @@ export default function EmployeesPage() {
 
         {/* Ẩn nút chỉ là trang trí — backend vẫn kiểm tra quyền đầy đủ. */}
         {can("employee:create") && (
-          <Link
-            href="/employees/new"
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-          >
-            Thêm nhân viên
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/employees/imports"
+              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700"
+            >
+              Nhập từ tệp
+            </Link>
+            <Link
+              href="/employees/new"
+              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
+            >
+              Thêm nhân viên
+            </Link>
+          </div>
         )}
       </div>
 

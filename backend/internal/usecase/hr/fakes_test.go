@@ -3,6 +3,7 @@ package hr
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -57,8 +58,22 @@ func (f *fakeEmployees) Create(_ context.Context, e *domainhr.Employee) error {
 	if e.ID == uuid.Nil {
 		e.ID = uuid.New()
 	}
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = time.Now()
+	}
 	f.byID[e.ID] = e
 	return nil
+}
+
+func (f *fakeEmployees) FindByCode(
+	_ context.Context, _ uuid.UUID, code string,
+) (*domainhr.Employee, error) {
+	for _, e := range f.byID {
+		if strings.EqualFold(e.EmployeeCode, strings.TrimSpace(code)) {
+			return e, nil
+		}
+	}
+	return nil, domainhr.ErrNotFound
 }
 
 func (f *fakeEmployees) Update(_ context.Context, e *domainhr.Employee) error {
@@ -123,16 +138,37 @@ func (f *fakeEmployees) ListAncestorIDs(
 	return out, nil
 }
 
+// ExistsCode và ExistsEmail thấy cả bản ghi đặt tay (codes/emails) lẫn
+// bản ghi đã Create. Thiếu vế sau thì phép thử nhập hàng loạt không thấy
+// hai dòng trùng mã trong cùng một tệp.
 func (f *fakeEmployees) ExistsCode(
-	_ context.Context, _ uuid.UUID, code string, _ *uuid.UUID,
+	_ context.Context, _ uuid.UUID, code string, excludeID *uuid.UUID,
 ) (bool, error) {
-	return f.codes[strings.TrimSpace(code)], nil
+	code = strings.TrimSpace(code)
+	if f.codes[code] {
+		return true, nil
+	}
+	for id, e := range f.byID {
+		if (excludeID == nil || id != *excludeID) && strings.EqualFold(e.EmployeeCode, code) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (f *fakeEmployees) ExistsEmail(
-	_ context.Context, email string, _ *uuid.UUID,
+	_ context.Context, email string, excludeID *uuid.UUID,
 ) (bool, error) {
-	return f.emails[strings.TrimSpace(email)], nil
+	email = strings.TrimSpace(email)
+	if f.emails[email] {
+		return true, nil
+	}
+	for id, e := range f.byID {
+		if (excludeID == nil || id != *excludeID) && strings.EqualFold(e.Email, email) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (f *fakeEmployees) UpdateAvatarKey(
