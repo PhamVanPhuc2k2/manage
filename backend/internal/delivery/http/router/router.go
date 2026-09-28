@@ -410,6 +410,16 @@ func New(d Deps) http.Handler {
 				// --- Khoá kỳ công ---
 				r.With(appmw.RequirePermission(domainauth.PermAttendanceManage)).
 					Post("/lock", d.Attendance.LockPeriod)
+
+				// Xuất Excel: cần attendance:read_all như xem công phòng ban.
+				// Phạm vi (cả công ty hay chỉ phòng mình) áp ở worker, theo
+				// ảnh chụp quyền lúc yêu cầu.
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceReadAll)).
+					Post("/exports", d.Attendance.RequestExport)
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceReadAll)).
+					Get("/exports", d.Attendance.ListExports)
+				r.With(appmw.RequirePermission(domainauth.PermAttendanceReadAll)).
+					Get("/exports/{exportID}/file", d.Attendance.DownloadExport)
 			})
 
 			// --- Nghỉ phép ---

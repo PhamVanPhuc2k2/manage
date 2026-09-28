@@ -48,6 +48,11 @@ type Usecase struct {
 	presence  domainatt.PresenceReader
 	company   CompanyLookup
 	clock     domainatt.Clock
+
+	// Xuất Excel. Cả ba có thể nil — xem export.go.
+	exports        domainatt.ExportRepository
+	exportJobs     ExportJobPublisher
+	exportNotifier ExportNotifier
 }
 
 func NewUsecase(

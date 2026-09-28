@@ -153,6 +153,13 @@ func run() error {
 	// thể kèm tạo tài khoản (băm mật khẩu) — quá lâu cho một request HTTP.
 	hrConsumer := consumer.NewHRConsumer(buildImportUsecase(db, mqClient, notifUC))
 
+	// Xuất báo cáo chấm công ra Excel.
+	exportUC := buildAttendanceUsecase(db, rdb)
+	exportUC.SetExports(repopg.NewAttendanceExportRepository(db))
+	// Không SetExportJobs: worker không tự xếp việc cho chính mình.
+	exportUC.SetExportNotifier(systemNotifier(notifUC, "attendance_export"))
+	attendanceConsumer := consumer.NewAttendanceConsumer(exportUC)
+
 	// Đăng ký handler cho từng loại job.
 	// Phase sau chỉ cần thêm dòng vào đây.
 	jobs := map[string]consumer.HandlerFunc{
@@ -170,6 +177,9 @@ func run() error {
 
 		// Nhập nhân viên. Chạy lại an toàn: làm tiếp từ dòng chưa có kết quả.
 		repomq.JobImportEmployees: hrConsumer.HandleImport,
+
+		// Xuất chấm công. Chạy lại an toàn: dựng lại tệp từ đầu và ghi đè.
+		repomq.JobExportAttendance: attendanceConsumer.HandleExport,
 
 		// Sự kiện module dự án, từ Phase 5 sinh thông báo thật. Cả bốn dùng
 		// chung một handler vì payload của chúng giống hệt nhau.
@@ -389,19 +399,28 @@ func buildImportUsecase(db *postgres.DB, mqClient *rabbitmq.Client, notifUC *ucn
 	hrUC.SetWelcomeMailer(repomq.NewMailer(mqClient))
 	hrUC.SetImports(repopg.NewEmployeeImportRepository(db))
 	// Không SetImportJobs: worker không tự xếp việc cho chính mình.
-	hrUC.SetImportNotifier(func(ctx context.Context, to uuid.UUID, title, body, link string) error {
+	hrUC.SetImportNotifier(systemNotifier(notifUC, "employee_import"))
+	return hrUC
+}
+
+// systemNotifier dựng hàm báo "việc nền của bạn đã xong" cho một người.
+//
+// ActorID để trống có chủ ý: người nhận CHÍNH LÀ người đã bấm, mà usecase
+// thông báo lọc bỏ actor khỏi danh sách người nhận.
+func systemNotifier(
+	notifUC *ucnotif.Usecase,
+	resource string,
+) func(ctx context.Context, to uuid.UUID, title, body, link string) error {
+	return func(ctx context.Context, to uuid.UUID, title, body, link string) error {
 		return notifUC.Create(ctx, domainnotif.Request{
 			Recipients: []uuid.UUID{to},
 			Type:       domainnotif.TypeSystem,
 			Title:      title,
 			Body:       body,
 			Link:       link,
-			// ActorID để trống: người nhận CHÍNH LÀ người bấm nhập, mà
-			// usecase thông báo lọc bỏ actor khỏi danh sách người nhận.
-			Resource: "employee_import",
+			Resource:   resource,
 		})
-	})
-	return hrUC
+	}
 }
 
 // buildAttendanceUsecase lắp ráp module chấm công cho worker.

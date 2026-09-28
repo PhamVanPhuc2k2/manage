@@ -251,6 +251,9 @@ func run() error {
 		adjustmentRepo, leaveRepo, balanceRepo,
 		employeeLookup, presenceStore, hrUC,
 	)
+	// Xuất Excel: api chỉ ghi nhận yêu cầu, worker mới đọc dữ liệu và dựng tệp.
+	attendanceUC.SetExports(repopg.NewAttendanceExportRepository(db))
+	attendanceUC.SetExportJobs(repomq.NewAttendanceJobs(mqClient))
 
 	payrollUC := ucpay.NewUsecase(
 		payrollSettingsRepo, salaryStructureRepo, payrollPeriodRepo,

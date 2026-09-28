@@ -519,6 +519,17 @@ Bốn con số đáng xem:
 > thời gian mở phần mềm, không đo công việc hoàn thành. Một người làm xong
 > việc trong 5 tiếng có ích hơn người mở máy 10 tiếng.
 
+**Xuất ra Excel.** Bấm **Xuất Excel**, chọn tháng và phòng, rồi bấm **Xuất
+Excel** lần nữa. Tệp được tạo ở chế độ nền. Khi xong bạn nhận thông báo, và
+nút **Tải về** hiện ra. Tệp gồm hai trang:
+
+- **Tổng hợp**: mỗi người một dòng, đúng các con số dùng để tính lương.
+- **Chi tiết**: mỗi ngày một ô, ghi X (có mặt), V (vắng), P (nghỉ phép),
+  L (nghỉ lễ). Ô xám là cuối tuần.
+
+Tệp chỉ có những người bạn được xem công. Tệp được giữ **7 ngày**; quá hạn thì
+xuất lại.
+
 ### Quản lý dự án
 
 Chủ dự án làm được:

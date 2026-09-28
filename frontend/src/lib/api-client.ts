@@ -177,6 +177,54 @@ async function request<T>(
   return { data: parsed.data as T, meta: parsed.meta as PageMeta | undefined };
 }
 
+/**
+ * Tải một tệp nhị phân (Excel, PDF) có kèm token rồi mở hộp lưu tệp.
+ *
+ * Không dùng thẻ <a href> trỏ thẳng vào API: trình duyệt sẽ không gắn
+ * access token (token nằm trong bộ nhớ, không phải cookie) và máy chủ trả
+ * 401. Lỗi thì đọc thân JSON như mọi request khác để báo đúng câu.
+ */
+export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const send = (token: string | null) =>
+    fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+    });
+
+  let res = await send(await getValidToken());
+  if (res.status === 401) {
+    const token = await refreshAccessToken();
+    if (token) res = await send(token);
+  }
+
+  if (!res.ok) {
+    let parsed: Envelope<unknown> = {};
+    try {
+      parsed = (await res.json()) as Envelope<unknown>;
+    } catch {
+      // trang lỗi của nginx, không phải JSON
+    }
+    throw new ApiError(
+      res.status,
+      parsed.error?.code ?? gatewayCode(res.status),
+      parsed.error?.message ?? gatewayMessage(res.status),
+    );
+  }
+
+  // Tên tệp lấy từ máy chủ (filename* theo RFC 5987 trước, rồi filename).
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1];
+  const plain = /filename="([^"]+)"/i.exec(cd)?.[1];
+  const name = star ? decodeURIComponent(star) : (plain ?? fallbackName);
+
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "GET" }),

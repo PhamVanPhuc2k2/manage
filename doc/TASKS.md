@@ -499,7 +499,11 @@ Lệnh chạy:
 - [x] Quản lý quỹ ngày phép năm, phép tồn
 - [x] Đánh dấu ngày lễ, ngày nghỉ theo lịch công ty
 - [x] API báo cáo chấm công: theo nhân viên, theo phòng ban, theo tháng
-- [ ] Xuất báo cáo chấm công ra Excel (xử lý nền)
+- [x] Xuất báo cáo chấm công ra Excel (xử lý nền)
+> Worker dựng `.xlsx` hai trang (Tổng hợp, Chi tiết người × ngày) theo phạm
+> vi quyền chụp lúc bấm — trưởng phòng xuất thì chỉ có người phòng mình. Tệp
+> lưu BYTEA trong `attendance_exports` (không cần R2), giữ 7 ngày rồi tự dọn.
+> Kiểm chứng: `scripts/smoke-export.sh` 12/12, Playwright luồng 2b tải tệp thật.
 
 ### Frontend
 - [x] Widget trạng thái làm việc trên topbar: đang online, tổng giờ hôm nay
@@ -1223,7 +1227,7 @@ Việc còn làm được trên local, theo thứ tự:
 
 1. ~~Nhập nhân viên hàng loạt từ CSV/Excel (Phase 1)~~ — xong
 2. ~~Sơ đồ tổ chức dạng cây (Phase 1)~~ — xong
-3. Xuất báo cáo chấm công ra Excel (Phase 3)
+3. ~~Xuất báo cáo chấm công ra Excel (Phase 3)~~ — xong
 4. Sinh phiếu lương PDF ở server (Phase 4)
 5. Mỗi lúc chỉ một người chiếu màn hình (Phase 7)
 6. Giới hạn số người mỗi phòng gọi (Phase 7)

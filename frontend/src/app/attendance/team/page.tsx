@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
 import { FormError } from "@/components/form";
@@ -76,7 +77,15 @@ export default function TeamAttendancePage() {
 
   return (
     <AppShell>
-      <h1 className="mb-6 text-xl font-semibold">Chấm công phòng ban</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Chấm công phòng ban</h1>
+        <Link
+          href="/attendance/exports"
+          className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700"
+        >
+          Xuất Excel
+        </Link>
+      </div>
 
       <FormError message={errMsg(presenceError, "Không tải được trạng thái")} />
 

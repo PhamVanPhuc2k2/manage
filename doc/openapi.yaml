@@ -260,6 +260,23 @@ components:
                   ok: { type: boolean }
 
   schemas:
+    AttendanceExport:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        year: { type: integer }
+        month: { type: integer }
+        department_id: { type: string, format: uuid }
+        department_name: { type: string }
+        status: { type: string, enum: [queued, processing, done, failed] }
+        requester_name: { type: string }
+        file_name: { type: string }
+        has_file: { type: boolean, description: false khi chưa xong hoặc tệp đã bị dọn sau 7 ngày }
+        employee_count: { type: integer }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+
     EmployeeImport:
       type: object
       properties:
@@ -2794,6 +2811,73 @@ paths:
                   data: { $ref: "#/components/schemas/Adjustment" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { description: Yêu cầu đã được quyết định trước đó }
+
+  /attendance/exports:
+    post:
+      tags: [Chấm công]
+      summary: Xuất báo cáo chấm công một tháng ra Excel
+      description: |
+        Ghi nhận yêu cầu rồi trả về ngay. Worker dựng tệp `.xlsx` gồm hai
+        trang, **Tổng hợp** (mỗi người một dòng) và **Chi tiết** (người × ngày),
+        rồi gửi thông báo cho người yêu cầu.
+
+        Phạm vi dữ liệu theo quyền của người yêu cầu lúc bấm: phạm vi toàn
+        công ty thì có mọi người, trưởng phòng chỉ có người trong phòng mình.
+        Không nhận tháng chưa tới. Tệp giữ **7 ngày**.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [year, month]
+              properties:
+                year: { type: integer }
+                month: { type: integer, minimum: 1, maximum: 12 }
+                department_id: { type: string, format: uuid, description: Chỉ xuất một phòng }
+      responses:
+        "202":
+          description: Đã nhận, worker đang dựng tệp
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AttendanceExport" }
+        "400": { description: Tháng không hợp lệ hoặc chưa tới }
+    get:
+      tags: [Chấm công]
+      summary: Các lượt xuất gần nhất
+      description: 20 lượt gần nhất. Phạm vi toàn công ty thấy của mọi người, người khác chỉ thấy của mình.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AttendanceExport" }
+
+  /attendance/exports/{exportID}/file:
+    parameters:
+      - name: exportID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Chấm công]
+      summary: Tải tệp Excel đã xuất
+      description: "Trả thẳng tệp, không bọc JSON. Có Cache-Control: no-store."
+      responses:
+        "200":
+          description: Tệp .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "404": { description: Không có, không phải của mình, hoặc tệp đã quá 7 ngày }
 
   /attendance/lock:
     post:

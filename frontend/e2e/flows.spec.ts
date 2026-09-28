@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test, type Page } from "@playwright/test";
 
 import {
@@ -95,6 +97,35 @@ test.describe("Luồng 2 — Chấm công", () => {
     // con số chứ không kiểm giá trị: nó thay đổi theo từng phút và một phép
     // thử bám vào giá trị sẽ hỏng ngẫu nhiên.
     await expect(shared.getByRole("main")).toContainText(/\d/);
+  });
+});
+
+test.describe("Luồng 2b — Xuất chấm công ra Excel", () => {
+  test("bấm xuất, worker dựng tệp, tải về được tệp .xlsx thật", async () => {
+    await shared.goto("/attendance/team");
+    await shared.getByRole("link", { name: "Xuất Excel" }).click();
+    await expect(
+      shared.getByRole("heading", { name: "Xuất báo cáo chấm công" }),
+    ).toBeVisible();
+
+    await shared.getByRole("button", { name: "Xuất Excel" }).click();
+
+    // Lượt mới nhất nằm trên cùng; nút Tải về chỉ hiện khi worker xong.
+    const download = shared.getByRole("button", { name: "Tải về" }).first();
+    await expect(download).toBeVisible({ timeout: 20_000 });
+
+    // Tải qua fetch có kèm token rồi mới lưu — bắt đúng sự kiện tải tệp của
+    // trình duyệt để chắc chắn người dùng nhận được một tệp, không phải một
+    // trang lỗi 401.
+    const [file] = await Promise.all([
+      shared.waitForEvent("download"),
+      download.click(),
+    ]);
+    expect(file.suggestedFilename()).toMatch(/^cham-cong-\d{4}-\d{2}\.xlsx$/);
+    const path = await file.path();
+    const bytes = readFileSync(path);
+    // .xlsx là tệp zip: bắt đầu bằng chữ ký PK.
+    expect(bytes.subarray(0, 2).toString()).toBe("PK");
   });
 });
 

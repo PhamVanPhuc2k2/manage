@@ -174,8 +174,8 @@ bash scripts/backup.sh
 bash scripts/restore.sh --list
 bash scripts/restore.sh <tên-file>
 
-# --- Kiểm chứng nghiệp vụ (287 mục) ---
-for s in auth hr project attendance payroll chat; do
+# --- Kiểm chứng nghiệp vụ (chín bộ) ---
+for s in auth hr project attendance payroll chat call import export; do
   ADMIN_PASS='...' bash scripts/smoke-$s.sh
 done
 ```
