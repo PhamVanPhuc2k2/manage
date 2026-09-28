@@ -1,0 +1,22 @@
+# Chạy trên các tệp ĐANG STAGE, không phải cả repo: commit vài dòng thì chỉ
+# kiểm vài dòng đó, và code cũ chưa định dạng không chặn một commit mới.
+
+cd frontend && npx lint-staged || exit 1
+cd ..
+
+# Backend nằm cùng repo: tệp Go stage vào phải qua gofmt. CI cũng chặn,
+# nhưng bắt ở đây rẻ hơn một vòng đẩy lên rồi chờ CI báo đỏ.
+GO_FILES=$(git diff --cached --name-only --diff-filter=ACM -- 'backend/*.go' 'backend/**/*.go')
+if [ -n "$GO_FILES" ]; then
+  if command -v gofmt >/dev/null 2>&1; then
+    BAD=$(gofmt -l $GO_FILES)
+    if [ -n "$BAD" ]; then
+      echo "Các tệp Go chưa qua gofmt:"
+      echo "$BAD"
+      echo "Chạy: gofmt -w <tệp> rồi stage lại."
+      exit 1
+    fi
+  else
+    echo "Cảnh báo: không có gofmt trên máy, bỏ qua kiểm định dạng Go."
+  fi
+fi
