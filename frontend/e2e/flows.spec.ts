@@ -149,7 +149,11 @@ test.describe("Luồng 3 — Thêm nhân viên", () => {
     // Tạo xong thì chuyển sang trang chi tiết và thấy đúng tên vừa nhập.
     // Đây là chỗ một form gửi sai tên trường sẽ lộ ra: API trả 201 nhưng
     // tên hiển thị lại trống.
-    await expect(shared.getByText(name)).toBeVisible({ timeout: 20_000 });
+    // Theo TIÊU ĐỀ trang, không theo chữ bất kỳ: tên còn hiện trên
+    // breadcrumb, và điều cần khẳng định là trang hồ sơ đã mở đúng người.
+    await expect(shared.getByRole("heading", { name })).toBeVisible({
+      timeout: 20_000,
+    });
   });
 
   test("bỏ trống trường bắt buộc thì báo lỗi ngay, không gửi đi", async () => {
