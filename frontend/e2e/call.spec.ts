@@ -302,6 +302,80 @@ test.describe("Luồng 6 — Gọi thoại và gọi video", () => {
     ).toHaveCount(0, { timeout: 20_000 });
   });
 
+  test("kiểm tra thiết bị trước khi gọi: xem hình, micro có tiếng, chọn micro thì cuộc gọi dùng đúng micro đó", async () => {
+    await callerPage.goto("/call-check");
+    await expect(
+      callerPage.getByRole("heading", { name: "Kiểm tra thiết bị" }),
+    ).toBeVisible();
+
+    // Hình thật chạy trong ô xem trước, không chỉ là một thẻ video rỗng.
+    const preview = callerPage.getByLabel("Hình từ camera");
+    await expect
+      .poll(() => preview.evaluate((v: HTMLVideoElement) => v.videoWidth), {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(0);
+
+    const meter = callerPage.getByRole("meter", { name: "Mức âm thanh micro" });
+    await expect
+      .poll(async () => Number(await meter.getAttribute("aria-valuenow")), {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(0);
+
+    // Chọn micro thứ hai (Chromium giả có vài micro) — phải được lưu.
+    const mic = callerPage.getByRole("combobox", {
+      name: "Micro",
+      exact: true,
+    });
+    const options = mic.locator("option");
+    expect(
+      await options.count(),
+      "cần ít nhất hai micro giả để thử đổi",
+    ).toBeGreaterThan(1);
+    const chosenLabel = (await options.nth(1).textContent())!.trim();
+    await mic.selectOption({ label: chosenLabel });
+    await expect(callerPage.getByRole("status")).toContainText("Đã lưu");
+
+    // Gọi: cuộc gọi phải bật ĐÚNG micro vừa chọn, không phải micro mặc định.
+    await calleePage.goto("/attendance");
+    await openConversation(callerPage, peer.fullName);
+    await callerPage.getByRole("button", { name: "Gọi video" }).click();
+    await expect(calleePage.getByText("Cuộc gọi video đến")).toBeVisible({
+      timeout: 20_000,
+    });
+    await calleePage.getByRole("button", { name: "Nghe" }).click();
+    await expect(
+      callerPage.getByRole("button", { name: "Rời cuộc gọi" }),
+    ).toBeVisible({ timeout: 20_000 });
+
+    // So theo TÊN, không theo mã: mã thiết bị đổi giữa hai lần tải trang
+    // (đúng lý do phần lưu thiết bị phải nhớ cả tên).
+    await callerPage.getByRole("button", { name: "Thiết bị" }).click();
+    const inCall = callerPage.getByRole("combobox", {
+      name: "Micro",
+      exact: true,
+    });
+    await expect
+      .poll(
+        () =>
+          inCall.evaluate(
+            (el: HTMLSelectElement) => el.selectedOptions[0]?.text,
+          ),
+        {
+          timeout: 10_000,
+        },
+      )
+      .toBe(chosenLabel);
+
+    await callerPage
+      .getByRole("button", { name: "Kết thúc cho tất cả" })
+      .click();
+    await expect(
+      calleePage.getByRole("button", { name: "Rời cuộc gọi" }),
+    ).toHaveCount(0, { timeout: 20_000 });
+  });
+
   test("từ chối cuộc gọi thì màn hình gọi đóng ở cả hai phía", async () => {
     await calleePage.goto("/attendance");
     await openConversation(callerPage, peer.fullName);

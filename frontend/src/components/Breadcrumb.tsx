@@ -17,6 +17,7 @@ const LABELS: Record<string, string> = {
   "/attendance": "Chấm công",
   "/attendance/exports": "Xuất Excel",
   "/attendance/team": "Công phòng ban",
+  "/call-check": "Kiểm tra thiết bị",
   "/change-password": "Đổi mật khẩu",
   "/chat": "Tin nhắn",
   "/departments": "Phòng ban",

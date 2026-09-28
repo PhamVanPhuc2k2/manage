@@ -67,6 +67,12 @@ export default function ProfilePage() {
         >
           Đổi mật khẩu
         </Link>
+        <Link
+          href="/call-check"
+          className="ml-2 mt-4 inline-block rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        >
+          Kiểm tra camera, micro, loa
+        </Link>
       </section>
 
       <section>

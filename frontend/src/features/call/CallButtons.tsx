@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -104,6 +105,14 @@ export function CallButtons({ conversationId }: { conversationId: string }) {
       >
         Gọi video
       </button>
+      {/* Lối vào trang kiểm tra — không phải bước bắt buộc trước mỗi cuộc gọi. */}
+      <Link
+        href="/call-check"
+        title="Kiểm tra camera, micro và loa trước khi gọi"
+        className="px-1 text-xs text-neutral-500 underline-offset-4 hover:underline"
+      >
+        Kiểm tra thiết bị
+      </Link>
     </>
   );
 }

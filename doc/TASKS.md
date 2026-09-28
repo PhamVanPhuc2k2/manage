@@ -1109,7 +1109,12 @@ Lệnh chạy:
 > trình duyệt chặn phát âm thanh ở tab chưa được chạm vào.
 - [x] Màn hình cuộc gọi: lưới video tự đổi bố cục theo số người, viền sáng người đang nói, màn hình chia sẻ lên trước
 - [x] Thanh điều khiển: tắt/bật mic, camera, chia sẻ màn hình, rời cuộc gọi, kết thúc cho tất cả (chỉ người khởi tạo)
-- [ ] Màn hình kiểm tra thiết bị trước khi vào: chọn mic/camera/loa, xem trước hình, đo mức âm thanh
+- [x] Màn hình kiểm tra thiết bị trước khi vào: chọn mic/camera/loa, xem trước hình, đo mức âm thanh
+> Là trang `/call-check` mở được bất cứ lúc nào (link cạnh nút Gọi, và trong
+> Hồ sơ), KHÔNG phải bước chặn trước mỗi cuộc gọi. Thiết bị chọn ở đây hay ở
+> bảng Thiết bị giữa cuộc gọi được nhớ và tự dùng ở cuộc gọi sau. Nhớ cả
+> TÊN chứ không chỉ mã: Playwright cho thấy cùng một micro mang hai mã khác
+> nhau ở hai lần tải trang.
 - [x] Thay bằng **bảng chọn thiết bị mở ngay trong cuộc gọi** (nút "Thiết bị"): chọn mic/camera/loa, thanh đo mức micro. Chưa có xem trước hình — ô hình của chính mình đã là bản xem trước
 > Thanh đo đọc **tại máy** bằng AnalyserNode, không dùng `audioLevel` của
 > SFU: con số đó chỉ khác 0 khi SFU coi mình là người đang nói, nên người

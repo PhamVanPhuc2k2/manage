@@ -11,6 +11,7 @@ import {
   type TrackPublication,
 } from "livekit-client";
 
+import { loadDevicePrefs, resolveDevice } from "./devicePrefs";
 import type { CallJoin, CallKind } from "./types";
 
 export type RoomPhase = "idle" | "connecting" | "connected" | "failed";
@@ -127,6 +128,10 @@ export function useLiveKitRoom(join: CallJoin, kind: CallKind) {
         //
         // Gộp chung thì máy không có webcam sẽ hỏng luôn cả micro, và
         // người dùng mất tiếng ở một cuộc gọi lẽ ra chỉ thiếu hình.
+        // Bật mic trước, camera sau, và mỗi cái một try riêng.
+        //
+        // Gộp chung thì máy không có webcam sẽ hỏng luôn cả micro, và
+        // người dùng mất tiếng ở một cuộc gọi lẽ ra chỉ thiếu hình.
         try {
           await r.localParticipant.setMicrophoneEnabled(true);
         } catch {
@@ -140,6 +145,31 @@ export function useLiveKitRoom(join: CallJoin, kind: CallKind) {
           } catch {
             setError("Không truy cập được camera. Cuộc gọi vẫn có tiếng.");
           }
+        }
+
+        // Chuyển sang thiết bị đã chọn ở lần trước (trang Kiểm tra thiết bị
+        // hoặc bảng Thiết bị). Bật bằng thiết bị mặc định TRƯỚC rồi mới đổi,
+        // không truyền deviceId lúc bật:
+        //  - thiết bị đã lưu có thể đã bị rút ra — đổi hỏng thì vẫn còn
+        //    thiết bị mặc định đang chạy, mất lựa chọn còn hơn mất tiếng;
+        //  - chỉ switchActiveDevice mới ghi nhận thiết bị đang dùng trong
+        //    SDK. Bật kèm deviceId thì bảng Thiết bị vẫn báo "default" dù
+        //    đang dùng micro khác — Playwright bắt được đúng chuyện này.
+        const prefs = loadDevicePrefs();
+        for (const kindKey of [
+          "audioinput",
+          "videoinput",
+          "audiooutput",
+        ] as const) {
+          if (!prefs[kindKey]) continue;
+          if (kindKey === "videoinput" && kind !== "video") continue;
+          // Mã thiết bị đổi giữa các lần tải trang — quy về mã hiện tại
+          // theo mã rồi theo tên. Không còn thiết bị đó thì giữ mặc định.
+          const list = await Room.getLocalDevices(kindKey, false).catch(
+            () => [],
+          );
+          const id = resolveDevice(prefs[kindKey], list);
+          if (id) await r.switchActiveDevice(kindKey, id).catch(() => false);
         }
 
         if (!cancelled) setPhase("connected");

@@ -324,6 +324,15 @@ Lần đầu, trình duyệt sẽ hỏi xin quyền dùng micro và camera. **Ph
 "Cho phép"** — bấm "Chặn" thì lần sau trình duyệt không hỏi lại nữa, và bạn
 phải vào phần cài đặt của trình duyệt để mở lại.
 
+### Kiểm tra thiết bị trước cuộc họp quan trọng
+
+Bấm **Kiểm tra thiết bị** cạnh nút Gọi (hoặc vào Hồ sơ). Trang này cho bạn xem
+hình của mình, nói thử để thấy thanh micro nhảy, và **Phát thử tiếng loa**.
+
+Thiết bị bạn chọn ở đây, chẳng hạn tai nghe, sẽ được **nhớ lại** và tự dùng
+cho các cuộc gọi sau. Nếu hôm đó tai nghe không cắm, cuộc gọi dùng thiết bị
+mặc định của máy.
+
 ### Khi có người gọi bạn
 
 Một ô nhỏ hiện lên ở góc dưới bên phải, kèm tiếng chuông. Nó hiện **ở
