@@ -281,67 +281,67 @@ Lệnh chạy:
 > Hướng dẫn chi tiết từng bước kèm mã nguồn đầy đủ: **[PHASE-0-SETUP.md](./PHASE-0-SETUP.md)**
 
 ### Hạ tầng & công cụ
-- [ ] Khởi tạo repo git, `.gitignore`, `.editorconfig`
-- [ ] File `.env.example` gốc cho compose + `.env.example` riêng cho backend và frontend
-- [ ] `Makefile`: `make up`, `make down`, `make logs`, `make migrate`, `make test`, `make lint`, `make seed`, `make sh-api`
+- [x] Khởi tạo repo git, `.gitignore`, `.editorconfig`
+- [x] File `.env.example` gốc cho compose + `.env.example` riêng cho backend và frontend — *chỉ có một `.env.example` gốc dùng chung; compose truyền biến xuống từng service nên không cần bản riêng*
+- [x] `Makefile`: `make up`, `make down`, `make logs`, `make migrate`, `make test`, `make lint`, `make seed`, `make sh-api`
 
 ### Docker — môi trường dev
-- [ ] `docker-compose.yml` gốc: postgres, redis, rabbitmq, api, worker, frontend, nginx
-- [ ] Khai báo `healthcheck` cho cả 3 dịch vụ hạ tầng (`pg_isready`, `redis-cli ping`, `rabbitmq-diagnostics ping`)
-- [ ] Dùng `depends_on: condition: service_healthy` cho api và worker
-- [ ] Named volume cho dữ liệu: `pgdata`, `redisdata`, `rabbitmqdata`
-- [ ] Hai network tách biệt: `backend` (nội bộ) và `proxy` (nginx ↔ api/frontend)
-- [ ] `docker/backend/Dockerfile` **dùng chung cho `api` và `worker`**, chọn binary bằng build arg `BINARY`, có target `dev` / `builder` / `prod`
-- [ ] `.air.api.toml` và `.air.worker.toml` — hai cấu hình hot reload riêng
-- [ ] Air bật `poll = true` (bind mount trên Windows không phát sự kiện inotify) và `send_interrupt = true` (để code graceful shutdown thật sự được chạy khi reload)
-- [ ] Volume ẩn danh cho `/app/tmp` để binary Linux của Air không làm bẩn repo trên host
-- [ ] `docker/frontend/Dockerfile` multi-stage, bật `output: "standalone"` trong `next.config.js`
-- [ ] `docker-compose.override.yml`: bind mount source, bật polling cho hot reload trên Windows, expose port 5432/6379/15672 ra host để debug
-- [ ] Thêm adminer + mailhog vào file override (chỉ dev, không có ở production)
-- [ ] `docker/postgres/init/01-extensions.sql`: bật `uuid-ossp`, `pg_trgm`, `unaccent` (phục vụ tìm kiếm tiếng Việt)
-- [ ] `docker/nginx/conf.d/app.conf`: proxy `/api` và `/ws` sang api, còn lại sang frontend, có cấu hình nâng cấp WebSocket đầy đủ
-- [ ] Service `migrate` chạy một lần rồi thoát, `api` chờ nó hoàn tất
-- [ ] `docker/backend/entrypoint.sh` dùng `exec` để binary giữ PID 1, nhận đúng `SIGTERM`
-- [ ] `.dockerignore` cho cả backend và frontend (loại `node_modules`, `.git`, `tmp`, file test)
-- [ ] Kiểm chứng: clone repo sạch → `make up` → mở `http://localhost` thấy trang chạy, không cần cài Go hay Node trên máy
+- [x] `docker-compose.yml` gốc: postgres, redis, rabbitmq, api, worker, frontend, nginx
+- [x] Khai báo `healthcheck` cho cả 3 dịch vụ hạ tầng (`pg_isready`, `redis-cli ping`, `rabbitmq-diagnostics ping`)
+- [x] Dùng `depends_on: condition: service_healthy` cho api và worker
+- [x] Named volume cho dữ liệu: `pgdata`, `redisdata`, `rabbitmqdata`
+- [x] Hai network tách biệt: `backend` (nội bộ) và `proxy` (nginx ↔ api/frontend)
+- [x] `docker/backend/Dockerfile` **dùng chung cho `api` và `worker`**, chọn binary bằng build arg `BINARY`, có target `dev` / `builder` / `prod`
+- [x] `.air.api.toml` và `.air.worker.toml` — hai cấu hình hot reload riêng
+- [x] Air bật `poll = true` (bind mount trên Windows không phát sự kiện inotify) và `send_interrupt = true` (để code graceful shutdown thật sự được chạy khi reload)
+- [x] Volume ẩn danh cho `/app/tmp` để binary Linux của Air không làm bẩn repo trên host
+- [x] `docker/frontend/Dockerfile` multi-stage, bật `output: "standalone"` trong `next.config.js`
+- [x] `docker-compose.override.yml`: bind mount source, bật polling cho hot reload trên Windows, expose port 5432/6379/15672 ra host để debug
+- [x] Thêm adminer + mailhog vào file override (chỉ dev, không có ở production)
+- [x] `docker/postgres/init/01-extensions.sql`: bật `uuid-ossp`, `pg_trgm`, `unaccent` (phục vụ tìm kiếm tiếng Việt)
+- [x] `docker/nginx/conf.d/app.conf`: proxy `/api` và `/ws` sang api, còn lại sang frontend, có cấu hình nâng cấp WebSocket đầy đủ
+- [x] Service `migrate` chạy một lần rồi thoát, `api` chờ nó hoàn tất
+- [x] `docker/backend/entrypoint.sh` dùng `exec` để binary giữ PID 1, nhận đúng `SIGTERM` — *không cần tệp riêng: Dockerfile dùng `ENTRYPOINT` dạng exec form nên binary vẫn giữ PID 1*
+- [x] `.dockerignore` cho cả backend và frontend (loại `node_modules`, `.git`, `tmp`, file test)
+- [x] Kiểm chứng: clone repo sạch → `make up` → mở `http://localhost` thấy trang chạy, không cần cài Go hay Node trên máy
 
 ### Tiện ích nền (`backend/pkg/`)
-- [ ] `config`: đọc env bằng viper, validate lúc khởi động, chết ngay nếu thiếu cấu hình
-- [ ] `logger`: zerolog, dev in dạng đọc được, production in JSON, gắn `request_id` vào mọi log
-- [ ] `postgres`: pgxpool + retry khi khởi động + healthcheck
-- [ ] `redis`: kết nối có retry, healthcheck
-- [ ] `rabbitmq`: kết nối tự reconnect khi rớt, khai báo exchange + queue lúc khởi động
-- [ ] `httpx`: chuẩn hoá `{ data, meta }` / `{ error: { code, message, details } }`
-- [ ] `apperror`: ánh xạ lỗi domain → HTTP status, không để lộ chi tiết lỗi nội bộ ra ngoài
-- [ ] Thiết lập golangci-lint + cấu hình
+- [x] `config`: đọc env bằng viper, validate lúc khởi động, chết ngay nếu thiếu cấu hình
+- [x] `logger`: zerolog, dev in dạng đọc được, production in JSON, gắn `request_id` vào mọi log
+- [x] `postgres`: pgxpool + retry khi khởi động + healthcheck
+- [x] `redis`: kết nối có retry, healthcheck
+- [x] `rabbitmq`: kết nối tự reconnect khi rớt, khai báo exchange + queue lúc khởi động
+- [x] `httpx`: chuẩn hoá `{ data, meta }` / `{ error: { code, message, details } }`
+- [x] `apperror`: ánh xạ lỗi domain → HTTP status, không để lộ chi tiết lỗi nội bộ ra ngoài
+- [x] Thiết lập golangci-lint + cấu hình
 
 ### Binary `api`
-- [ ] Router chi + middleware: RequestID, RealIP, Logger, Recoverer, Timeout, CORS, Compress
-- [ ] `GET /health` (sống chưa) và `GET /ready` (kiểm tra cả postgres, redis, rabbitmq)
-- [ ] `GET /api/v1/ping` — đọc giờ từ PostgreSQL, bắn một job sang worker, endpoint nghiệm thu Phase 0
-- [ ] Bộ khung Clean Architecture mẫu: một module đi hết 4 tầng `domain` → `usecase` → `repository` → `delivery`
-- [ ] Graceful shutdown: bắt `SIGTERM`, đóng HTTP server, đóng pool, `stop_grace_period` 60s (chuẩn bị cho WebSocket ở Phase 5)
+- [x] Router chi + middleware: RequestID, RealIP, Logger, Recoverer, Timeout, CORS, Compress
+- [x] `GET /health` (sống chưa) và `GET /ready` (kiểm tra cả postgres, redis, rabbitmq)
+- [x] `GET /api/v1/ping` — đọc giờ từ PostgreSQL, bắn một job sang worker, endpoint nghiệm thu Phase 0
+- [x] Bộ khung Clean Architecture mẫu: một module đi hết 4 tầng `domain` → `usecase` → `repository` → `delivery`
+- [x] Graceful shutdown: bắt `SIGTERM`, đóng HTTP server, đóng pool, `stop_grace_period` 60s (chuẩn bị cho WebSocket ở Phase 5)
 
 ### Binary `worker`
-- [ ] Consumer RabbitMQ: nhận message, ack/nack đúng cách, có dead-letter queue
-- [ ] Đăng ký handler theo tên job, dễ thêm job mới ở phase sau
-- [ ] Xử lý một job mẫu (ghi log) để kiểm chứng đường truyền api → RabbitMQ → worker
-- [ ] Graceful shutdown: xử lý xong message đang cầm rồi mới thoát, không bỏ dở
+- [x] Consumer RabbitMQ: nhận message, ack/nack đúng cách, có dead-letter queue
+- [x] Đăng ký handler theo tên job, dễ thêm job mới ở phase sau
+- [x] Xử lý một job mẫu (ghi log) để kiểm chứng đường truyền api → RabbitMQ → worker
+- [x] Graceful shutdown: xử lý xong message đang cầm rồi mới thoát, không bỏ dở
 
 ### Khung frontend
-- [ ] `create-next-app` với TypeScript, Tailwind, App Router
-- [ ] Cài shadcn/ui, dựng theme (light/dark)
-- [ ] API client bọc `fetch`: tự gắn token, tự refresh khi 401, xử lý lỗi tập trung
-- [ ] Layout khung: sidebar, topbar, breadcrumb, khu vực thông báo
-- [ ] ESLint + Prettier + husky pre-commit
+- [x] `create-next-app` với TypeScript, Tailwind, App Router
+- [ ] Cài shadcn/ui, dựng theme (light/dark) — *chưa làm: dùng component tự viết + Tailwind; giao diện tối theo cài đặt hệ điều hành, chưa có nút chuyển*
+- [x] API client bọc `fetch`: tự gắn token, tự refresh khi 401, xử lý lỗi tập trung
+- [ ] Layout khung: sidebar, topbar, breadcrumb, khu vực thông báo — *có sidebar và topbar (AppShell), thông báo ở chuông; chưa có breadcrumb*
+- [ ] ESLint + Prettier + husky pre-commit — *có ESLint; chưa có cấu hình Prettier và husky*
 
 ### CI
-- [ ] GitHub Actions: lint + test + build cho cả backend và frontend
-- [ ] Migration chạy tự động trong CI trên PostgreSQL service container
-- [ ] Job build Docker image cho `api`, `worker`, `frontend` — có cache layer (`docker/build-push-action` + GHA cache theo scope riêng)
-- [ ] Kiểm tra `go mod tidy` không tạo thay đổi — chặn merge nếu `go.mod` chưa sạch
-- [ ] Gắn tag image theo git SHA và theo nhánh; chỉ đẩy lên GHCR khi merge vào `main`
-- [ ] Quét lỗ hổng image bằng Trivy, chặn merge nếu có lỗi mức HIGH/CRITICAL
+- [x] GitHub Actions: lint + test + build cho cả backend và frontend
+- [x] Migration chạy tự động trong CI trên PostgreSQL service container
+- [x] Job build Docker image cho `api`, `worker`, `frontend` — có cache layer (`docker/build-push-action` + GHA cache theo scope riêng)
+- [x] Kiểm tra `go mod tidy` không tạo thay đổi — chặn merge nếu `go.mod` chưa sạch
+- [x] Gắn tag image theo git SHA và theo nhánh; chỉ đẩy lên GHCR khi merge vào `main`
+- [x] Quét lỗ hổng image bằng Trivy, chặn merge nếu có lỗi mức HIGH/CRITICAL
 
 ---
 
@@ -1209,7 +1209,15 @@ Phase 4 (lương) cần dữ liệu công từ Phase 3 để tính lương theo 
 
 ## 8. Bước tiếp theo
 
-1. ~~Viết kế hoạch triển khai chi tiết cho Phase 0~~ → xong: [PHASE-0-SETUP.md](./PHASE-0-SETUP.md)
-2. Code Phase 0 theo tài liệu đó.
-3. Nghiệm thu: `make init` → `make smoke` trả về JSON có `database_time` và `job_queued: true`, đồng thời log worker hiện job vừa nhận — chứng minh cả hai chuỗi HTTP → PostgreSQL và api → RabbitMQ → worker đã thông.
-4. Sang Phase 1: xác thực JWT, RBAC, CRUD nhân viên và phòng ban.
+Phase 0–7 đã xong và đã merge vào `main` (28/09/2026). **Dự án tạm dừng ở
+mức chạy trên máy local** — chưa có domain và server, nên HTTPS thật và
+các mục nghiệm thu trên mạng thật của Phase 7 được hoãn có chủ đích.
+
+Việc còn làm được trên local, theo thứ tự:
+
+1. Nhập nhân viên hàng loạt từ CSV/Excel (Phase 1)
+2. Sơ đồ tổ chức dạng cây (Phase 1)
+3. Xuất báo cáo chấm công ra Excel (Phase 3)
+4. Sinh phiếu lương PDF ở server (Phase 4)
+5. Mỗi lúc chỉ một người chiếu màn hình (Phase 7)
+6. Giới hạn số người mỗi phòng gọi (Phase 7)
