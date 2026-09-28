@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { WorkStatusWidget } from "@/features/attendance/WorkStatusWidget";
 import { CallHost } from "@/features/call/CallHost";
 import { ChatBubble } from "@/features/chat/ChatBubble";
@@ -108,6 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-4">
             {can("attendance:read") && <WorkStatusWidget />}
+            <ThemeToggle />
             <NotificationBell />
             <Link href="/profile" className="text-sm hover:underline">
               {user.email}

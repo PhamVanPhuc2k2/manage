@@ -3,5 +3,11 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+}
+
+/* Ô chọn, thanh cuộn và ô nhập ngày của trình duyệt đi theo giao diện đã
+   chọn, không theo hệ điều hành. */
+:root.dark {
+  color-scheme: dark;
 }

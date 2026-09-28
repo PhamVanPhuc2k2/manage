@@ -13,10 +13,8 @@
   --gap: 20px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .tree {
-    --line: #404040;
-  }
+:global(.dark) .tree {
+  --line: #404040;
 }
 
 .tree ul {

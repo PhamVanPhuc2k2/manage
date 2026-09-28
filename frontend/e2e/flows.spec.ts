@@ -281,6 +281,48 @@ test.describe("Luồng 3c — Sơ đồ tổ chức", () => {
   });
 });
 
+test.describe("Giao diện sáng / tối", () => {
+  test("chọn Tối thì giữ nguyên sau khi tải lại; Theo máy thì đi theo hệ điều hành", async () => {
+    // Script đặt theme chạy nội tuyến trong <head>: CSP dùng nonce, nên một
+    // script thiếu nonce bị chặn và chỉ để lại một dòng lỗi ở console.
+    const cspErrors: string[] = [];
+    const onConsole = (m: { type(): string; text(): string }) => {
+      if (m.type() === "error" && /Content Security Policy/i.test(m.text())) {
+        cspErrors.push(m.text());
+      }
+    };
+    shared.on("console", onConsole);
+
+    const html = shared.locator("html");
+    const pick = shared.getByRole("combobox", { name: "Giao diện" });
+
+    await shared.emulateMedia({ colorScheme: "light" });
+    await shared.goto("/employees");
+    await pick.selectOption("dark");
+    await expect(html).toHaveClass(/dark/);
+
+    // Tải lại: lựa chọn còn nguyên, và class có NGAY khi HTML vừa tải —
+    // tức là do script trong <head>, không phải do React đặt sau.
+    await shared.reload({ waitUntil: "commit" });
+    await expect(html).toHaveClass(/dark/);
+    await expect(pick).toHaveValue("dark");
+
+    await pick.selectOption("light");
+    await expect(html).not.toHaveClass(/dark/);
+
+    // Theo máy: hệ điều hành tối thì trang tối, đổi sang sáng thì đổi theo
+    // mà không cần tải lại.
+    await pick.selectOption("system");
+    await shared.emulateMedia({ colorScheme: "dark" });
+    await expect(html).toHaveClass(/dark/);
+    await shared.emulateMedia({ colorScheme: "light" });
+    await expect(html).not.toHaveClass(/dark/);
+
+    shared.off("console", onConsole);
+    expect(cspErrors, "script theme bị CSP chặn").toEqual([]);
+  });
+});
+
 test.describe("Luồng 4 — Dự án và công việc", () => {
   test("tạo dự án rồi thêm một công việc vào bảng", async () => {
     const id = suffix();

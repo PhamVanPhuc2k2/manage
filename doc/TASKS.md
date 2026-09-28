@@ -330,7 +330,7 @@ Lệnh chạy:
 
 ### Khung frontend
 - [x] `create-next-app` với TypeScript, Tailwind, App Router
-- [ ] Cài shadcn/ui, dựng theme (light/dark) — *chưa làm: dùng component tự viết + Tailwind; giao diện tối theo cài đặt hệ điều hành, chưa có nút chuyển*
+- [ ] Cài shadcn/ui, dựng theme (light/dark) — *theme xong (28/09/2026): chọn Sáng / Tối / Theo máy ở thanh trên, nhớ lựa chọn, không nháy trắng khi tải. shadcn/ui chưa cài: app đã có bộ component tự viết bằng Tailwind*
 - [x] API client bọc `fetch`: tự gắn token, tự refresh khi 401, xử lý lỗi tập trung
 - [ ] Layout khung: sidebar, topbar, breadcrumb, khu vực thông báo — *có sidebar và topbar (AppShell), thông báo ở chuông; chưa có breadcrumb*
 - [ ] ESLint + Prettier + husky pre-commit — *có ESLint; chưa có cấu hình Prettier và husky*
