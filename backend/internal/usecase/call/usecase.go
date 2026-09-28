@@ -8,6 +8,7 @@ package call
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -245,6 +246,9 @@ func (u *Usecase) joinExisting(
 	actor *domainauth.Actor,
 	c *domaincall.Call,
 ) (*StartResult, error) {
+	if err := u.ensureRoomHasSpace(ctx, c, actor.EmployeeID); err != nil {
+		return nil, err
+	}
 	now := u.clock.Now()
 	if err := u.participants.Join(ctx, c.ID, actor.EmployeeID, now); err != nil {
 		return nil, apperror.Internal(err)
@@ -260,6 +264,40 @@ func (u *Usecase) joinExisting(
 	c.Participants, _ = u.participants.ListForCall(ctx, c.ID)
 
 	return &StartResult{Call: c, Token: token}, nil
+}
+
+// ensureRoomHasSpace chặn người vào khi phòng đã đủ người.
+//
+// Người ĐANG trong phòng (rớt mạng rồi vào lại, hay xin token mới) không
+// tính là người mới — không thì chính họ bị chặn khỏi phòng của mình.
+//
+// Hai người cùng bấm khi phòng có 15 người có thể cùng lọt qua: SFU vẫn
+// chặn người thứ 17, chỉ là người đó nhận lỗi kết nối thay vì câu rõ ràng.
+// Không khoá hàng để đổi lấy trường hợp hiếm đó.
+func (u *Usecase) ensureRoomHasSpace(
+	ctx context.Context,
+	c *domaincall.Call,
+	employeeID uuid.UUID,
+) error {
+	list, err := u.participants.ListForCall(ctx, c.ID)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	inRoom := 0
+	for _, p := range list {
+		if p.EmployeeID == employeeID {
+			continue
+		}
+		if p.JoinedAt != nil && p.LeftAt == nil {
+			inRoom++
+		}
+	}
+	if inRoom >= domaincall.MaxParticipants {
+		return apperror.Conflict(fmt.Sprintf(
+			"Cuộc gọi đã đủ %d người. Giới hạn này giữ chất lượng hình và tiếng cho những người đang trong phòng.",
+			domaincall.MaxParticipants))
+	}
+	return nil
 }
 
 // issueToken cấp access token vào phòng SFU.

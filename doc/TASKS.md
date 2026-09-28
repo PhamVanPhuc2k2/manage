@@ -950,7 +950,6 @@ Lệnh chạy:
 > | Đo tỉ lệ relay qua TURN | Cột `relay_ratio` có trong bảng nhưng luôn NULL. LiveKit không báo kiểu kết nối của từng người, qua webhook lẫn qua API danh sách người tham gia |
 > | TURN listener trên TCP/443 | Trong dev, đường dự phòng khi mạng chặn UDP là **RTC qua TCP cổng 7881** của LiveKit. Cổng 443 cần chứng chỉ thật, nên đi cùng khối HTTPS |
 > | Màn hình kiểm tra thiết bị trước khi vào | Quyền bị từ chối đã có báo rõ và mic/camera bật trong hai khối try riêng, nên thiếu màn hình này không làm hỏng cuộc gọi — chỉ làm người dùng biết muộn hơn một nhịp |
-> | Giới hạn số người mỗi phòng | Chưa đặt. Cần đặt trước khi mở cho toàn công ty — xem bảng ước lượng băng thông ở cuối mục |
 > | Ghi hình | Xem bảng quyết định bên dưới |
 
 ### Quyết định đã chốt
@@ -1016,6 +1015,11 @@ Lệnh chạy:
 - [x] Bật **simulcast** ngay từ đầu, kèm `adaptiveStream` và `dynacast`
 - [ ] Chỉ hiện người đang nói ở độ nét cao, phần còn lại hạ xuống 180p
 - [x] Giới hạn số người mỗi phòng: **16**, đặt ở `docker/livekit/livekit.yaml`
+> Backend kiểm TRƯỚC khi phát token (bắt máy, vào cuộc gọi đang chạy, xin
+> lại token): người thứ 17 nhận 409 "Cuộc gọi đã đủ 16 người" thay vì một lỗi
+> kết nối mù mờ từ SFU. Người đang trong phòng xin lại token không bị tính
+> trùng. `domaincall.MaxParticipants` có phép thử đọc `livekit.yaml` để hai
+> con số không lệch nhau.
 > Chưa giới hạn SỐ PHÒNG chạy song song: LiveKit không có tham số đó, và
 > trần thật nằm ở CPU và băng thông — đã đặt `deploy.resources.limits` cho
 > container SFU, xem doc/OPERATIONS.md.
@@ -1237,4 +1241,4 @@ Việc còn làm được trên local, theo thứ tự:
 3. ~~Xuất báo cáo chấm công ra Excel (Phase 3)~~ — xong
 4. Sinh phiếu lương PDF ở server (Phase 4)
 5. ~~Mỗi lúc chỉ một người chiếu màn hình (Phase 7)~~ — xong
-6. Giới hạn số người mỗi phòng gọi (Phase 7)
+6. ~~Giới hạn số người mỗi phòng gọi (Phase 7)~~ — xong

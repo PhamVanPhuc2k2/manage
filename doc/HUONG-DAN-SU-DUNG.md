@@ -409,6 +409,7 @@ tin nhắn khác.
 | *"Người nhận đang bận"* | Họ đang trong cuộc gọi khác. Nhắn tin thay vì gọi lại liên tục |
 | *"Không truy cập được micro"* | Bạn đã lỡ bấm "Chặn". Mở lại trong cài đặt quyền của trình duyệt (biểu tượng ở đầu thanh địa chỉ) |
 | Tham gia nhưng không thấy ai | Mạng công ty có thể đang chặn. Báo bộ phận kỹ thuật — **nói rõ là gọi video**, vì đó là một đường mạng khác với phần còn lại |
+| *"Cuộc gọi đã đủ 16 người"* | Mỗi cuộc gọi tối đa 16 người để giữ chất lượng hình và tiếng. Chờ có người rời phòng rồi bấm **Gọi** trong hội thoại để vào |
 | Đang họp thì bị đưa ra | Bạn đã mở cuộc gọi ở một tab khác. Mỗi người chỉ ở trong cuộc gọi tại **một tab** — hai tab cùng bật micro sẽ tạo tiếng hú |
 
 ---

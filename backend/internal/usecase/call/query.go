@@ -127,6 +127,9 @@ func (u *Usecase) Token(
 	if c.Status.Final() {
 		return "", apperror.Conflict("Cuộc gọi đã kết thúc")
 	}
+	if err := u.ensureRoomHasSpace(ctx, c, actor.EmployeeID); err != nil {
+		return "", err
+	}
 
 	names, _ := u.employees.NamesOf(ctx, []uuid.UUID{actor.EmployeeID})
 	return u.issueToken(ctx, c, actor.EmployeeID, names[actor.EmployeeID])

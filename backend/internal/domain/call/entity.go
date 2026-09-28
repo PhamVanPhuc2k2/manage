@@ -122,6 +122,14 @@ const (
 	ICECredentialTTL = 30 * time.Minute
 )
 
+// MaxParticipants là số người tối đa cùng lúc trong một phòng.
+//
+// PHẢI khớp room.max_participants trong docker/livekit/livekit.yaml — có
+// phép thử đọc tệp đó để hai con số không lệch nhau. SFU là hàng rào thật;
+// backend kiểm TRƯỚC để người thứ 17 nhận câu "đã đủ người" thay vì một
+// lỗi kết nối không rõ nguyên nhân sau khi đã được phát token.
+const MaxParticipants = 16
+
 // =========================================================================
 // TÊN SỰ KIỆN REALTIME
 // =========================================================================

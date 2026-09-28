@@ -38,6 +38,11 @@ func (u *Usecase) Accept(
 	if c.Status.Final() {
 		return nil, apperror.Conflict("Cuộc gọi đã kết thúc")
 	}
+	// Kiểm TRƯỚC khi đổi trạng thái hay ghi người tham gia: phòng đầy thì
+	// lần bấm nghe này không được để lại dấu vết gì.
+	if err := u.ensureRoomHasSpace(ctx, c, actor.EmployeeID); err != nil {
+		return nil, err
+	}
 
 	now := u.clock.Now()
 
